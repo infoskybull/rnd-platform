@@ -1,0 +1,20 @@
+# version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    container_name: rnd-frontend-container
+    ports:
+      - "2222:80"
+    # Add host.docker.internal for cross-platform compatibility
+    # Works on Docker Desktop for Windows/Mac automatically
+    # For Linux, host-gateway ensures it resolves to the host machine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # DNS settings for better host.docker.internal resolution
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4

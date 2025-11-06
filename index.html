@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/logo-192.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Viewport -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Title -->
+    <title>RnD Game Marketplace - Upload, Preview & Trade Games</title>
+
+    <!-- Meta Description -->
+    <meta
+      name="description"
+      content="An innovative platform for game developers and publishers to upload, showcase, and trade games. Preview games before purchase and connect with the gaming community."
+    />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://rnd-game-marketplace.com/" />
+    <meta
+      property="og:title"
+      content="RnD Game Marketplace - Upload, Preview & Trade Games"
+    />
+    <meta
+      property="og:description"
+      content="An innovative platform for game developers and publishers to upload, showcase, and trade games. Preview games before purchase and connect with the gaming community."
+    />
+    <meta property="og:image" content="/logo-192.svg" />
+    <meta property="og:site_name" content="RnD Game Marketplace" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://rnd-game-marketplace.com/" />
+    <meta
+      property="twitter:title"
+      content="RnD Game Marketplace - Upload, Preview & Trade Games"
+    />
+    <meta
+      property="twitter:description"
+      content="An innovative platform for game developers and publishers to upload, showcase, and trade games. Preview games before purchase and connect with the gaming community."
+    />
+    <meta property="twitter:image" content="/logo-192.svg" />
+
+    <!-- Additional Meta -->
+    <meta
+      name="keywords"
+      content="games, marketplace, developers, publishers, webgl, gaming, trade, upload, preview"
+    />
+    <meta name="author" content="RnD Game Marketplace" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#9333EA" />
+
+    <!-- PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="RnD Games" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "brand-blue": "#1e40af",
+              "brand-blue-light": "#2563eb",
+              "brand-blue-dark": "#1e3a8a",
+              "gray-dark": "#111827",
+              "gray-medium": "#1f2937",
+              "gray-light": "#4b5563",
+              "gray-text": "#d1d5db",
+              "gray-subtle": "#9ca3af",
+            },
+            animation: {
+              "pulse-fast": "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            },
+          },
+        },
+      };
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://aistudiocdn.com/react@^19.2.0",
+          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+          "react/": "https://aistudiocdn.com/react@^19.2.0/"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body class="bg-gray-900 text-white">
+    <div id="root"></div>
+    <script src="/env.js"></script>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

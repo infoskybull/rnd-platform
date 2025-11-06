@@ -1,0 +1,5 @@
+{
+  "name": "RnD Game Marketplace",
+  "description": "An application to upload, preview, and trade games. Sellers can showcase their work, and buyers can preview and purchase games directly.",
+  "requestFramePermissions": []
+}
