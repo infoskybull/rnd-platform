@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { User } from "../../types";
 import { useTonConnect } from "../../hooks/useTonConnect";
+import { useSuiWallet } from "../../contexts/SuiWalletContext";
+import { useSolanaWallet } from "../../contexts/SolanaWalletContext";
+import { useAccount, useSignMessage } from "wagmi";
 import { walletService } from "../../services/walletService";
 import { useAuth } from "../../hooks/useAuth";
 import { getUserCreatedDate } from "../../utils/userUtils";
+import { apiService } from "../../services/api";
 import {
   useChangePassword,
   useTwoFactorAuth,
 } from "../../hooks/useSecuritySettings";
-import { X, Eye, EyeOff, Shield, Copy, Check } from "lucide-react";
+import { X, Eye, EyeOff, Shield, Copy, Check, Settings } from "lucide-react";
 
 interface SettingsTabProps {
   user: User;
@@ -17,22 +21,78 @@ interface SettingsTabProps {
 
 const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
   const navigate = useNavigate();
+  const currentPlanDetails = user?.currentPlan ?? null;
+  const currentPlanCode =
+    (typeof currentPlanDetails?.planType === "string"
+      ? currentPlanDetails.planType.toLowerCase()
+      : null) ||
+    (typeof user?.plan === "string" ? user.plan.toLowerCase() : null) ||
+    "free";
+  const currentPlanLabel =
+    currentPlanDetails?.name ||
+    (currentPlanCode
+      ? `${currentPlanCode.charAt(0).toUpperCase()}${currentPlanCode.slice(1)}`
+      : "Free");
+  const currentPlanDescription =
+    currentPlanDetails?.description ||
+    (currentPlanCode === "business"
+      ? "Unlimited prototypes, 500 AI requests"
+      : currentPlanCode === "pro"
+      ? "20 prototypes, 200 AI requests"
+      : "1 free prototype/month, 1 AI request");
+
+  // TON wallet hooks
   const {
-    isConnected,
-    walletAddress,
-    connect,
-    disconnect,
-    isLoading,
-    error,
-    signMessage,
+    isConnected: isTonConnected,
+    walletAddress: tonWalletAddress,
+    connect: connectTon,
+    disconnect: disconnectTon,
+    isLoading: tonLoading,
+    error: tonError,
+    signMessage: signTonMessage,
   } = useTonConnect();
-  const { accessToken } = useAuth();
+
+  // Sui wallet hooks
+  const {
+    walletAddress: suiWalletAddress,
+    isConnected: isSuiConnected,
+    isLoading: isSuiLoading,
+    error: suiError,
+    connect: connectSui,
+    signMessage: signSuiMessage,
+  } = useSuiWallet();
+
+  // Solana wallet hooks
+  const {
+    publicKey: solanaPublicKey,
+    isConnected: isSolanaConnected,
+    isLoading: isSolanaLoading,
+    error: solanaError,
+    connect: connectSolana,
+    signMessage: signSolanaMessage,
+  } = useSolanaWallet();
+
+  // Ethereum wallet hooks
+  const { address: ethAddress, isConnected: isEthConnected } = useAccount();
+  const { signMessageAsync: signEthMessage } = useSignMessage();
+
+  const { accessToken, refreshUser } = useAuth();
   const [linkedWallets, setLinkedWallets] = useState<
     Array<{ type: string; address: string }>
   >([]);
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
+  const [linkingWalletType, setLinkingWalletType] = useState<string | null>(
+    null
+  );
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccess, setLinkSuccess] = useState<string | null>(null);
+  const [isFetchingWallets, setIsFetchingWallets] = useState(false);
+
+  // Ref to track if we've already initialized wallets from user prop
+  const initializedFromUserRef = useRef(false);
+
+  // Ref to track if we've already fetched from API
+  const fetchedFromAPIRef = useRef(false);
 
   // Change Password state
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -70,53 +130,264 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
     resetSetup,
   } = useTwoFactorAuth();
 
-  // Check if user has linked wallets
-  useEffect(() => {
-    const fetchUserWallets = async () => {
-      if (!accessToken) return;
+  const renderWalletAddressBadge = (address?: string | null) => {
+    if (!address) {
+      return null;
+    }
+    const truncatedAddress =
+      address.length > 18
+        ? `${address.slice(0, 6)}...${address.slice(-4)}`
+        : address;
+    return (
+      <span
+        className="inline-flex max-w-full sm:max-w-[220px] items-center px-2 py-0.5 bg-green-500 text-white text-xs rounded font-mono whitespace-nowrap overflow-hidden text-ellipsis"
+        title={address}
+      >
+        {truncatedAddress}
+      </span>
+    );
+  };
 
+  // Helper function to extract wallets from user object (no dependencies)
+  const extractWalletsFromUser = useCallback(
+    (userData: User): Array<{ type: string; address: string }> => {
+      const wallets: Array<{ type: string; address: string }> = [];
+      if (userData.tonWalletAddress) {
+        wallets.push({
+          type: "ton_wallet",
+          address: userData.tonWalletAddress,
+        });
+      }
+      if (userData.ethereumWalletAddress) {
+        wallets.push({
+          type: "ethereum_wallet",
+          address: userData.ethereumWalletAddress,
+        });
+      }
+      if (userData.suiWalletAddress) {
+        wallets.push({
+          type: "sui_wallet",
+          address: userData.suiWalletAddress,
+        });
+      }
+      if (userData.solanaWalletAddress) {
+        wallets.push({
+          type: "solana_wallet",
+          address: userData.solanaWalletAddress,
+        });
+      }
+      return wallets;
+    },
+    []
+  );
+
+  // Fetch user wallets from /api/users/me - call this after successful linking
+  const fetchUserWallets = useCallback(
+    async (skipRefresh = false) => {
+      if (!accessToken || isFetchingWallets) return;
+
+      setIsFetchingWallets(true);
       try {
-        const result = await walletService.getUserWallets(accessToken);
-        if (result.success && result.data?.wallets) {
-          setLinkedWallets(result.data.wallets);
+        // Use /api/users/me to get user info including wallets
+        const userProfile = await apiService.getCurrentUser();
+
+        // Extract wallets from user profile response
+        // Backend returns wallets in data object with wallet addresses
+        const wallets: Array<{ type: string; address: string }> = [];
+
+        // Handle nested response structure
+        let userData = userProfile;
+        if ((userProfile as any).data) {
+          userData = (userProfile as any).data;
+        }
+
+        // Handle API response format: { success: true, data: { ... } }
+        if ((userProfile as any).success && (userProfile as any).data) {
+          userData = (userProfile as any).data;
+        }
+
+        // Extract wallet addresses from userData
+        if ((userData as any).tonWalletAddress) {
+          wallets.push({
+            type: "ton_wallet",
+            address: (userData as any).tonWalletAddress,
+          });
+        }
+        if ((userData as any).ethereumWalletAddress) {
+          wallets.push({
+            type: "ethereum_wallet",
+            address: (userData as any).ethereumWalletAddress,
+          });
+        }
+        if ((userData as any).suiWalletAddress) {
+          wallets.push({
+            type: "sui_wallet",
+            address: (userData as any).suiWalletAddress,
+          });
+        }
+        if ((userData as any).solanaWalletAddress) {
+          wallets.push({
+            type: "solana_wallet",
+            address: (userData as any).solanaWalletAddress,
+          });
+        }
+
+        console.log("Fetched wallets from /api/users/me:", wallets);
+        setLinkedWallets(wallets);
+
+        // Only refresh user profile in Redux store if explicitly requested (after linking)
+        // Don't refresh by default to avoid infinite loops
+        if (!skipRefresh) {
+          try {
+            await refreshUser();
+          } catch (refreshError) {
+            console.warn(
+              "Failed to refresh user in Redux store:",
+              refreshError
+            );
+          }
         }
       } catch (error) {
         console.error("Error fetching user wallets:", error);
-      }
-    };
+        // Fallback: try to get wallets from user prop if available
+        // Note: user is accessed from closure, not from dependencies
+        const walletsFromUser = extractWalletsFromUser(user);
+        if (walletsFromUser.length > 0) {
+          setLinkedWallets(walletsFromUser);
+        }
 
-    fetchUserWallets();
+        // Fallback to walletService if apiService fails
+        try {
+          const result = await walletService.getUserWallets(accessToken);
+          if (result.success && result.data?.wallets) {
+            setLinkedWallets(result.data.wallets);
+          }
+        } catch (fallbackError) {
+          console.error("Fallback wallet fetch also failed:", fallbackError);
+        }
+      } finally {
+        setIsFetchingWallets(false);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [accessToken, isFetchingWallets, refreshUser, extractWalletsFromUser]
+  );
+
+  // Initialize wallets from user prop on mount (only once, or when wallet addresses change)
+  useEffect(() => {
+    // Create a string key from wallet addresses to detect changes
+    const walletKey = `${user.tonWalletAddress || ""}_${
+      user.ethereumWalletAddress || ""
+    }_${user.suiWalletAddress || ""}_${user.solanaWalletAddress || ""}`;
+
+    // Check if we've initialized before and if wallet addresses changed
+    const prevWalletKey = (initializedFromUserRef.current as any)?.walletKey;
+
+    if (!initializedFromUserRef.current || prevWalletKey !== walletKey) {
+      const walletsFromUser = extractWalletsFromUser(user);
+      if (walletsFromUser.length > 0) {
+        setLinkedWallets(walletsFromUser);
+      }
+      initializedFromUserRef.current = { walletKey } as any;
+    }
+  }, [
+    extractWalletsFromUser,
+    user.tonWalletAddress,
+    user.ethereumWalletAddress,
+    user.suiWalletAddress,
+    user.solanaWalletAddress,
+  ]);
+
+  // Fetch wallets from API only when accessToken changes or on mount (only once)
+  useEffect(() => {
+    if (accessToken && !fetchedFromAPIRef.current) {
+      fetchUserWallets(true); // Skip refresh to avoid infinite loop
+      fetchedFromAPIRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
-  const handleLinkWallet = async () => {
-    if (!isConnected) {
-      try {
-        await connect();
-      } catch (error) {
-        setLinkError("Failed to connect wallet");
-        return;
-      }
+  // Reset fetchedFromAPIRef when accessToken changes (user logged out/logged in)
+  useEffect(() => {
+    if (!accessToken) {
+      fetchedFromAPIRef.current = false;
+      initializedFromUserRef.current = false;
     }
+  }, [accessToken]);
 
-    if (!walletAddress) {
-      setLinkError("No wallet address available");
-      return;
-    }
-
+  // Generic handler to link any wallet type
+  const handleLinkWallet = async (
+    walletType: "ton" | "sui" | "ethereum" | "solana"
+  ) => {
     if (!accessToken) {
       setLinkError("Authentication required");
       return;
     }
 
     setIsLinkingWallet(true);
+    setLinkingWalletType(walletType);
     setLinkError(null);
     setLinkSuccess(null);
 
     try {
-      // Check if wallet is already linked to another account
+      let walletAddress: string | null = null;
+      let signature: string | null = null;
+      let authMessage: string | null = null;
+
+      // Step 1: Connect and get wallet address based on type
+      if (walletType === "ton") {
+        if (!isTonConnected) {
+          try {
+            await connectTon();
+            // Wait a bit for connection to complete
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          } catch (error) {
+            setLinkError("Failed to connect TON wallet");
+            return;
+          }
+        }
+        walletAddress = tonWalletAddress || null;
+      } else if (walletType === "sui") {
+        if (!isSuiConnected) {
+          try {
+            await connectSui();
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          } catch (error) {
+            setLinkError("Failed to connect SUI wallet");
+            return;
+          }
+        }
+        walletAddress = suiWalletAddress || null;
+      } else if (walletType === "ethereum") {
+        if (!isEthConnected || !ethAddress) {
+          setLinkError(
+            "Please connect your Ethereum wallet first using the Connect button"
+          );
+          return;
+        }
+        walletAddress = ethAddress;
+      } else if (walletType === "solana") {
+        if (!isSolanaConnected || !solanaPublicKey) {
+          try {
+            await connectSolana();
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          } catch (error) {
+            setLinkError("Failed to connect Solana wallet");
+            return;
+          }
+        }
+        walletAddress = solanaPublicKey?.toString() || null;
+      }
+
+      if (!walletAddress) {
+        setLinkError("No wallet address available");
+        return;
+      }
+
+      // Step 2: Check if wallet is already linked to another account
       const checkResult = await walletService.checkWalletExists(
         walletAddress,
-        "ton"
+        walletType
       );
 
       if (checkResult.data?.exists && checkResult.data?.userId !== user.id) {
@@ -124,47 +395,68 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
         return;
       }
 
-      // Generate authentication message
+      // Check if wallet is already linked to this account
+      const isAlreadyLinked = linkedWallets.some(
+        (w) => w.type === walletType && w.address === walletAddress
+      );
+      if (isAlreadyLinked) {
+        setLinkError("This wallet is already linked to your account");
+        return;
+      }
+
+      // Step 3: Generate authentication message
       const messageResult = await walletService.generateAuthMessage(
         walletAddress,
-        "ton"
+        walletType
       );
       if (!messageResult.success) {
         setLinkError("Failed to generate authentication message");
         return;
       }
 
-      const authMessage = messageResult.data.message;
+      authMessage = messageResult.data.message;
 
-      // Sign the message with the wallet
-      const signature = await signMessage(authMessage);
+      // Step 4: Sign the message with the wallet
+      if (walletType === "ton") {
+        signature = await signTonMessage(authMessage);
+      } else if (walletType === "sui") {
+        signature = await signSuiMessage(authMessage);
+      } else if (walletType === "ethereum") {
+        signature = await signEthMessage({
+          account: ethAddress as `0x${string}`,
+          message: authMessage,
+        });
+      } else if (walletType === "solana") {
+        signature = await signSolanaMessage(authMessage);
+      }
+
       if (!signature) {
         setLinkError("Failed to sign authentication message");
         return;
       }
 
-      // Link wallet to current account
+      // Step 5: Link wallet to current account
       await walletService.linkWalletToAccount(
-        "ton",
+        walletType,
         walletAddress,
         authMessage,
         signature,
         accessToken
       );
 
-      setLinkSuccess("Wallet linked successfully!");
+      setLinkSuccess(`${walletType.toUpperCase()} wallet linked successfully!`);
 
-      // Refresh the wallet list
-      const result = await walletService.getUserWallets(accessToken);
-      if (result.success && result.data?.wallets) {
-        setLinkedWallets(result.data.wallets);
-      }
+      // Step 6: Refresh the wallet list to view updated status
+      // Reset refs to allow fetching again
+      fetchedFromAPIRef.current = false;
+      await fetchUserWallets(false); // Allow refresh to sync Redux store
     } catch (error) {
       setLinkError(
         error instanceof Error ? error.message : "Failed to link wallet"
       );
     } finally {
       setIsLinkingWallet(false);
+      setLinkingWalletType(null);
     }
   };
 
@@ -735,34 +1027,37 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
               <div>
                 <div className="text-white font-medium">Current Plan</div>
                 <div className="text-gray-400 text-sm">
-                  {user.plan === "free" &&
-                    "1 free prototype/month, 1 AI request"}
-                  {user.plan === "pro" && "20 prototypes, 200 AI requests"}
-                  {user.plan === "business" &&
-                    "Unlimited prototypes, 500 AI requests"}
-                  {!user.plan &&
-                    "Free plan - 1 free prototype/month, 1 AI request"}
+                  {currentPlanDescription}
                 </div>
               </div>
               <div
                 className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                  user.plan === "business"
+                  currentPlanCode === "business"
                     ? "bg-purple-100 text-purple-800"
-                    : user.plan === "pro"
+                    : currentPlanCode === "pro"
                     ? "bg-indigo-100 text-indigo-800"
                     : "bg-gray-100 text-gray-800"
                 }`}
               >
-                {user.plan || "Free"}
+                {currentPlanLabel}
               </div>
             </div>
 
-            <button
-              onClick={() => navigate("/plan")}
-              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-            >
-              Upgrade Plan
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => navigate("/manage-plan")}
+                className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2"
+              >
+                <Settings className="w-4 h-4" />
+                <span>Manage Plan</span>
+              </button>
+              <button
+                onClick={() => navigate("/plan")}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors"
+              >
+                Upgrade Plan
+              </button>
+            </div>
           </div>
         </div>
 
@@ -804,7 +1099,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
           </h3>
           <div className="space-y-4">
             {/* Error Messages */}
-            {(error || linkError) && (
+            {(tonError || suiError || solanaError || linkError) && (
               <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
                 <div className="flex items-center">
                   <svg
@@ -820,7 +1115,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
                       d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span>{error || linkError}</span>
+                  <span>
+                    {tonError || suiError || solanaError || linkError}
+                  </span>
                 </div>
               </div>
             )}
@@ -848,8 +1145,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
             )}
 
             {/* Linked Wallets Display */}
-            {linkedWallets.length > 0 ? (
-              <div className="space-y-4">
+            {/* {linkedWallets.length > 0 && (
+              <div className="space-y-4 mb-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-white font-medium">Linked Wallets</div>
@@ -872,18 +1169,30 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
                       <div className="flex items-center space-x-2">
                         <img
                           src={`/coins/${
-                            wallet.type === "ton_wallet" ? "ton" : wallet.type
+                            wallet.type === "ton_wallet"
+                              ? "ton"
+                              : wallet.type === "ethereum_wallet"
+                              ? "ethereum"
+                              : wallet.type === "sui_wallet"
+                              ? "sui"
+                              : wallet.type === "solana_wallet"
+                              ? "solana"
+                              : wallet.type
                           }.png`}
                           alt={wallet.type}
-                          className="w-5 h-5"
+                          className="w-5 h-5 rounded-full"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src =
+                              "/coins/ethereum.png";
+                          }}
                         />
                         <span className="text-white font-medium capitalize">
                           {wallet.type === "ton_wallet"
                             ? "TON Wallet"
                             : wallet.type === "metamask"
                             ? "MetaMask"
-                            : wallet.type === "bnb_wallet"
-                            ? "BNB Wallet"
+                            : wallet.type === "ethereum_wallet"
+                            ? "Ethereum Wallet"
                             : wallet.type === "sui_wallet"
                             ? "SUI Wallet"
                             : wallet.type === "solana_wallet"
@@ -906,62 +1215,199 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-white font-medium">
-                      No Wallet Linked
-                    </div>
-                    <div className="text-gray-400 text-sm">
-                      Connect your TON wallet to enable Web3 features
-                    </div>
-                  </div>
-                  <div className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-                    Not Connected
+            )} */}
+
+            {/* Wallet Options */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-white font-medium">Connect Wallets</div>
+                  <div className="text-gray-400 text-sm">
+                    Link your wallets to enable Web3 features
                   </div>
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <img src="/coins/ton.png" alt="TON" className="w-6 h-6" />
-                  <span className="text-white">TON Wallet</span>
+                <div className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                  {linkedWallets.length} Linked
                 </div>
-
-                <button
-                  onClick={handleLinkWallet}
-                  disabled={isLinkingWallet || isLoading}
-                  className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-                >
-                  {isLinkingWallet || isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      {isLinkingWallet ? "Linking..." : "Connecting..."}
-                    </div>
-                  ) : (
-                    "Link Wallet"
-                  )}
-                </button>
               </div>
-            )}
+
+              {/* TON Wallet */}
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <img src="/coins/ton.png" alt="TON" className="w-6 h-6" />
+                    <span className="text-white font-medium">TON Wallet</span>
+                    {renderWalletAddressBadge(
+                      linkedWallets.find((w) => w.type === "ton_wallet")
+                        ?.address
+                    )}
+                  </div>
+                  {linkedWallets.some((w) => w.type === "ton_wallet") ? (
+                    <span className="inline-flex justify-center w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-300 text-sm font-medium rounded cursor-not-allowed">
+                      Linked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleLinkWallet("ton")}
+                      disabled={
+                        isLinkingWallet ||
+                        tonLoading ||
+                        linkingWalletType !== null
+                      }
+                      className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors"
+                    >
+                      {isLinkingWallet && linkingWalletType === "ton"
+                        ? "Linking..."
+                        : "Link"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Ethereum Wallet */}
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <img
+                      src="/coins/ethereum.png"
+                      alt="Ethereum"
+                      className="w-6 h-6 rounded-full"
+                    />
+                    <span className="text-white font-medium">
+                      Ethereum Wallet
+                    </span>
+                    {renderWalletAddressBadge(
+                      linkedWallets.find(
+                        (w) =>
+                          w.type === "ethereum_wallet" || w.type === "metamask"
+                      )?.address
+                    )}
+                  </div>
+                  {linkedWallets.some(
+                    (w) => w.type === "ethereum_wallet" || w.type === "metamask"
+                  ) ? (
+                    <span className="inline-flex justify-center w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-300 text-sm font-medium rounded cursor-not-allowed">
+                      Linked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleLinkWallet("ethereum")}
+                      disabled={isLinkingWallet || linkingWalletType !== null}
+                      className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors"
+                    >
+                      {isLinkingWallet && linkingWalletType === "ethereum"
+                        ? "Linking..."
+                        : "Link"}
+                    </button>
+                  )}
+                </div>
+                {!isEthConnected &&
+                  !linkedWallets.some(
+                    (w) => w.type === "ethereum_wallet" || w.type === "metamask"
+                  ) && (
+                    <p className="text-xs text-yellow-400 mt-2">
+                      Please connect your Ethereum wallet first using the
+                      Connect button
+                    </p>
+                  )}
+              </div>
+
+              {/* SUI Wallet */}
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <img src="/coins/sui.png" alt="SUI" className="w-6 h-6" />
+                    <span className="text-white font-medium">SUI Wallet</span>
+                    {renderWalletAddressBadge(
+                      linkedWallets.find((w) => w.type === "sui_wallet")
+                        ?.address
+                    )}
+                  </div>
+                  {linkedWallets.some((w) => w.type === "sui_wallet") ? (
+                    <span className="inline-flex justify-center w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-300 text-sm font-medium rounded cursor-not-allowed">
+                      Linked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleLinkWallet("sui")}
+                      disabled={
+                        isLinkingWallet ||
+                        isSuiLoading ||
+                        linkingWalletType !== null
+                      }
+                      className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors"
+                    >
+                      {isLinkingWallet && linkingWalletType === "sui"
+                        ? "Linking..."
+                        : "Link"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Solana Wallet */}
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <img
+                      src="/coins/solana.png"
+                      alt="Solana"
+                      className="w-6 h-6"
+                    />
+                    <span className="text-white font-medium">
+                      Solana Wallet
+                    </span>
+                    {renderWalletAddressBadge(
+                      linkedWallets.find((w) => w.type === "solana_wallet")
+                        ?.address
+                    )}
+                  </div>
+                  {linkedWallets.some((w) => w.type === "solana_wallet") ? (
+                    <span className="inline-flex justify-center w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-300 text-sm font-medium rounded cursor-not-allowed">
+                      Linked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleLinkWallet("solana")}
+                      disabled={
+                        isLinkingWallet ||
+                        isSolanaLoading ||
+                        linkingWalletType !== null
+                      }
+                      className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors"
+                    >
+                      {isLinkingWallet && linkingWalletType === "solana" ? (
+                        <div className="flex items-center justify-center">
+                          <svg
+                            className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          Linking...
+                        </div>
+                      ) : (
+                        "Link"
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

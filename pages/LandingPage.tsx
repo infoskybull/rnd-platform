@@ -343,7 +343,7 @@ const LandingPage: React.FC = () => {
   };
 
   const handleSignUp = () => {
-    navigate("/login");
+    navigate("/signup");
   };
 
   return (

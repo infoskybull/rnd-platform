@@ -331,7 +331,7 @@ const CollaborationsTab: React.FC<CollaborationsTabProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/profile/${collaboration.developerId}`);
+                navigate(`/profile/${collaboration.creatorId}`);
               }}
               className="text-purple-400 hover:text-purple-300 hover:underline"
             >
@@ -584,7 +584,7 @@ const CollaborationsTab: React.FC<CollaborationsTabProps> = ({
           <div className="text-2xl font-bold text-purple-400">
             {calculatedStats.completedContracts}
           </div>
-          <div className="text-sm text-gray-400">Completed Contracts</div>
+          <div className="text-sm text-gray-400">Completed Collaborations</div>
         </div>
       </div>
 

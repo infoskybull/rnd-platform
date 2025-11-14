@@ -1,10 +1,13 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import AdminManagementPage from "../pages/AdminManagementPage";
+import AdminLayout from "./AdminLayout";
+import AdminAccountsPage from "../pages/AdminAccountsPage";
+import AdminReportsPage from "../pages/AdminReportsPage";
+import MessagesTab from "./dashboard/MessagesTab";
 
 interface AdminRouteWrapperProps {
-  page: "management";
+  page: "accounts" | "messages" | "reports";
 }
 
 const AdminRouteWrapper: React.FC<AdminRouteWrapperProps> = ({ page }) => {
@@ -42,13 +45,25 @@ const AdminRouteWrapper: React.FC<AdminRouteWrapperProps> = ({ page }) => {
     logout();
   };
 
-  // Render the appropriate page based on the page prop
-  switch (page) {
-    case "management":
-      return <AdminManagementPage user={user} onLogout={handleLogout} />;
-    default:
-      return <Navigate to="/404" replace />;
-  }
+  // Render the appropriate page based on the page prop with AdminLayout
+  const renderPageContent = () => {
+    switch (page) {
+      case "accounts":
+        return <AdminAccountsPage />;
+      case "messages":
+        return <MessagesTab useFullHeight />;
+      case "reports":
+        return <AdminReportsPage />;
+      default:
+        return <Navigate to="/404" replace />;
+    }
+  };
+
+  return (
+    <AdminLayout user={user} onLogout={handleLogout}>
+      {renderPageContent()}
+    </AdminLayout>
+  );
 };
 
 export default AdminRouteWrapper;

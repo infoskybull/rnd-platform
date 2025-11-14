@@ -13,7 +13,7 @@ export const useWalletState = () => {
 
     // Other wallet states
     sui: walletState.sui,
-    bnb: walletState.bnb,
+    ethereum: walletState.ethereum,
     solana: walletState.solana,
 
     // Global wallet state
@@ -21,14 +21,14 @@ export const useWalletState = () => {
     activeWalletType: walletState.activeWalletType,
 
     // Helper functions
-    isWalletConnected: (walletType: "ton" | "sui" | "bnb" | "solana") => {
+    isWalletConnected: (walletType: "ton" | "sui" | "ethereum" | "solana") => {
       switch (walletType) {
         case "ton":
           return walletState.tonConnect.isConnected;
         case "sui":
           return walletState.sui.isConnected;
-        case "bnb":
-          return walletState.bnb.isConnected;
+        case "ethereum":
+          return walletState.ethereum.isConnected;
         case "solana":
           return walletState.solana.isConnected;
         default:
@@ -36,14 +36,14 @@ export const useWalletState = () => {
       }
     },
 
-    getWalletAddress: (walletType: "ton" | "sui" | "bnb" | "solana") => {
+    getWalletAddress: (walletType: "ton" | "sui" | "ethereum" | "solana") => {
       switch (walletType) {
         case "ton":
           return walletState.tonConnect.walletAddress;
         case "sui":
           return walletState.sui.walletAddress;
-        case "bnb":
-          return walletState.bnb.walletAddress;
+        case "ethereum":
+          return walletState.ethereum.walletAddress;
         case "solana":
           return walletState.solana.walletAddress;
         default:

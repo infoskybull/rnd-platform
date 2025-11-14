@@ -227,7 +227,7 @@ const EnhancedInventoryTab: React.FC = () => {
     return (
       item.ideaSaleData?.askingPrice ||
       item.productSaleData?.askingPrice ||
-      item.devCollaborationData?.budget ||
+      item.creatorCollaborationData?.budget ||
       0
     );
   };
@@ -289,12 +289,12 @@ const EnhancedInventoryTab: React.FC = () => {
 
             {(item.ideaSaleData?.tags ||
               item.productSaleData?.tags ||
-              item.devCollaborationData?.tags) && (
+              item.creatorCollaborationData?.tags) && (
               <div className="flex flex-wrap gap-1 mb-3">
                 {(
                   item.ideaSaleData?.tags ||
                   item.productSaleData?.tags ||
-                  item.devCollaborationData?.tags ||
+                  item.creatorCollaborationData?.tags ||
                   []
                 ).map((tag, index) => (
                   <span
@@ -535,12 +535,12 @@ const EnhancedInventoryTab: React.FC = () => {
         {/* Tags if available */}
         {(item.project.ideaSaleData?.tags ||
           item.project.productSaleData?.tags ||
-          item.project.devCollaborationData?.tags) && (
+          item.project.creatorCollaborationData?.tags) && (
           <div className="flex flex-wrap gap-1">
             {(
               item.project.ideaSaleData?.tags ||
               item.project.productSaleData?.tags ||
-              item.project.devCollaborationData?.tags ||
+              item.project.creatorCollaborationData?.tags ||
               []
             )
               .slice(0, 3)
@@ -556,7 +556,7 @@ const EnhancedInventoryTab: React.FC = () => {
             {(
               item.project.ideaSaleData?.tags ||
               item.project.productSaleData?.tags ||
-              item.project.devCollaborationData?.tags ||
+              item.project.creatorCollaborationData?.tags ||
               []
             ).length > 3 && (
               <span className="px-2 py-1 bg-gray-600/20 text-gray-400 rounded-full text-xs">
@@ -564,7 +564,7 @@ const EnhancedInventoryTab: React.FC = () => {
                 {(
                   item.project.ideaSaleData?.tags ||
                   item.project.productSaleData?.tags ||
-                  item.project.devCollaborationData?.tags ||
+                  item.project.creatorCollaborationData?.tags ||
                   []
                 ).length - 3}{" "}
                 more

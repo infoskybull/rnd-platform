@@ -274,7 +274,7 @@ class InventoryService {
       const askingPrice =
         item.ideaSaleData?.askingPrice ||
         item.productSaleData?.askingPrice ||
-        item.devCollaborationData?.budget ||
+        item.creatorCollaborationData?.budget ||
         0;
 
       if (askingPrice <= 50) {

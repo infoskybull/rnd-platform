@@ -1,155 +1,37 @@
 import { apiService } from "./api";
+import type {
+  Contract,
+  ContractMilestone,
+  ContractSignature,
+  ContractFilters,
+  ContractResponse,
+  ContractStats,
+  CreateContractRequest,
+  UpdateContractRequest,
+  SignContractRequest,
+  UpdateMilestoneRequest,
+  MilestoneProgressResponse,
+} from "../types";
 
-// Contract Management Service
-export interface ContractMilestone {
-  id: string;
-  title: string;
-  description: string;
-  budget: number;
-  dueDate: Date;
-  deliverables: string[];
-  paymentPercentage: number;
-  isCompleted: boolean;
-  completedAt?: Date;
-  paymentStatus: "pending" | "paid" | "overdue";
-}
-
-export interface ContractSignature {
-  userId: string;
-  signatureData: string;
-  ipAddress: string;
-  userAgent: string;
-  signedAt: Date;
-}
-
-export interface Contract {
-  _id: string;
-  collaborationId: string;
-  publisherId: string;
-  developerId: string;
-  contractTitle: string;
-  contractDescription: string;
-  contractType:
-    | "development"
-    | "publishing"
-    | "marketing"
-    | "support"
-    | "maintenance";
-  status:
-    | "draft"
-    | "pending_signature"
-    | "active"
-    | "completed"
-    | "terminated"
-    | "expired";
-  totalBudget: number;
-  advancePayment: number;
-  paymentSchedule:
-    | "monthly"
-    | "quarterly"
-    | "milestone_based"
-    | "upfront"
-    | "completion";
-  milestones: ContractMilestone[];
-  termsAndConditions: string;
-  contractStartDate: Date;
-  contractEndDate: Date;
-  signatures: ContractSignature[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ContractFilters {
-  page?: number;
-  limit?: number;
-  status?: Contract["status"];
-  contractType?: Contract["contractType"];
-  collaborationId?: string;
-  publisherId?: string;
-  developerId?: string;
-  search?: string;
-  sortBy?:
-    | "createdAt"
-    | "updatedAt"
-    | "totalBudget"
-    | "contractStartDate"
-    | "contractEndDate";
-  sortOrder?: "asc" | "desc";
-}
-
-export interface ContractResponse {
-  contracts: Contract[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-export interface ContractStats {
-  totalContracts: number;
-  activeContracts: number;
-  completedContracts: number;
-  pendingContracts: number;
-  totalBudget: number;
-  totalPaid: number;
-  averageContractValue: number;
-  contractsByType: Record<string, number>;
-  contractsByStatus: Record<string, number>;
-}
-
-export interface CreateContractRequest {
-  collaborationId: string;
-  contractTitle: string;
-  contractDescription: string;
-  contractType: Contract["contractType"];
-  totalBudget: number;
-  advancePayment: number;
-  paymentSchedule: Contract["paymentSchedule"];
-  milestones: Omit<
-    ContractMilestone,
-    "id" | "isCompleted" | "completedAt" | "paymentStatus"
-  >[];
-  termsAndConditions: string;
-  contractStartDate: string;
-  contractEndDate: string;
-}
-
-export interface UpdateContractRequest {
-  contractTitle?: string;
-  contractDescription?: string;
-  totalBudget?: number;
-  advancePayment?: number;
-  paymentSchedule?: Contract["paymentSchedule"];
-  termsAndConditions?: string;
-  contractStartDate?: string;
-  contractEndDate?: string;
-}
-
-export interface SignContractRequest {
-  signatureData: string;
-  ipAddress: string;
-  userAgent: string;
-}
-
-export interface UpdateMilestoneRequest {
-  isCompleted?: boolean;
-  progressPercentage?: number;
-  completedAt?: string;
-}
-
-export interface MilestoneProgressResponse {
-  milestones: ContractMilestone[];
-  totalProgress: number;
-  completedMilestones: number;
-  totalMilestones: number;
-  totalPaid: number;
-  totalBudget: number;
-}
+// Re-export types for backward compatibility
+export type {
+  Contract,
+  ContractMilestone,
+  ContractSignature,
+  ContractFilters,
+  ContractResponse,
+  ContractStats,
+  CreateContractRequest,
+  UpdateContractRequest,
+  SignContractRequest,
+  UpdateMilestoneRequest,
+  MilestoneProgressResponse,
+};
 
 class ContractService {
   // Contract CRUD Operations
   async createContract(contractData: CreateContractRequest): Promise<Contract> {
-    return apiService["makeRequest"]("/contracts", {
+    return apiService.request("/contracts", {
       method: "POST",
       body: JSON.stringify(contractData),
     });
@@ -167,25 +49,41 @@ class ContractService {
     const queryString = queryParams.toString();
     const endpoint = `/contracts${queryString ? `?${queryString}` : ""}`;
 
-    return apiService["makeRequest"](endpoint);
+    return apiService.request(endpoint);
   }
 
   async getContractById(contractId: string): Promise<Contract> {
-    return apiService["makeRequest"](`/contracts/${contractId}`);
+    const response = await apiService.request<{
+      success: boolean;
+      data: Contract;
+    }>(`/contracts/${contractId}`);
+
+    // Handle both response formats: {success, data} or direct Contract
+    const contract: Contract = (response.data || response) as Contract;
+
+    // Normalize field names for backward compatibility
+    if ((contract as Contract).creatorId && !contract.creatorId) {
+      contract.creatorId = contract.creatorId;
+    }
+    if (contract.creatorId && !contract.creatorId) {
+      contract.creatorId = contract.creatorId;
+    }
+
+    return contract;
   }
 
   async updateContract(
     contractId: string,
     updateData: UpdateContractRequest
   ): Promise<Contract> {
-    return apiService["makeRequest"](`/contracts/${contractId}`, {
+    return apiService.request(`/contracts/${contractId}`, {
       method: "PUT",
       body: JSON.stringify(updateData),
     });
   }
 
   async deleteContract(contractId: string): Promise<void> {
-    return apiService["makeRequest"](`/contracts/${contractId}`, {
+    return apiService.request(`/contracts/${contractId}`, {
       method: "DELETE",
     });
   }
@@ -195,10 +93,16 @@ class ContractService {
     contractId: string,
     signatureData: SignContractRequest
   ): Promise<Contract> {
-    return apiService["makeRequest"](`/contracts/${contractId}/sign`, {
+    const response = await apiService.request<{
+      success: boolean;
+      data: Contract;
+    }>(`/contracts/${contractId}/sign`, {
       method: "POST",
       body: JSON.stringify(signatureData),
     });
+
+    // Handle both response formats: {success, data} or direct Contract
+    return (response.data || response) as Contract;
   }
 
   // Milestone Management
@@ -206,39 +110,67 @@ class ContractService {
     contractId: string,
     milestoneId: string,
     updateData: UpdateMilestoneRequest
-  ): Promise<ContractMilestone> {
-    return apiService["makeRequest"](
-      `/contracts/${contractId}/milestones/${milestoneId}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(updateData),
-      }
-    );
+  ): Promise<Contract> {
+    const response = await apiService.request<{
+      success: boolean;
+      data: Contract;
+    }>(`/contracts/${contractId}/milestones/${milestoneId}`, {
+      method: "PUT",
+      body: JSON.stringify(updateData),
+    });
+
+    // Handle both response formats: {success, data} or direct Contract
+    return (response.data || response) as Contract;
   }
 
   async getMilestoneProgress(
     contractId: string
   ): Promise<MilestoneProgressResponse> {
-    return apiService["makeRequest"](
-      `/contracts/${contractId}/milestones/progress`
-    );
+    const response = await apiService.request<{
+      success: boolean;
+      data: MilestoneProgressResponse;
+    }>(`/contracts/${contractId}/milestones/progress`);
+
+    // Handle both response formats: {success, data} or direct MilestoneProgressResponse
+    const progressData: MilestoneProgressResponse = (response.data ||
+      response) as MilestoneProgressResponse;
+
+    // Normalize response to ensure backward compatibility
+    const normalized: MilestoneProgressResponse = {
+      contractId: progressData.contractId || contractId,
+      totalMilestones:
+        progressData.totalMilestones || progressData.milestones?.length || 0,
+      completedMilestones: progressData.completedMilestones || 0,
+      progressPercentage:
+        progressData.progressPercentage || progressData.totalProgress || 0,
+      upcomingMilestones: progressData.upcomingMilestones || [],
+      overdueMilestones: progressData.overdueMilestones || [],
+      totalBudget: progressData.totalBudget || 0,
+      paidAmount: progressData.paidAmount || progressData.totalPaid || 0,
+      pendingAmount: progressData.pendingAmount || 0,
+      // Legacy fields
+      milestones: progressData.milestones,
+      totalProgress:
+        progressData.progressPercentage || progressData.totalProgress,
+      totalPaid: progressData.paidAmount || progressData.totalPaid,
+    };
+
+    return normalized;
   }
 
   // Contract Analytics
   async getContractStats(): Promise<ContractStats> {
-    return apiService["makeRequest"]("/contracts/stats");
+    return apiService.request("/contracts/stats");
   }
 
   async getContractsByCollaboration(
     collaborationId: string
   ): Promise<Contract[]> {
-    return apiService["makeRequest"](
-      `/contracts/collaboration/${collaborationId}`
-    );
+    return apiService.request(`/contracts/collaboration/${collaborationId}`);
   }
 
   async getContractsByUser(userId: string): Promise<Contract[]> {
-    return apiService["makeRequest"](`/contracts/user/${userId}`);
+    return apiService.request(`/contracts/user/${userId}`);
   }
 
   // Publisher-specific contract endpoints
@@ -258,11 +190,11 @@ class ContractService {
       queryString ? `?${queryString}` : ""
     }`;
 
-    return apiService["makeRequest"](endpoint);
+    return apiService.request(endpoint);
   }
 
   async getPublisherContractStats(): Promise<ContractStats> {
-    return apiService["makeRequest"]("/contracts/publisher/stats");
+    return apiService.request("/contracts/stats");
   }
 
   // Creator-specific contract endpoints
@@ -282,20 +214,20 @@ class ContractService {
       queryString ? `?${queryString}` : ""
     }`;
 
-    return apiService["makeRequest"](endpoint);
+    return apiService.request(endpoint);
   }
 
   async getDeveloperContractStats(): Promise<ContractStats> {
-    return apiService["makeRequest"]("/contracts/stats");
+    return apiService.request("/contracts/stats");
   }
 
   // Contract notifications and reminders
   async getContractNotifications(): Promise<any[]> {
-    return apiService["makeRequest"]("/contracts/notifications");
+    return apiService.request("/contracts/notifications");
   }
 
   async markNotificationAsRead(notificationId: string): Promise<void> {
-    return apiService["makeRequest"](
+    return apiService.request(
       `/contracts/notifications/${notificationId}/read`,
       {
         method: "POST",
@@ -308,43 +240,76 @@ class ContractService {
     contractId: string,
     format: "pdf" | "json" = "pdf"
   ): Promise<Blob> {
-    const API_BASE_URL =
-      (window as any).__API_BASE_URL__ ||
-      (import.meta as any).env?.VITE_API_BASE_URL ||
-      "http://localhost:3000/api";
-    const response = await fetch(
-      `${API_BASE_URL}/contracts/${contractId}/export?format=${format}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiService.getAccessToken()}`,
-        },
+    // For blob responses, we need to use fetch directly but with apiService to handle refreshToken
+    // First, try to get fresh token if needed by making a lightweight request
+    try {
+      // Use apiService to ensure token is refreshed if needed
+      // For blob responses, we'll need to use fetch but ensure token is fresh first
+      const API_BASE_URL =
+        (import.meta as any).env?.VITE_API_BASE_URL ||
+        "http://localhost:8080/api";
+
+      // Ensure we have a fresh token by making a request through apiService first
+      // This will trigger refresh if needed
+      await apiService
+        .request(`/contracts/${contractId}`, { method: "HEAD" })
+        .catch(() => {
+          // Ignore HEAD request errors, just ensure token is fresh
+        });
+
+      const token = apiService.getAccessToken();
+      const response = await fetch(
+        `${API_BASE_URL}/contracts/${contractId}/export?format=${format}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // If it's a 401/403, apiService.request would have handled refresh
+        // But for blob, we need to retry manually
+        if (response.status === 401 || response.status === 403) {
+          // Token might have been refreshed, try again
+          const newToken = apiService.getAccessToken();
+          const retryResponse = await fetch(
+            `${API_BASE_URL}/contracts/${contractId}/export?format=${format}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${newToken}`,
+              },
+            }
+          );
+          if (retryResponse.ok) {
+            return retryResponse.blob();
+          }
+        }
+        throw new Error("Failed to export contract");
       }
-    );
 
-    if (!response.ok) {
-      throw new Error("Failed to export contract");
+      return response.blob();
+    } catch (error) {
+      console.error("Error exporting contract:", error);
+      throw error;
     }
-
-    return response.blob();
   }
 
   // Contract template management
   async getContractTemplates(): Promise<any[]> {
-    return apiService["makeRequest"]("/contracts/templates");
+    return apiService.request("/contracts/templates");
   }
 
   async createContractFromTemplate(
     templateId: string,
     contractData: Partial<CreateContractRequest>
   ): Promise<Contract> {
-    return apiService["makeRequest"](
-      `/contracts/templates/${templateId}/create`,
-      {
-        method: "POST",
-        body: JSON.stringify(contractData),
-      }
-    );
+    return apiService.request(`/contracts/templates/${templateId}/create`, {
+      method: "POST",
+      body: JSON.stringify(contractData),
+    });
   }
 }
 

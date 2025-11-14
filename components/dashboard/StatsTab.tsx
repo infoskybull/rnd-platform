@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { analyticsService } from "../../services/analyticsService";
+import apiService from "../../services/api";
 import { AnalyticsFilters } from "../../services/analyticsService";
 import {
   WarningIcon,
@@ -16,11 +17,337 @@ import {
   PublisherPaymentAnalytics,
   DeveloperCollaborationProjects,
   DeveloperCollaborationDetails,
+  SpendingTrends,
+  EarningsChartData,
 } from "../../types";
 
 interface StatsTabProps {
   userRole: "publisher" | "creator";
 }
+
+// Earnings Chart Component
+interface EarningsChartProps {
+  data: Array<{
+    month: string;
+    monthLabel: string;
+    projectCount: number;
+    totalEarnings: number;
+    averageEarningsPerProject?: number;
+    growth?: number;
+  }>;
+  formatCurrency: (amount: number) => string;
+  formatNumber: (num: number) => string;
+  totalEarnings?: number; // Total earnings from dashboard for comparison
+}
+
+const EarningsChart: React.FC<EarningsChartProps> = ({
+  data,
+  formatCurrency,
+  formatNumber,
+  totalEarnings,
+}) => {
+  if (!data || data.length === 0) return null;
+
+  // Group data by quarter
+  const groupByQuarter = (monthData: typeof data) => {
+    const quarters: Record<string, typeof data> = {};
+
+    monthData.forEach((item) => {
+      const [year, month] = item.month.split("-");
+      const monthNum = parseInt(month);
+      const quarter = Math.floor((monthNum - 1) / 3) + 1;
+      const quarterKey = `${year}-Q${quarter}`;
+
+      if (!quarters[quarterKey]) {
+        quarters[quarterKey] = [];
+      }
+      quarters[quarterKey].push(item);
+    });
+
+    return Object.entries(quarters)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([quarterKey, items]) => {
+        const totalEarnings = items.reduce(
+          (sum, item) => sum + (item.totalEarnings || 0),
+          0
+        );
+        const totalProjects = items.reduce(
+          (sum, item) => sum + (item.projectCount || 0),
+          0
+        );
+        const [year, quarter] = quarterKey.split("-Q");
+        const yearShort = year.slice(-2); // Lấy 2 chữ số cuối của năm
+        const quarterLabel = `Q${quarter} ${yearShort}`;
+
+        // Calculate growth vs previous quarter
+        let growth: number | undefined = undefined;
+        const quarterIndex = Object.keys(quarters).sort().indexOf(quarterKey);
+        if (quarterIndex > 0) {
+          const prevQuarterKey = Object.keys(quarters).sort()[quarterIndex - 1];
+          const prevQuarterItems = quarters[prevQuarterKey];
+          const prevTotalEarnings = prevQuarterItems.reduce(
+            (sum, item) => sum + (item.totalEarnings || 0),
+            0
+          );
+          if (prevTotalEarnings > 0) {
+            growth =
+              ((totalEarnings - prevTotalEarnings) / prevTotalEarnings) * 100;
+          }
+        }
+
+        return {
+          quarterKey,
+          quarterLabel,
+          totalEarnings,
+          projectCount: totalProjects,
+          growth,
+          averageEarningsPerProject:
+            totalProjects > 0 ? totalEarnings / totalProjects : 0,
+          months: items.map((item) => item.monthLabel).join(", "),
+        };
+      });
+  };
+
+  const quarterlyData = groupByQuarter(data);
+
+  // Calculate max value for scaling (use totalEarnings for bar height)
+  const maxEarnings = Math.max(
+    ...quarterlyData.map((d) => d.totalEarnings || 0)
+  );
+  const maxProjects = Math.max(
+    ...quarterlyData.map((d) => d.projectCount || 0)
+  );
+  const minValue = 0; // Start from 0 for better visualization
+
+  // Chart dimensions
+  const chartHeight = 200;
+  const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+  const chartWidth = 100;
+  const usableWidth = chartWidth - padding.left - padding.right;
+  const usableHeight = chartHeight - padding.top - padding.bottom;
+
+  // Tính toán barWidth và spacing để có khoảng cách rộng hơn
+  const minBarWidth = 3; // Minimum width cho mỗi bar
+  const totalSpacing =
+    quarterlyData.length > 1 ? (quarterlyData.length - 1) * 2 : 0; // Khoảng cách giữa các bars (2 units mỗi khoảng)
+  const availableWidth = usableWidth - totalSpacing;
+  const barWidth = Math.max(minBarWidth, availableWidth / quarterlyData.length);
+  const barSpacing = 2; // Fixed spacing giữa các bars
+
+  // Calculate bar heights for earnings (primary bars)
+  const bars = quarterlyData.map((item, index) => {
+    const earningsValue = item.totalEarnings || 0;
+    const earningsHeight =
+      maxEarnings > 0 ? (earningsValue / maxEarnings) * usableHeight : 0;
+    // Tính x position với spacing đã được tính toán
+    const x = padding.left + index * (barWidth + barSpacing);
+    const y = padding.top + usableHeight - earningsHeight;
+
+    return {
+      x,
+      y,
+      earningsHeight: earningsHeight || 0,
+      earningsValue,
+      projectCount: item.projectCount || 0,
+      quarterLabel: item.quarterLabel,
+      growth: item.growth,
+      averageEarningsPerProject: item.averageEarningsPerProject,
+      months: item.months,
+    };
+  });
+
+  // Generate line path for trend (connecting midpoints of bars)
+  const linePoints = bars
+    .map((bar) => `${bar.x + barWidth / 2},${bar.y}`)
+    .join(" ");
+
+  return (
+    <div className="w-full">
+      {/* Chart SVG */}
+      <div
+        className="relative w-full"
+        style={{ height: `${chartHeight + 60}px` }}
+      >
+        <svg
+          width="100%"
+          height={chartHeight + 60}
+          className="overflow-visible"
+          viewBox={`0 0 ${chartWidth} ${chartHeight + 60}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = padding.top + usableHeight - ratio * usableHeight;
+            return (
+              <line
+                key={ratio}
+                x1={padding.left}
+                y1={y}
+                x2={chartWidth - padding.right}
+                y2={y}
+                stroke="rgba(156, 163, 175, 0.2)"
+                strokeWidth="0.5"
+              />
+            );
+          })}
+
+          {/* Bars for Earnings */}
+          {bars.map((bar, index) => (
+            <g key={index}>
+              <rect
+                x={bar.x}
+                y={bar.y}
+                width={barWidth}
+                height={bar.earningsHeight}
+                fill="url(#earningsGradient)"
+                rx="2"
+                className="hover:opacity-80 transition-opacity cursor-pointer"
+              />
+              {/* Value label on hover */}
+              <title>
+                {bar.quarterLabel}
+                {"\n"}Earnings: {formatCurrency(bar.earningsValue)}
+                {"\n"}Projects: {formatNumber(bar.projectCount)}
+                {"\n"}Months: {bar.months}
+                {bar.growth !== undefined &&
+                  bar.growth !== null &&
+                  `\nGrowth: ${bar.growth >= 0 ? "+" : ""}${bar.growth.toFixed(
+                    1
+                  )}%`}
+              </title>
+            </g>
+          ))}
+
+          {/* Trend line */}
+          {bars.length > 1 && (
+            <polyline
+              points={linePoints}
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.7"
+            />
+          )}
+
+          {/* Gradient definition */}
+          <defs>
+            <linearGradient
+              id="earningsGradient"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.4" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* X-axis labels */}
+        <div
+          className="flex mt-2"
+          style={{
+            paddingLeft: `${padding.left}%`,
+            paddingRight: `${padding.right}%`,
+            gap: `${
+              (barSpacing / (chartWidth - padding.left - padding.right)) * 100
+            }%`,
+          }}
+        >
+          {bars.map((bar, index) => (
+            <div
+              key={index}
+              className="text-xs text-gray-400 text-center flex-1"
+              style={{
+                minWidth: `${
+                  (barWidth / (chartWidth - padding.left - padding.right)) * 100
+                }%`,
+              }}
+              title={`${bar.quarterLabel} (${bar.months})`}
+            >
+              {bar.quarterLabel}
+            </div>
+          ))}
+        </div>
+
+        {/* Y-axis labels */}
+        <div
+          className="absolute left-0 top-0 bottom-12 flex flex-col justify-between text-xs text-gray-400"
+          style={{ width: `${padding.left}%`, paddingLeft: "4px" }}
+        >
+          {[
+            maxEarnings,
+            maxEarnings * 0.75,
+            maxEarnings * 0.5,
+            maxEarnings * 0.25,
+            0,
+          ].map((value, index) => (
+            <div key={index}>{formatCurrency(Math.round(value))}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Legend and Stats */}
+      <div className="mt-4 space-y-3">
+        {/* Legend */}
+        <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-400 rounded"></div>
+            <span>Earnings</span>
+          </div>
+          {bars.length > 1 && (
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-0.5 bg-green-400 opacity-60"></div>
+              <span>Trend</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quarterly Stats Grid - Last 3 quarters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+          {bars.slice(-3).map((bar, index) => (
+            <div key={index} className="bg-gray-700/30 rounded-lg p-2 text-xs">
+              <div className="text-gray-400 mb-1">{bar.quarterLabel}</div>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Projects:</span>
+                  <span className="text-blue-400 font-medium">
+                    {formatNumber(bar.projectCount)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Earnings:</span>
+                  <span className="text-green-400 font-medium">
+                    {formatCurrency(bar.earningsValue)}
+                  </span>
+                </div>
+                {bar.growth !== undefined && bar.growth !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Growth:</span>
+                    <span
+                      className={`font-medium ${
+                        bar.growth >= 0 ? "text-green-400" : "text-gray-400"
+                      }`}
+                    >
+                      {bar.growth >= 0 ? "+" : ""}
+                      {bar.growth.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+                <div className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-600">
+                  {bar.months}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
   const isPublisher = userRole === "publisher";
@@ -50,6 +377,11 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
     useState<DeveloperCollaborationProjects | null>(null);
   const [developerCollaborationDetails, setDeveloperCollaborationDetails] =
     useState<DeveloperCollaborationDetails | null>(null);
+  const [spendingTrends, setSpendingTrends] = useState<SpendingTrends | null>(
+    null
+  );
+  const [earningsChartData, setEarningsChartData] =
+    useState<EarningsChartData | null>(null);
 
   // Fetch analytics data
   const fetchAnalyticsData = async () => {
@@ -68,8 +400,9 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
           projectData,
           roiData,
           paymentData,
+          trendsData,
         ] = await Promise.all([
-          analyticsService.getPublisherDashboard(filters).catch(() => null),
+          apiService.getPublisherDashboard(filters).catch(() => null),
           analyticsService
             .getPublisherBudgetAnalytics(filters)
             .catch(() => null),
@@ -83,6 +416,7 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
           analyticsService
             .getPublisherPaymentAnalytics(filters)
             .catch(() => null),
+          apiService.getSpendingTrends(filters).catch(() => null),
         ]);
 
         setDashboard(dashboardData);
@@ -91,14 +425,19 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
         setPublisherProjectAnalytics(projectData);
         setPublisherROIAnalytics(roiData);
         setPublisherPaymentAnalytics(paymentData);
+        setSpendingTrends(trendsData);
       } else {
-        // Fetch creator-specific analytics
+        // Fetch creator-specific analytics using real API
         const [
           dashboardData,
+          trendsData,
+          earningsChartDataResponse,
           collaborationProjectsData,
           collaborationDetailsData,
         ] = await Promise.all([
-          analyticsService.getDeveloperDashboard(filters).catch(() => null),
+          apiService.getDeveloperDashboard(filters).catch(() => null),
+          apiService.getSpendingTrends(filters).catch(() => null),
+          apiService.getCreatorEarningsChart(filters).catch(() => null),
           analyticsService
             .getDeveloperCollaborationProjects(filters)
             .catch(() => null),
@@ -108,144 +447,33 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
         ]);
 
         setDashboard(dashboardData);
+        setSpendingTrends(trendsData);
+        setEarningsChartData(
+          earningsChartDataResponse?.data || earningsChartDataResponse
+        );
         setDeveloperCollaborationProjects(collaborationProjectsData);
         setDeveloperCollaborationDetails(collaborationDetailsData);
       }
     } catch (err) {
       // Set a user-friendly error message
-      setError("Analytics API is not available yet. Using demo data for now.");
-      console.warn("Analytics API not available, using fallback data:", err);
+      setError("Failed to load analytics data. Please try again later.");
+      console.warn("Analytics API error:", err);
 
-      // Set demo data for development
+      // Set empty/null data instead of demo data
       if (isPublisher) {
-        setDashboard({
-          overview: {
-            totalPurchases: 12,
-            totalSpent: 15000,
-            activeCollaborations: 3,
-            completedContracts: 8,
-            recentPurchases: [
-              {
-                projectTitle: "Mobile Game Development",
-                purchaseDate: "2024-01-15",
-                amount: 5000,
-              },
-              {
-                projectTitle: "Web Application",
-                purchaseDate: "2024-01-10",
-                amount: 3000,
-              },
-              {
-                projectTitle: "Indie Horror Game",
-                purchaseDate: "2024-01-08",
-                amount: 2500,
-              },
-              {
-                projectTitle: "Racing Simulator",
-                purchaseDate: "2024-01-05",
-                amount: 2000,
-              },
-              {
-                projectTitle: "Platformer Adventure",
-                purchaseDate: "2024-01-03",
-                amount: 2500,
-              },
-            ],
-          },
-          spendingAnalytics: {
-            totalSpent: 15000,
-            spendingThisMonth: 5000,
-            monthlyGrowth: 15.2,
-          },
-          purchaseAnalytics: {
-            totalPurchases: 12,
-            averagePurchaseValue: 1250,
-            topPurchasedCategories: ["GAME", "WEB_APP", "MOBILE_APP"],
-          },
-        });
+        setDashboard(null);
+        setPublisherBudgetAnalytics(null);
+        setPublisherCollaborationPerformance(null);
+        setPublisherProjectAnalytics(null);
+        setPublisherROIAnalytics(null);
+        setPublisherPaymentAnalytics(null);
+        setSpendingTrends(null);
       } else {
-        // Creator-specific demo data
-        setDashboard({
-          overview: {
-            totalPurchases: 0, // Developers don't purchase, they earn
-            totalSpent: 0, // Developers don't spend, they earn
-            activeCollaborations: 5,
-            completedContracts: 12,
-            recentPurchases: [], // Developers don't have purchases
-          },
-          // Creator-specific analytics
-          earningsAnalytics: {
-            totalEarnings: 25000,
-            earningsThisMonth: 3500,
-            monthlyGrowth: 12.5,
-          },
-          projectAnalytics: {
-            totalProjects: 8,
-            publishedProjects: 6,
-            soldProjects: 3,
-            averageProjectValue: 1500,
-            topProjectCategories: ["GAME", "WEB_APP", "MOBILE_APP"],
-          },
-        });
-        setDeveloperCollaborationDetails({
-          totalCollaborations: 17,
-          activeCollaborations: 5,
-          completedCollaborations: 12,
-          totalEarnings: 25000,
-          averageProjectValue: 1500,
-          topPublishers: [
-            {
-              publisherId: "pub1",
-              publisherName: "GameCorp Studios",
-              publisherEmail: "contact@gamecorp.com",
-              collaborationCount: 3,
-              totalBudget: 12000,
-              completedProjects: 2,
-            },
-            {
-              publisherId: "pub2",
-              publisherName: "IndieGames Inc",
-              publisherEmail: "hello@indiegames.com",
-              collaborationCount: 2,
-              totalBudget: 8000,
-              completedProjects: 1,
-            },
-          ],
-          successRate: 85.5,
-        });
-        setDeveloperCollaborationProjects({
-          totalProjects: 8,
-          projects: [
-            {
-              collaborationId: "collab1",
-              projectId: "proj1",
-              projectTitle: "Space Adventure RPG",
-              projectType: "idea_sale",
-              projectStatus: "completed",
-              publisherName: "GameCorp Studios",
-              publisherEmail: "contact@gamecorp.com",
-              budget: 5000,
-              status: "completed",
-              startDate: "2024-01-01",
-              endDate: "2024-03-01",
-              createdAt: "2024-01-01",
-            },
-            {
-              collaborationId: "collab2",
-              projectId: "proj2",
-              projectTitle: "Mobile Puzzle Game",
-              projectType: "product_sale",
-              projectStatus: "active",
-              publisherName: "IndieGames Inc",
-              publisherEmail: "hello@indiegames.com",
-              budget: 3000,
-              status: "active",
-              startDate: "2024-02-01",
-              endDate: "2024-04-01",
-              createdAt: "2024-02-01",
-            },
-          ],
-        });
+        setDashboard(null);
+        setSpendingTrends(null);
+        setEarningsChartData(null);
+        setDeveloperCollaborationProjects(null);
+        setDeveloperCollaborationDetails(null);
       }
     } finally {
       setLoading(false);
@@ -436,14 +664,15 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 </div>
               </>
             ) : (
-              // Creator Metrics
+              // Creator Metrics - Using API response format
               <>
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-green-400">
-                      {dashboard?.earningsAnalytics
+                      {dashboard?.collaborationAnalytics
                         ? formatCurrency(
-                            dashboard.earningsAnalytics.totalEarnings
+                            dashboard.collaborationAnalytics
+                              .totalCollaborationValue || 0
                           )
                         : "$0"}
                     </div>
@@ -456,8 +685,10 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-lg sm:text-xl font-bold text-blue-400">
-                      {dashboard?.projectAnalytics
-                        ? formatNumber(dashboard.projectAnalytics.totalProjects)
+                      {dashboard?.purchaseAnalytics
+                        ? formatNumber(
+                            dashboard.purchaseAnalytics.totalPurchases || 0
+                          )
                         : "0"}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -469,8 +700,11 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-yellow-400">
-                      {dashboard?.overview
-                        ? formatNumber(dashboard.overview.activeCollaborations)
+                      {dashboard?.collaborationAnalytics
+                        ? formatNumber(
+                            dashboard.collaborationAnalytics
+                              .activeCollaborations || 0
+                          )
                         : "0"}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -482,9 +716,10 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-purple-400">
-                      {dashboard?.overview
+                      {dashboard?.collaborationAnalytics
                         ? formatNumber(
-                            dashboard.overview.completedContracts || 0
+                            dashboard.collaborationAnalytics
+                              .completedContracts || 0
                           )
                         : "0"}
                     </div>
@@ -563,62 +798,47 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 )}
               </div>
             ) : (
-              // Creator: Recent Earnings Section
+              // Creator: Earnings Chart Section
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                   <h3 className="text-base sm:text-lg font-semibold text-white">
-                    Recent Earnings
+                    Earnings Chart
                   </h3>
-                  {developerCollaborationProjects?.projects?.length > 0 && (
+                  {dashboard?.collaborationAnalytics
+                    ?.totalCollaborationValue !== undefined && (
                     <div className="text-right">
-                      <div className="text-xs text-gray-400">Recent Total:</div>
+                      <div className="text-xs text-gray-400">
+                        Total Earnings:
+                      </div>
                       <div className="text-sm font-medium text-green-400">
                         {formatCurrency(
-                          developerCollaborationProjects.projects
-                            .slice(0, 5)
-                            .reduce((sum, project) => sum + project.budget, 0)
+                          dashboard.collaborationAnalytics
+                            .totalCollaborationValue || 0
                         )}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {developerCollaborationProjects?.projects?.length > 0 ? (
-                  <div className="space-y-2 sm:space-y-3">
-                    {developerCollaborationProjects.projects
-                      .slice(0, 5)
-                      .map((project, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 sm:p-3 bg-gray-700/50 rounded-lg gap-2"
-                        >
-                          <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
-                            <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0"></div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-white text-xs sm:text-sm font-medium truncate">
-                                {project.projectTitle}
-                              </div>
-                              <div className="text-gray-400 text-xs">
-                                {project.publisherName} • {project.status}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className="text-green-400 text-xs sm:text-sm font-medium">
-                              +{formatCurrency(project.budget)}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                {earningsChartData &&
+                earningsChartData.data &&
+                earningsChartData.data.length > 0 ? (
+                  <EarningsChart
+                    data={earningsChartData.data}
+                    formatCurrency={formatCurrency}
+                    formatNumber={formatNumber}
+                    totalEarnings={
+                      dashboard?.collaborationAnalytics?.totalCollaborationValue
+                    }
+                  />
                 ) : (
                   <div className="text-center py-8">
                     <div className="text-6xl mb-4">
                       <CurrencyDollarIcon className="w-16 h-16 mx-auto text-green-400" />
                     </div>
-                    <p className="text-gray-400">No recent earnings</p>
+                    <p className="text-gray-400">No earnings data</p>
                     <p className="text-gray-500 text-sm">
-                      Your collaboration earnings will appear here
+                      Your earnings chart will appear here
                     </p>
                   </div>
                 )}
@@ -677,20 +897,24 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                 )}
               </div>
             ) : (
-              // Creator: Earnings Overview Section
+              // Creator: Earnings Overview Section - Using API response format
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6">
                 <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
                   Earnings Overview
                 </h3>
 
-                {dashboard?.earningsAnalytics ? (
+                {dashboard?.spendingAnalytics ||
+                dashboard?.collaborationAnalytics ? (
                   <div className="space-y-3 sm:space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
                         <div className="text-lg sm:text-xl font-bold text-green-400">
-                          {formatCurrency(
-                            dashboard.earningsAnalytics.totalEarnings
-                          )}
+                          {dashboard?.collaborationAnalytics
+                            ? formatCurrency(
+                                dashboard.collaborationAnalytics
+                                  .totalCollaborationValue || 0
+                              )
+                            : "$0"}
                         </div>
                         <div className="text-gray-400 text-xs sm:text-sm">
                           Total Earnings
@@ -698,24 +922,32 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                       </div>
                       <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
                         <div className="text-lg sm:text-xl font-bold text-blue-400">
-                          {formatCurrency(
-                            dashboard.earningsAnalytics.earningsThisMonth
-                          )}
+                          {dashboard?.spendingAnalytics
+                            ? formatCurrency(
+                                dashboard.spendingAnalytics.spendingThisMonth ||
+                                  0
+                              )
+                            : "$0"}
                         </div>
                         <div className="text-gray-400 text-xs sm:text-sm">
                           This Month
                         </div>
                       </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-xs sm:text-sm text-gray-400">
-                        Monthly Growth:{" "}
-                        <span className="text-green-400 font-medium">
-                          {dashboard.earningsAnalytics.monthlyGrowth.toFixed(1)}
-                          %
-                        </span>
+                    {dashboard?.spendingAnalytics?.monthlyGrowth !==
+                      undefined && (
+                      <div className="text-center">
+                        <div className="text-xs sm:text-sm text-gray-400">
+                          Monthly Growth:{" "}
+                          <span className="text-green-400 font-medium">
+                            {dashboard.spendingAnalytics.monthlyGrowth.toFixed(
+                              1
+                            )}
+                            %
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8">
@@ -775,8 +1007,8 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                   </div>
                 </div>
               )
-            : // Creator: Project Analytics
-              dashboard?.projectAnalytics && (
+            : // Creator: Project Analytics - Using API response format
+              dashboard?.purchaseAnalytics && (
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6">
                   <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
                     Project Breakdown
@@ -784,7 +1016,9 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="text-center p-3 sm:p-4 bg-gray-700/50 rounded-lg">
                       <div className="text-lg sm:text-xl font-bold text-blue-400">
-                        {formatNumber(dashboard.projectAnalytics.totalProjects)}
+                        {formatNumber(
+                          dashboard.purchaseAnalytics.totalPurchases || 0
+                        )}
                       </div>
                       <div className="text-gray-400 text-xs sm:text-sm">
                         Total Projects
@@ -793,7 +1027,7 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                     <div className="text-center p-3 sm:p-4 bg-gray-700/50 rounded-lg">
                       <div className="text-lg sm:text-xl font-bold text-green-400">
                         {formatCurrency(
-                          dashboard.projectAnalytics.averageProjectValue
+                          dashboard.purchaseAnalytics.averagePurchaseValue || 0
                         )}
                       </div>
                       <div className="text-gray-400 text-xs sm:text-sm">
@@ -802,7 +1036,8 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
                     </div>
                     <div className="text-center p-3 sm:p-4 bg-gray-700/50 rounded-lg">
                       <div className="text-lg sm:text-xl font-bold text-yellow-400">
-                        {dashboard.projectAnalytics.topProjectCategories.length}
+                        {dashboard.purchaseAnalytics.topPurchasedCategories
+                          ?.length || 0}
                       </div>
                       <div className="text-gray-400 text-xs sm:text-sm">
                         Categories
@@ -854,93 +1089,8 @@ const StatsTab: React.FC<StatsTabProps> = ({ userRole }) => {
       )}
 
       {/* Publisher Extended Analytics Section */}
-      {isPublisher && publisherBudgetAnalytics && (
+      {isPublisher && (
         <>
-          {/* Budget Analytics */}
-          <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
-              Budget Analytics
-            </h3>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-              <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
-                <div className="text-lg sm:text-xl font-bold text-blue-400">
-                  {formatCurrency(
-                    publisherBudgetAnalytics.totalBudgetAllocated
-                  )}
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">
-                  Total Allocated
-                </div>
-              </div>
-              <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
-                <div className="text-lg sm:text-xl font-bold text-red-400">
-                  {formatCurrency(publisherBudgetAnalytics.totalBudgetSpent)}
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">
-                  Total Spent
-                </div>
-              </div>
-              <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
-                <div className="text-lg sm:text-xl font-bold text-green-400">
-                  {formatCurrency(publisherBudgetAnalytics.remainingBudget)}
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">
-                  Remaining
-                </div>
-              </div>
-              <div className="text-center p-2 sm:p-3 bg-gray-700/50 rounded-lg">
-                <div className="text-lg sm:text-xl font-bold text-yellow-400">
-                  {publisherBudgetAnalytics.budgetUtilizationRate.toFixed(1)}%
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">
-                  Utilization Rate
-                </div>
-              </div>
-            </div>
-
-            {/* Budget by Project Type */}
-            {publisherBudgetAnalytics.budgetByProjectType?.length > 0 && (
-              <div className="mb-4 sm:mb-6">
-                <h4 className="text-sm sm:text-base font-medium text-white mb-3">
-                  Budget by Project Type
-                </h4>
-                <div className="space-y-2">
-                  {publisherBudgetAnalytics.budgetByProjectType.map(
-                    (item, index) => (
-                      <div
-                        key={index}
-                        className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 sm:p-3 bg-gray-700/30 rounded-lg gap-2"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-white font-medium text-sm sm:text-base truncate">
-                            {item.projectType}
-                          </div>
-                          <div className="text-gray-400 text-xs sm:text-sm">
-                            {item.projectCount} projects
-                          </div>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <div className="text-green-400 font-medium text-xs sm:text-sm">
-                            {formatCurrency(item.spentBudget)} /{" "}
-                            {formatCurrency(item.totalBudget)}
-                          </div>
-                          <div className="text-gray-400 text-xs">
-                            {(
-                              (item.spentBudget / item.totalBudget) *
-                              100
-                            ).toFixed(1)}
-                            % used
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Collaboration Performance */}
           {publisherCollaborationPerformance && (
             <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6">

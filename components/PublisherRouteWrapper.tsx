@@ -8,6 +8,12 @@ import PublisherContractsPage from "../pages/PublisherContractsPage";
 import PublisherStatsPage from "../pages/PublisherStatsPage";
 import PublisherHistoryPage from "../pages/PublisherHistoryPage";
 import PublisherSettingsPage from "../pages/PublisherSettingsPage";
+import PublisherMessagesPage from "../pages/PublisherMessagesPage";
+import {
+  PlanAccessRequirement,
+  getPlanCode,
+  meetsPlanRequirements,
+} from "../utils/planAccess";
 
 interface PublisherRouteWrapperProps {
   page:
@@ -17,13 +23,28 @@ interface PublisherRouteWrapperProps {
     | "contracts"
     | "stats"
     | "history"
-    | "settings";
+    | "settings"
+    | "messages";
 }
 
 const PublisherRouteWrapper: React.FC<PublisherRouteWrapperProps> = ({
   page,
 }) => {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  const pageRequirements: Record<
+    PublisherRouteWrapperProps["page"],
+    PlanAccessRequirement | undefined
+  > = {
+    "browse-games": undefined,
+    inventory: undefined,
+    collaborations: undefined,
+    contracts: undefined,
+    stats: { minPlan: "pro", features: ["hasAnalyticsAccess"] },
+    history: undefined,
+    settings: undefined,
+    messages: undefined,
+  };
 
   // Show loading while auth is being checked
   if (isLoading) {
@@ -53,6 +74,17 @@ const PublisherRouteWrapper: React.FC<PublisherRouteWrapperProps> = ({
     return <Navigate to="/403" replace />;
   }
 
+  const requirement = pageRequirements[page];
+  if (!meetsPlanRequirements(user, requirement)) {
+    const requiredPlan = requirement?.minPlan ?? "pro";
+    const redirectTarget = `/plan?required=${encodeURIComponent(
+      page
+    )}&current=${encodeURIComponent(
+      getPlanCode(user)
+    )}&upgrade=${encodeURIComponent(requiredPlan)}`;
+    return <Navigate to={redirectTarget} replace />;
+  }
+
   const handleLogout = () => {
     logout();
   };
@@ -75,6 +107,8 @@ const PublisherRouteWrapper: React.FC<PublisherRouteWrapperProps> = ({
       return <PublisherHistoryPage user={user} onLogout={handleLogout} />;
     case "settings":
       return <PublisherSettingsPage user={user} onLogout={handleLogout} />;
+    case "messages":
+      return <PublisherMessagesPage user={user} onLogout={handleLogout} />;
     default:
       return <Navigate to="/404" replace />;
   }

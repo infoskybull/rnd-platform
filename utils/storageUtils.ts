@@ -25,7 +25,7 @@ export const clearAuthLocalStorage = (): void => {
     "tonPublicKey",
     "tonWalletAddress",
     "suiWalletAddress",
-    "bnbWalletAddress",
+    "ethereumWalletAddress",
     "solanaWalletAddress",
   ];
 
@@ -44,7 +44,7 @@ export const clearWalletLocalStorage = (): void => {
     "tonPublicKey",
     "tonWalletStateInit",
     "suiWalletAddress",
-    "bnbWalletAddress",
+    "ethereumWalletAddress",
     "solanaWalletAddress",
     "walletType",
     "walletConnected",

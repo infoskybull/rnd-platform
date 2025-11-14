@@ -110,10 +110,10 @@ export interface SpendingTrends {
   period: string;
   trends: Array<{
     period: string;
-    count: number;
-    totalSpent: number;
+    spending: number;
+    growth: number; // Phần trăm tăng trưởng
   }>;
-  lastUpdated: string;
+  lastUpdated: Date | string;
 }
 
 // Publisher-specific analytics interfaces
@@ -147,7 +147,7 @@ export interface PublisherCollaborationPerformance {
   collaborationSuccessRate: number;
   averageProjectRating: number;
   topPerformingDevelopers: Array<{
-    developerId: string;
+    creatorId: string;
     developerName: string;
     completedProjects: number;
     averageRating: number;

@@ -59,7 +59,7 @@ export const useInventory = () => {
             purchasePrice:
               project.ideaSaleData?.askingPrice ||
               project.productSaleData?.askingPrice ||
-              project.devCollaborationData?.budget ||
+              project.creatorCollaborationData?.budget ||
               0,
             status: "completed" as const,
             transactionId: project._id,
@@ -221,7 +221,7 @@ export const useInventory = () => {
             purchasePrice:
               project.ideaSaleData?.askingPrice ||
               project.productSaleData?.askingPrice ||
-              project.devCollaborationData?.budget ||
+              project.creatorCollaborationData?.budget ||
               0,
             status: "completed" as const,
             transactionId: project._id,

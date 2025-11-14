@@ -35,7 +35,7 @@ const mockVideos = [
 export const mockProjects: GameProject[] = [
   {
     _id: "1",
-    developerId: "current_user",
+    creatorId: "current_user",
     title: "Space Adventure RPG",
     shortDescription:
       "An epic space exploration RPG with procedurally generated planets and deep character customization.",
@@ -70,7 +70,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "2",
-    developerId: "dev2",
+    creatorId: "dev2",
     title: "Puzzle Quest Mobile",
     shortDescription:
       "A mobile puzzle game with unique mechanics and beautiful hand-drawn artwork.",
@@ -109,13 +109,13 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "3",
-    developerId: "dev3",
+    creatorId: "dev3",
     title: "Indie Horror Game Collaboration",
     shortDescription:
       "Looking for a publisher to collaborate on a psychological horror game with unique art style.",
     projectType: "dev_collaboration",
     status: "published",
-    devCollaborationData: {
+    creatorCollaborationData: {
       description:
         "A psychological horror game that explores themes of isolation and fear through innovative gameplay mechanics. The game features a unique art style combining 2D and 3D elements, atmospheric sound design, and branching storylines.",
       proposal:
@@ -158,7 +158,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "4",
-    developerId: "current_user",
+    creatorId: "current_user",
     title: "Retro Arcade Shooter",
     shortDescription:
       "A fast-paced retro-style arcade shooter with modern twists and online multiplayer.",
@@ -188,7 +188,7 @@ export const mockProjects: GameProject[] = [
   // Additional projects for pagination testing
   {
     _id: "5",
-    developerId: "dev5",
+    creatorId: "dev5",
     title: "Fantasy MMORPG",
     shortDescription:
       "A massive multiplayer online RPG set in a rich fantasy world with player-driven economy.",
@@ -219,7 +219,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "6",
-    developerId: "dev6",
+    creatorId: "dev6",
     title: "Racing Simulator Pro",
     shortDescription:
       "A realistic racing simulator with authentic physics and licensed cars.",
@@ -253,7 +253,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "7",
-    developerId: "current_user",
+    creatorId: "current_user",
     title: "City Builder Strategy",
     shortDescription:
       "A strategic city building game with resource management and diplomacy.",
@@ -282,7 +282,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "8",
-    developerId: "dev8",
+    creatorId: "dev8",
     title: "Indie Platformer Adventure",
     shortDescription:
       "A charming 2D platformer with hand-drawn art and engaging story.",
@@ -316,13 +316,13 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "9",
-    developerId: "dev9",
+    creatorId: "dev9",
     title: "VR Fitness Game",
     shortDescription:
       "An immersive VR fitness game that makes exercise fun and engaging.",
     projectType: "dev_collaboration",
     status: "published",
-    devCollaborationData: {
+    creatorCollaborationData: {
       description:
         "A VR fitness game that combines exercise with gaming elements. Features multiple workout modes, progress tracking, and social features. Designed to make fitness accessible and enjoyable for all ages.",
       proposal:
@@ -356,7 +356,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "10",
-    developerId: "dev10",
+    creatorId: "dev10",
     title: "Battle Royale Mobile",
     shortDescription:
       "A fast-paced battle royale game optimized for mobile devices.",
@@ -391,7 +391,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "11",
-    developerId: "dev11",
+    creatorId: "dev11",
     title: "Educational Math Game",
     shortDescription:
       "A fun educational game that teaches math concepts through gameplay.",
@@ -425,7 +425,7 @@ export const mockProjects: GameProject[] = [
   },
   {
     _id: "12",
-    developerId: "current_user",
+    creatorId: "current_user",
     title: "Stealth Action Game",
     shortDescription:
       "A stealth-based action game with innovative mechanics and rich narrative.",

@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  MessageCircle,
 } from "lucide-react";
 
 export type TabType =
@@ -22,7 +23,8 @@ export type TabType =
   | "stats"
   | "settings"
   | "your-projects"
-  | "history";
+  | "history"
+  | "messages";
 
 interface TabConfig {
   id: TabType;
@@ -140,6 +142,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       description: "Manage creator collaborations",
     },
     {
+      id: "messages",
+      label: "Messages",
+      icon: <MessageCircle className="w-5 h-5" />,
+      description: "Chat with collaborators",
+    },
+    {
       id: "contracts",
       label: "Contracts",
       icon: <FileText className="w-5 h-5" />,
@@ -177,6 +185,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       label: "Collaborations",
       icon: <Users className="w-5 h-5" />,
       description: "Manage publisher collaborations",
+    },
+    {
+      id: "messages",
+      label: "Messages",
+      icon: <MessageCircle className="w-5 h-5" />,
+      description: "Chat with collaborators",
     },
     {
       id: "contracts",

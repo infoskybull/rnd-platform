@@ -217,6 +217,18 @@ export const SolanaWalletProvider: React.FC<SolanaWalletProviderProps> = ({
     }
   };
 
+  // Helper function to convert Uint8Array to base64 (browser-compatible)
+  const uint8ArrayToBase64 = (uint8Array: Uint8Array): string => {
+    // Convert Uint8Array to binary string
+    let binary = "";
+    const len = uint8Array.length;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(uint8Array[i]);
+    }
+    // Convert binary string to base64
+    return btoa(binary);
+  };
+
   // Sign message with Phantom wallet
   const signMessage = async (message: string): Promise<string | null> => {
     try {
@@ -234,10 +246,8 @@ export const SolanaWalletProvider: React.FC<SolanaWalletProviderProps> = ({
       // Sign the message
       const signedMessage = await provider.signMessage(messageBytes, "utf8");
 
-      // Convert signature to base64 string
-      const signatureBase64 = Buffer.from(signedMessage.signature).toString(
-        "base64"
-      );
+      // Convert signature to base64 string (browser-compatible)
+      const signatureBase64 = uint8ArrayToBase64(signedMessage.signature);
 
       console.log("Message signed successfully");
       return signatureBase64;

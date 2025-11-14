@@ -11,7 +11,7 @@ import { useWalletCheck } from "../hooks/useWalletCheck";
 import { Web3WalletCredentials } from "../types";
 import { useNavigate } from "react-router-dom";
 import { walletService } from "../services/walletService";
-import { useAccount, useConnect, useSignMessage } from "wagmi";
+import { useAccount, useSignMessage, useDisconnect } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSolanaWallet } from "../contexts/SolanaWalletContext";
 import { useSuiWallet } from "../contexts/SuiWalletContext";
@@ -52,6 +52,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
   // Ethereum/Wagmi hooks
   const { address: ethAddress, isConnected: isEthConnected } = useAccount();
   const { signMessageAsync: signEthMessage } = useSignMessage();
+  const { disconnect: disconnectEth } = useDisconnect();
 
   // Sui wallet hooks - using direct Sui wallet connection
   const {
@@ -92,55 +93,128 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
   // Ref to track if we've already processed this publicKey
   const processedPublicKeyRef = useRef<string | null>(null);
 
+  // Track if we need to process Ethereum connection after wallet is connected (TON-style flow)
+  const [processEthConnection, setProcessEthConnection] = useState(false);
+
+  // Ref to track if we've already processed this Ethereum address
+  const processedEthAddressRef = useRef<string | null>(null);
+
   // Memoize current publicKey to avoid unnecessary recalculations
   const currentPublicKey = useMemo(() => publicKey?.toString(), [publicKey]);
 
   // Force refresh state when modal opens/closes to ensure status accuracy
   const wasOpenRef = useRef(false);
+  const hasCleanedWalletsRef = useRef(false);
 
+  // Track previous connection states to detect when wallet just connected
+  const prevSolanaConnectedRef = useRef(false);
+  const prevSuiConnectedRef = useRef(false);
+  const prevEthConnectedRef = useRef(false);
+  const prevEthAddressRef = useRef<string | undefined>(undefined);
+  const prevSolanaPublicKeyRef = useRef<string | null>(null);
+  const prevSuiAddressRef = useRef<string | null>(null);
+
+  // Clean all wallet connections when modal opens for the first time
   useEffect(() => {
-    // When modal opens for the first time
-    if (isOpen && !wasOpenRef.current) {
-      console.log("Web3WalletModal opened - current status:", {
-        isTonConnected,
-        tonWalletAddress,
-        isEthConnected,
-        ethAddress,
-        isSuiConnected,
-        suiWalletAddress,
-        isSolanaConnected: !!publicKey,
-        solanaAddress: publicKey?.toString(),
-      });
+    if (isOpen && !wasOpenRef.current && !hasCleanedWalletsRef.current) {
+      console.log(
+        "Web3WalletModal opened for the first time - cleaning all wallet connections"
+      );
+
+      // Clean all wallets
+      const cleanAllWallets = async () => {
+        try {
+          // Reset previous connection state refs before disconnecting
+          prevSolanaConnectedRef.current = false;
+          prevSuiConnectedRef.current = false;
+          prevEthConnectedRef.current = false;
+          prevEthAddressRef.current = undefined;
+          prevSolanaPublicKeyRef.current = null;
+          prevSuiAddressRef.current = null;
+
+          // Disconnect TON wallet
+          if (isTonConnected) {
+            console.log("Disconnecting TON wallet...");
+            await disconnect();
+          }
+
+          // Disconnect Ethereum wallet
+          if (isEthConnected) {
+            console.log("Disconnecting Ethereum wallet...");
+            disconnectEth();
+          }
+
+          // Disconnect Solana wallet
+          if (isSolanaConnected) {
+            console.log("Disconnecting Solana wallet...");
+            await disconnectSolana();
+          }
+
+          // Disconnect Sui wallet
+          if (isSuiConnected) {
+            console.log("Disconnecting Sui wallet...");
+            await disconnectSui();
+          }
+
+          hasCleanedWalletsRef.current = true;
+          console.log("✅ All wallets cleaned");
+        } catch (error) {
+          console.error("Error cleaning wallets:", error);
+        }
+      };
+
+      cleanAllWallets();
       wasOpenRef.current = true;
     }
 
-    // When modal closes
+    // When modal closes, reset flags
     if (!isOpen && wasOpenRef.current) {
       console.log("Web3WalletModal closed - resetting state");
       processedPublicKeyRef.current = null;
       setProcessSolanaConnection(false);
+      processedEthAddressRef.current = null;
+      setProcessEthConnection(false);
+      processedSuiAddressRef.current = null;
+      setProcessSuiConnection(false);
+      setNotification(null);
       wasOpenRef.current = false;
+      hasCleanedWalletsRef.current = false;
+
+      // Reset previous connection state refs
+      prevSolanaConnectedRef.current = false;
+      prevSuiConnectedRef.current = false;
+      prevEthConnectedRef.current = false;
+      prevEthAddressRef.current = undefined;
+      prevSolanaPublicKeyRef.current = null;
+      prevSuiAddressRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]); // Only depend on isOpen to prevent unnecessary rerenders
 
-  // Handle Solana wallet connection after approval - memoized to prevent rerenders
+  // Handle Solana wallet connection after approval - ONLY when user clicks
   const handleApprovedConnection = useCallback(async () => {
     if (!processSolanaConnection || !publicKey || isSolanaConnecting) return;
 
     console.log("Processing Solana connection for:", publicKey.toString());
     setProcessSolanaConnection(false);
     setIsSolanaConnecting(true);
+    setIsConnecting(true);
 
     try {
       const walletAddress = publicKey.toString();
 
-      // Check if wallet exists
+      console.log("Processing Solana wallet connection for:", walletAddress);
+
+      // Step 1: Check if wallet exists (similar to TON flow)
       const walletCheck = await checkWallet(walletAddress, "solana");
 
+      console.log("Solana wallet check result:", walletCheck);
+
       if (walletCheck?.exists) {
-        // Generate auth message and sign for Solana wallet
-        console.log("Generating auth message from backend...");
+        // Step 2: Generate authentication message from backend (TON-style flow)
+        console.log(
+          "Generating auth message from backend for Solana wallet..."
+        );
         const messageResult = await walletService.generateAuthMessage(
           walletAddress,
           "solana"
@@ -151,17 +225,17 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
         }
 
         const authMessage = messageResult.data.message;
-        console.log("Generated auth message:", authMessage);
+        console.log("Generated auth message for Solana:", authMessage);
 
-        // Sign the message with Solana wallet
-        console.log("Signing message...");
+        // Step 3: Sign the message with Solana wallet
+        console.log("Signing message with Solana wallet...");
         const signature = await signSolanaMessage(authMessage);
 
         if (signature) {
-          console.log("Message signed successfully");
+          console.log("Message signed successfully with Solana wallet");
 
-          // Connect wallet via API
-          console.log("Connecting wallet via API...");
+          // Step 4: Connect wallet via API (same as TON flow)
+          console.log("Connecting Solana wallet via API...");
           const connectResult = await walletService.connectWallet(
             "solana",
             walletAddress,
@@ -169,7 +243,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
             signature
           );
 
-          console.log("Wallet connect result:", connectResult);
+          console.log("Solana wallet connect result:", connectResult);
 
           if (connectResult.success) {
             // Call the original onWeb3Login callback with the result
@@ -191,10 +265,15 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
           throw new Error("Failed to sign message");
         }
       } else {
+        // Wallet doesn't exist - show notification and navigate to signup (same as TON flow)
+        console.log("Solana wallet doesn't exist, redirecting to signup");
+
+        const notificationMessage =
+          "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.";
+
         setNotification({
           type: "warning",
-          message:
-            "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.",
+          message: notificationMessage,
         });
 
         setTimeout(() => {
@@ -214,6 +293,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
       });
     } finally {
       setIsSolanaConnecting(false);
+      setIsConnecting(false);
     }
   }, [
     processSolanaConnection,
@@ -226,33 +306,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
     onWeb3Login,
   ]);
 
-  useEffect(() => {
-    handleApprovedConnection();
-  }, [handleApprovedConnection]);
-
-  // Auto-trigger processing when publicKey becomes available (only when modal is open)
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (!currentPublicKey || isSolanaConnecting || processSolanaConnection)
-      return;
-
-    // Only trigger if this is a new publicKey
-    if (processedPublicKeyRef.current !== currentPublicKey) {
-      console.log(
-        "Solana wallet connected, auto-triggering process for:",
-        currentPublicKey
-      );
-      processedPublicKeyRef.current = currentPublicKey;
-
-      // Small delay to ensure state is settled
-      const timeoutId = setTimeout(() => {
-        setProcessSolanaConnection(true);
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isOpen, currentPublicKey, isSolanaConnecting, processSolanaConnection]);
+  // REMOVED: Auto-trigger processing - wallets should only connect/login when user clicks
 
   const handleTonConnect = useCallback(async () => {
     setIsConnecting(true);
@@ -397,18 +451,25 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
   ]);
 
   // Separate handler for processing Sui wallet (after connection)
+  // Following TON-style flow: connect → check wallet → generate message → sign → authenticate
   const processSuiWallet = useCallback(async () => {
     if (!isSuiConnected || !suiWalletAddress || isSuiConnecting) return;
 
     setIsSuiConnecting(true);
+    setIsConnecting(true);
     try {
       const walletAddress = suiWalletAddress;
 
-      // Check if wallet exists
+      console.log("Processing Sui wallet connection for:", walletAddress);
+
+      // Step 1: Check if wallet exists (similar to TON flow)
       const walletCheck = await checkWallet(walletAddress, "sui");
 
+      console.log("Sui wallet check result:", walletCheck);
+
       if (walletCheck?.exists) {
-        // Generate auth message and sign
+        // Step 2: Generate authentication message from backend (TON-style flow)
+        console.log("Generating auth message from backend for Sui wallet...");
         const messageResult = await walletService.generateAuthMessage(
           walletAddress,
           "sui"
@@ -419,15 +480,17 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
         }
 
         const authMessage = messageResult.data.message;
+        console.log("Generated auth message for Sui:", authMessage);
 
-        // Sign with Sui wallet
+        // Step 3: Sign the message with Sui wallet
+        console.log("Signing message with Sui wallet...");
         const signature = await signSuiMessage(authMessage);
 
         if (signature) {
-          console.log("Message signed successfully");
+          console.log("Message signed successfully with Sui wallet");
 
-          // Connect wallet via API
-          console.log("Connecting wallet via API...");
+          // Step 4: Connect wallet via API (same as TON flow)
+          console.log("Connecting Sui wallet via API...");
           const connectResult = await walletService.connectWallet(
             "sui",
             walletAddress,
@@ -435,7 +498,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
             signature
           );
 
-          console.log("Wallet connect result:", connectResult);
+          console.log("Sui wallet connect result:", connectResult);
 
           if (connectResult.success) {
             const credentials: Web3WalletCredentials = {
@@ -456,10 +519,15 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
           throw new Error("Failed to sign message");
         }
       } else {
+        // Wallet doesn't exist - show notification and navigate to signup (same as TON flow)
+        console.log("Sui wallet doesn't exist, redirecting to signup");
+
+        const notificationMessage =
+          "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.";
+
         setNotification({
           type: "warning",
-          message:
-            "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.",
+          message: notificationMessage,
         });
 
         setTimeout(() => {
@@ -479,6 +547,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
       });
     } finally {
       setIsSuiConnecting(false);
+      setIsConnecting(false);
     }
   }, [
     isSuiConnected,
@@ -495,50 +564,59 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
     // If not connected, trigger connection
     if (!isSuiConnected) {
       console.log("Connecting to Sui wallet...");
-      await connectSui();
-      console.log("Sui wallet connected");
+      try {
+        await connectSui();
+        console.log(
+          "Sui wallet connected - will auto-signMessage after connection"
+        );
+        // Auto-trigger signMessage via useEffect after connection succeeds
+      } catch (err) {
+        console.error("Failed to connect Sui wallet:", err);
+        setNotification({
+          type: "error",
+          message: `Failed to connect: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }`,
+        });
+      }
       return;
     }
 
-    // If already connected, trigger processing
+    // If already connected, trigger processing manually (user clicked to login)
     if (isSuiConnected && suiWalletAddress) {
       await processSuiWallet();
     }
   }, [isSuiConnected, suiWalletAddress, connectSui, processSuiWallet]);
 
-  // Auto-trigger processing when Sui wallet connects
-  const [shouldProcessSui, setShouldProcessSui] = useState(false);
+  // Track if we need to process Sui connection after wallet is connected
+  const [processSuiConnection, setProcessSuiConnection] = useState(false);
+  const processedSuiAddressRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    // DISABLED: Auto-processing Sui wallet on connection
-    // if (
-    //   shouldProcessSui &&
-    //   isSuiConnected &&
-    //   suiWalletAddress &&
-    //   !isSuiConnecting
-    // ) {
-    //   console.log("Auto-processing Sui wallet connection");
-    //   processSuiWallet();
-    //   setShouldProcessSui(false);
-    // }
+  // Handle approved Sui connection - ONLY when user clicks
+  const handleApprovedSuiConnection = useCallback(async () => {
+    if (
+      !processSuiConnection ||
+      !suiWalletAddress ||
+      isSuiConnecting ||
+      !isSuiConnected
+    )
+      return;
+
+    console.log("Processing Sui connection for:", suiWalletAddress);
+    setProcessSuiConnection(false);
+    await processSuiWallet();
   }, [
-    shouldProcessSui,
-    isSuiConnected,
+    processSuiConnection,
     suiWalletAddress,
     isSuiConnecting,
+    isSuiConnected,
     processSuiWallet,
   ]);
 
-  // DISABLED: Auto-trigger Sui wallet processing on connection
-  // Wallets should only process when user explicitly clicks connect/process button
-  // useEffect(() => {
-  //   if (isSuiConnected && suiWalletAddress && !isSuiConnecting) {
-  //     console.log("Sui wallet connected, should process:", suiWalletAddress);
-  //     setShouldProcessSui(true);
-  //   }
-  // }, [isSuiConnected, suiWalletAddress]);
+  // REMOVED: Auto-trigger processing - wallets should only connect/login when user clicks
 
   // Separate handler for processing Ethereum wallet (after connection)
+  // Following TON-style flow: connect → check wallet → generate message → sign → authenticate
   const processEthWallet = useCallback(async () => {
     if (!isEthConnected || !ethAddress || isEthConnecting) return;
 
@@ -549,11 +627,18 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
         throw new Error("No wallet address available");
       }
 
-      // Check if wallet exists
+      console.log("Processing Ethereum wallet connection for:", ethAddress);
+
+      // Step 1: Check if wallet exists (similar to TON flow)
       const walletCheck = await checkWallet(ethAddress, "ethereum");
 
+      console.log("Ethereum wallet check result:", walletCheck);
+
       if (walletCheck?.exists) {
-        // Generate auth message and sign
+        // Step 2: Generate authentication message from backend (TON-style flow)
+        console.log(
+          "Generating auth message from backend for Ethereum wallet..."
+        );
         const messageResult = await walletService.generateAuthMessage(
           ethAddress,
           "ethereum"
@@ -564,39 +649,58 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
         }
 
         const authMessage = messageResult.data.message;
+        console.log("Generated auth message for Ethereum:", authMessage);
 
-        // Sign with Ethereum wallet
+        // Step 3: Sign the message with Ethereum wallet (using EIP-191 personal_sign)
+        // This follows TON-style message signing pattern but uses Ethereum signing method
+        console.log("Signing message with Ethereum wallet...");
         const signature = await signEthMessage({
           account: ethAddress as `0x${string}`,
           message: authMessage,
         });
 
-        // Connect wallet via API
-        const connectResult = await walletService.connectWallet(
-          "ethereum",
-          ethAddress,
-          authMessage,
-          signature
-        );
+        if (signature) {
+          console.log("Message signed successfully with Ethereum wallet");
 
-        if (connectResult.success) {
-          const credentials: Web3WalletCredentials = {
-            walletAddress: ethAddress,
-            walletType: "ethereum",
-            signature: signature,
-            message: authMessage,
-          };
+          // Step 4: Connect wallet via API (same as TON flow)
+          console.log("Connecting Ethereum wallet via API...");
+          const connectResult = await walletService.connectWallet(
+            "ethereum",
+            ethAddress,
+            authMessage,
+            signature
+          );
 
-          await onWeb3Login(credentials);
-          onClose();
+          console.log("Ethereum wallet connect result:", connectResult);
+
+          if (connectResult.success) {
+            const credentials: Web3WalletCredentials = {
+              walletAddress: ethAddress,
+              walletType: "ethereum",
+              signature: signature,
+              message: authMessage,
+            };
+
+            await onWeb3Login(credentials);
+            onClose();
+          } else {
+            throw new Error(
+              connectResult.message || "Failed to connect wallet"
+            );
+          }
         } else {
-          throw new Error(connectResult.message || "Failed to connect wallet");
+          throw new Error("Failed to sign message");
         }
       } else {
+        // Wallet doesn't exist - show notification and navigate to signup (same as TON flow)
+        console.log("Ethereum wallet doesn't exist, redirecting to signup");
+
+        const notificationMessage =
+          "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.";
+
         setNotification({
           type: "warning",
-          message:
-            "Ví chưa được liên kết với tài khoản nào. Vui lòng tạo tài khoản trước tiên.",
+          message: notificationMessage,
         });
 
         setTimeout(() => {
@@ -629,8 +733,172 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
     navigate,
   ]);
 
+  // Handle Ethereum wallet connection after approval - ONLY when user clicks
+  const handleApprovedEthConnection = useCallback(async () => {
+    if (
+      !processEthConnection ||
+      !ethAddress ||
+      isEthConnecting ||
+      !isEthConnected
+    )
+      return;
+
+    console.log("Processing Ethereum connection for:", ethAddress);
+    setProcessEthConnection(false);
+    await processEthWallet();
+  }, [
+    processEthConnection,
+    ethAddress,
+    isEthConnecting,
+    isEthConnected,
+    processEthWallet,
+  ]);
+
+  // Trigger handleApprovedConnection when processSolanaConnection is set (user clicked)
+  useEffect(() => {
+    if (processSolanaConnection && publicKey) {
+      handleApprovedConnection();
+    }
+  }, [processSolanaConnection, publicKey, handleApprovedConnection]);
+
+  // Trigger handleApprovedSuiConnection when processSuiConnection is set (user clicked)
+  useEffect(() => {
+    if (processSuiConnection && suiWalletAddress) {
+      handleApprovedSuiConnection();
+    }
+  }, [processSuiConnection, suiWalletAddress, handleApprovedSuiConnection]);
+
+  // Trigger handleApprovedEthConnection when processEthConnection is set (user clicked)
+  useEffect(() => {
+    if (processEthConnection && ethAddress) {
+      handleApprovedEthConnection();
+    }
+  }, [processEthConnection, ethAddress, handleApprovedEthConnection]);
+
+  // Auto-trigger signMessage when Solana wallet connects successfully
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const currentPublicKeyStr = publicKey?.toString() || null;
+    const wasConnected = prevSolanaPublicKeyRef.current !== null;
+    const isNowConnected = currentPublicKeyStr !== null;
+
+    // Detect when wallet just connected (changed from null to value)
+    if (
+      !wasConnected &&
+      isNowConnected &&
+      currentPublicKeyStr &&
+      !isSolanaConnecting &&
+      !processSolanaConnection
+    ) {
+      console.log(
+        "Solana wallet connected successfully, auto-triggering signMessage:",
+        currentPublicKeyStr
+      );
+      prevSolanaPublicKeyRef.current = currentPublicKeyStr;
+      // Small delay to ensure state is settled
+      setTimeout(() => {
+        setProcessSolanaConnection(true);
+      }, 300);
+    } else if (isNowConnected) {
+      // Update ref to current value
+      prevSolanaPublicKeyRef.current = currentPublicKeyStr;
+    } else if (!isNowConnected) {
+      // Reset when disconnected
+      prevSolanaPublicKeyRef.current = null;
+    }
+  }, [isOpen, publicKey, isSolanaConnecting, processSolanaConnection]);
+
+  // Auto-trigger signMessage when Sui wallet connects successfully
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const wasConnected = prevSuiConnectedRef.current;
+    const isNowConnected = isSuiConnected && !!suiWalletAddress;
+
+    // Detect when wallet just connected (changed from false to true)
+    if (
+      !wasConnected &&
+      isNowConnected &&
+      suiWalletAddress &&
+      !isSuiConnecting &&
+      !processSuiConnection
+    ) {
+      console.log(
+        "Sui wallet connected successfully, auto-triggering signMessage:",
+        suiWalletAddress
+      );
+      prevSuiConnectedRef.current = true;
+      prevSuiAddressRef.current = suiWalletAddress;
+      // Small delay to ensure state is settled
+      setTimeout(() => {
+        setProcessSuiConnection(true);
+      }, 300);
+    } else if (isNowConnected) {
+      // Update refs to current values
+      prevSuiConnectedRef.current = true;
+      prevSuiAddressRef.current = suiWalletAddress;
+    } else if (!isNowConnected) {
+      // Reset when disconnected
+      prevSuiConnectedRef.current = false;
+      prevSuiAddressRef.current = null;
+    }
+  }, [
+    isOpen,
+    isSuiConnected,
+    suiWalletAddress,
+    isSuiConnecting,
+    processSuiConnection,
+  ]);
+
+  // Auto-trigger signMessage when Ethereum wallet connects successfully
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const wasConnected = prevEthConnectedRef.current;
+    const isNowConnected = isEthConnected && !!ethAddress;
+
+    // Detect when wallet just connected (changed from false to true or address changed)
+    const addressChanged = prevEthAddressRef.current !== ethAddress;
+    if (
+      (!wasConnected && isNowConnected) ||
+      (addressChanged && isNowConnected)
+    ) {
+      if (ethAddress && !isEthConnecting && !processEthConnection) {
+        console.log(
+          "Ethereum wallet connected successfully, auto-triggering signMessage:",
+          ethAddress
+        );
+        prevEthConnectedRef.current = true;
+        prevEthAddressRef.current = ethAddress;
+        // Small delay to ensure state is settled
+        setTimeout(() => {
+          setProcessEthConnection(true);
+        }, 300);
+      }
+    } else if (isNowConnected) {
+      // Update refs to current values
+      prevEthConnectedRef.current = true;
+      prevEthAddressRef.current = ethAddress;
+    } else if (!isNowConnected) {
+      // Reset when disconnected
+      prevEthConnectedRef.current = false;
+      prevEthAddressRef.current = undefined;
+    }
+  }, [
+    isOpen,
+    isEthConnected,
+    ethAddress,
+    isEthConnecting,
+    processEthConnection,
+  ]);
+
+  // REMOVED: Auto-trigger processing - wallets should only connect/login when user clicks
+
   const handleEthConnect = useCallback(async () => {
-    // Ethereum uses RainbowKit ConnectButton, so this is mainly for processing
+    // Ethereum uses RainbowKit ConnectButton
+    // If wallet is already connected, trigger processing manually
+    // Otherwise, ConnectButton will handle connection, and useEffect will auto-trigger signMessage
     if (isEthConnected && ethAddress) {
       await processEthWallet();
     } else {
@@ -641,61 +909,58 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
     }
   }, [isEthConnected, ethAddress, processEthWallet]);
 
-  // DISABLED: Auto-trigger processing when Ethereum wallet connects
-  // const [shouldProcessEth, setShouldProcessEth] = useState(false);
-
-  // useEffect(() => {
-  //   if (shouldProcessEth && isEthConnected && ethAddress && !isEthConnecting) {
-  //     console.log("Auto-processing Ethereum wallet connection");
-  //     processEthWallet();
-  //     setShouldProcessEth(false);
-  //   }
-  // }, [
-  //   shouldProcessEth,
-  //   isEthConnected,
-  //   ethAddress,
-  //   isEthConnecting,
-  //   processEthWallet,
-  // ]);
-
-  // DISABLED: Auto-trigger Ethereum wallet processing on connection
-  // useEffect(() => {
-  //   if (isEthConnected && ethAddress && !isEthConnecting) {
-  //     console.log("Ethereum wallet connected, should process:", ethAddress);
-  //     setShouldProcessEth(true);
-  //   }
-  // }, [isEthConnected, ethAddress]);
-
-  const handleProcessSolanaAfterConnect = useCallback(() => {
-    console.log("Process Solana - publicKey:", publicKey);
-    if (publicKey && !isSolanaConnecting) {
-      setProcessSolanaConnection(true);
-    }
-  }, [publicKey, isSolanaConnecting]);
-
   const handleConnectSolanaWallet = useCallback(async () => {
     try {
+      // If already connected, trigger login process
+      if (publicKey && !isSolanaConnecting) {
+        console.log(
+          "Solana wallet already connected, triggering login process"
+        );
+        setProcessSolanaConnection(true);
+        return;
+      }
+
+      // If not connected, connect first
+      // After connection succeeds, auto-trigger signMessage via useEffect
       console.log("Connecting to Phantom...");
       await connectSolana();
-      console.log("Phantom connection triggered");
+      console.log(
+        "Phantom connection triggered - will auto-signMessage after connection"
+      );
     } catch (error) {
       console.error("Failed to connect Phantom:", error);
       setNotification({
         type: "error",
-        message:
-          "Failed to connect Phantom. Please make sure the extension is installed.",
+        message: `Failed to connect: ${
+          error instanceof Error
+            ? error.message
+            : "Please make sure the extension is installed."
+        }`,
       });
     }
-  }, [connectSolana]);
+  }, [connectSolana, publicKey, isSolanaConnecting]);
 
   // Memoize computed values to prevent unnecessary recalculations
   const displayError = useMemo(
-    () => error || tonError || walletCheckError,
-    [error, tonError, walletCheckError]
+    () => error || tonError || walletCheckError || suiError || solanaError,
+    [error, tonError, walletCheckError, suiError, solanaError]
   );
   const displayLoading = useMemo(
-    () => isLoading || tonLoading || isConnecting || walletCheckLoading,
-    [isLoading, tonLoading, isConnecting, walletCheckLoading]
+    () =>
+      isLoading ||
+      tonLoading ||
+      isConnecting ||
+      walletCheckLoading ||
+      isSuiLoading ||
+      isSolanaLoading,
+    [
+      isLoading,
+      tonLoading,
+      isConnecting,
+      walletCheckLoading,
+      isSuiLoading,
+      isSolanaLoading,
+    ]
   );
 
   return (
@@ -888,15 +1153,13 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
                 {/* SUI Wallet */}
                 <button
                   onClick={handleSuiConnect}
-                  disabled={
-                    displayLoading || isSuiConnecting || !!suiWalletAddress
-                  }
+                  disabled={displayLoading || isSuiConnecting || isSuiConnected}
                   className={`w-full flex items-center justify-between p-4 border rounded-lg transition-colors ${
-                    suiWalletAddress
-                      ? "border-green-500 bg-green-900/20"
+                    isSuiConnected && suiWalletAddress
+                      ? "border-green-500 bg-green-900/20 hover:bg-green-900/30"
                       : "border-gray-600 bg-gray-700 hover:bg-gray-600"
                   } ${
-                    displayLoading || isSuiConnecting
+                    displayLoading || isSuiConnecting || isSuiConnected
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -913,7 +1176,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
                     <div className="text-left">
                       <p className="text-white font-medium">SUI Wallet</p>
                       <p className="text-gray-400 text-sm">
-                        {suiWalletAddress
+                        {isSuiConnected && suiWalletAddress
                           ? `Connected: ${suiWalletAddress?.slice(
                               0,
                               6
@@ -943,7 +1206,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       ></path>
                     </svg>
-                  ) : suiWalletAddress ? (
+                  ) : isSuiConnected && suiWalletAddress ? (
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                       <span className="text-green-400 text-xs font-medium">
@@ -998,56 +1261,28 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
                         })}
                       >
                         <button
-                          onClick={!connected ? openConnectModal : undefined}
+                          onClick={
+                            !connected ? openConnectModal : handleEthConnect
+                          }
+                          disabled={displayLoading || isEthConnecting}
                           className={`w-full flex items-center justify-between p-4 border rounded-lg transition-colors ${
                             isEthConnected
-                              ? "border-green-500 bg-green-900/20"
+                              ? "border-green-500 bg-green-900/20 hover:bg-green-900/30"
                               : "border-gray-600 bg-gray-700 hover:bg-gray-600"
+                          } ${
+                            displayLoading || isEthConnecting
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
                           }`}
                         >
                           <div className="flex items-center space-x-3">
                             {/* Ethereum Logo */}
-                            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden bg-white">
-                              <svg
-                                width="24"
-                                height="24"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path
-                                  d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z"
-                                  fill="#627EEA"
-                                />
-                                <path
-                                  d="M12.498 6V9.653L17.996 11.764L12.498 6Z"
-                                  fill="white"
-                                  fillOpacity="0.602"
-                                />
-                                <path
-                                  d="M12.498 6L7 11.764L12.498 9.653V6Z"
-                                  fill="white"
-                                />
-                                <path
-                                  d="M12.498 16.476V20.129L18 12.584L12.498 14.695V16.476Z"
-                                  fill="white"
-                                  fillOpacity="0.602"
-                                />
-                                <path
-                                  d="M12.498 20.129V16.476L7 12.584L12.498 20.129Z"
-                                  fill="white"
-                                />
-                                <path
-                                  d="M12.498 15.429L17.996 11.764L12.498 13.875V15.429Z"
-                                  fill="white"
-                                  fillOpacity="0.2"
-                                />
-                                <path
-                                  d="M7 11.764L12.498 15.429V13.875L7 11.764Z"
-                                  fill="white"
-                                  fillOpacity="0.602"
-                                />
-                              </svg>
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden">
+                              <img
+                                src="/coins/ethereum.png"
+                                alt="Ethereum"
+                                className="w-full h-full object-contain rounded-full"
+                              />
                             </div>
                             <div className="text-left">
                               <p className="text-white font-medium">
@@ -1093,11 +1328,7 @@ const Web3WalletModal: React.FC<Web3WalletModalProps> = ({
 
                 {/* Solana Wallet */}
                 <button
-                  onClick={
-                    publicKey
-                      ? handleProcessSolanaAfterConnect
-                      : handleConnectSolanaWallet
-                  }
+                  onClick={handleConnectSolanaWallet}
                   disabled={isSolanaConnecting || isSolanaLoading}
                   className={`w-full flex items-center justify-between p-4 border rounded-lg transition-colors ${
                     publicKey

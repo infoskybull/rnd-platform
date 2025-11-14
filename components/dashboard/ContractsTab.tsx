@@ -39,8 +39,9 @@ const ContractsTab: React.FC<ContractsTabProps> = ({ user }) => {
   // Recalculate pending count whenever contracts or stats change
   useEffect(() => {
     if (contracts.length > 0 && stats) {
+      // Only count contracts with status "pending_signature"
       const pendingCount = contracts.filter(
-        (c) => c.status === "pending_signature" || c.status === "draft"
+        (c) => c.status === "pending_signature"
       ).length;
 
       console.log("Recalculated Pending Count:", pendingCount);
@@ -97,7 +98,20 @@ const ContractsTab: React.FC<ContractsTabProps> = ({ user }) => {
       console.log("Pending Contracts Count:", statsData.pendingContracts);
       console.log("Contracts by Status:", statsData.contractsByStatus);
 
-      setStats(statsData);
+      const normalizedStats: ContractStats = {
+        ...statsData,
+        totalContracts: statsData?.totalContracts ?? 0,
+        activeContracts: statsData?.activeContracts ?? 0,
+        completedContracts: statsData?.completedContracts ?? 0,
+        pendingContracts: statsData?.pendingContracts ?? 0,
+        totalBudget: statsData?.totalBudget ?? 0,
+        totalPaid: statsData?.totalPaid ?? 0,
+        averageContractValue: statsData?.averageContractValue ?? 0,
+        contractsByType: statsData?.contractsByType ?? {},
+        contractsByStatus: statsData?.contractsByStatus ?? {},
+      };
+
+      setStats(normalizedStats);
     } catch (err) {
       console.error("Failed to load contract stats:", err);
     }

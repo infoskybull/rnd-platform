@@ -13,6 +13,7 @@ import RoleBadge from "./RoleBadge";
 import Sidebar, { TabType } from "./Sidebar";
 import YourProjectsTab from "./dashboard/YourProjectsTab";
 import CollaborationsTab from "./dashboard/CollaborationsTab";
+import MessagesTab from "./dashboard/MessagesTab";
 import ContractsTab from "./dashboard/ContractsTab";
 import StatsTab from "./dashboard/StatsTab";
 import HistoryTab from "./dashboard/HistoryTab";
@@ -341,6 +342,8 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
         );
       case "collaborations":
         return <CollaborationsTab userRole="creator" userId={user.id} />;
+      case "chat":
+        return <MessagesTab />;
       case "contracts":
         return <ContractsTab user={user} />;
       case "stats":
@@ -491,25 +494,26 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                     </div>
                     {(selectedProject.ideaSaleData?.gameGenre ||
                       selectedProject.productSaleData?.gameGenre ||
-                      selectedProject.devCollaborationData?.gameGenre) && (
+                      selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.gameGenre ||
                             selectedProject.productSaleData?.gameGenre ||
-                            selectedProject.devCollaborationData?.gameGenre}
+                            selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
                     {(selectedProject.ideaSaleData?.targetPlatform ||
                       selectedProject.productSaleData?.targetPlatform ||
-                      selectedProject.devCollaborationData?.targetPlatform) && (
+                      selectedProject.creatorCollaborationData
+                        ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.targetPlatform ||
                             selectedProject.productSaleData?.targetPlatform ||
-                            selectedProject.devCollaborationData
+                            selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
                       </div>
@@ -598,26 +602,26 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                     </div>
                   )}
 
-                  {selectedProject.devCollaborationData && (
+                  {selectedProject.creatorCollaborationData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
                       <h3 className="text-lg font-semibold text-white mb-2">
                         Collaboration Details
                       </h3>
                       <p className="text-gray-300 mb-2">
-                        {selectedProject.devCollaborationData.description}
+                        {selectedProject.creatorCollaborationData.description}
                       </p>
                       <div className="text-xl font-bold text-purple-400 mb-2">
                         Budget:{" "}
                         {formatPrice(
-                          selectedProject.devCollaborationData.budget
+                          selectedProject.creatorCollaborationData.budget
                         )}
                       </div>
                       <div className="text-sm text-gray-400 mb-2">
                         Timeline:{" "}
-                        {selectedProject.devCollaborationData.timeline}
+                        {selectedProject.creatorCollaborationData.timeline}
                       </div>
                       <p className="text-gray-300 text-sm">
-                        {selectedProject.devCollaborationData.proposal}
+                        {selectedProject.creatorCollaborationData.proposal}
                       </p>
                     </div>
                   )}
@@ -660,11 +664,11 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
                   {(selectedProject.ideaSaleData?.tags ||
                     selectedProject.productSaleData?.tags ||
-                    selectedProject.devCollaborationData?.tags) &&
+                    selectedProject.creatorCollaborationData?.tags) &&
                     (
                       selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
-                      selectedProject.devCollaborationData?.tags ||
+                      selectedProject.creatorCollaborationData?.tags ||
                       []
                     ).length > 0 && (
                       <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -675,7 +679,7 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                           {(
                             selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
-                            selectedProject.devCollaborationData?.tags ||
+                            selectedProject.creatorCollaborationData?.tags ||
                             []
                           ).map((tag, index) => (
                             <span

@@ -12,7 +12,9 @@ export const useRoleBasedAnalytics = ({
   userRole,
   filters,
 }: RoleBasedAnalyticsProps) => {
-  const [selectedPeriod, setSelectedPeriod] = useState("12months");
+  const [selectedPeriod, setSelectedPeriod] = useState<
+    "6months" | "12months" | "24months"
+  >("6months");
   const [currentFilters, setCurrentFilters] = useState<AnalyticsFilters>({
     period: selectedPeriod,
     ...filters,
@@ -20,7 +22,7 @@ export const useRoleBasedAnalytics = ({
 
   // Update filters when period changes
   useEffect(() => {
-    setCurrentFilters((prev) => ({
+    setCurrentFilters((prev: AnalyticsFilters) => ({
       ...prev,
       period: selectedPeriod,
     }));
@@ -41,7 +43,7 @@ export const useRoleBasedAnalytics = ({
     if (userRole === "publisher" && publisherAnalytics) {
       publisherAnalytics.refetchAll();
     } else if (userRole === "creator" && developerAnalytics) {
-      developerAnalytics.refetchAll();
+      developerAnalytics.refetch();
     }
   }, [userRole, publisherAnalytics, developerAnalytics]);
 

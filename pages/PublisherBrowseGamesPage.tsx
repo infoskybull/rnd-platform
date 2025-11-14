@@ -91,6 +91,9 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
   const [stats, setStats] = useState<any>(null);
   const [allProjects, setAllProjects] = useState<GameProject[]>([]);
   const [ownerData, setOwnerData] = useState<Record<string, any>>({});
+  
+  // Track liked status for selected project
+  const [isLiked, setIsLiked] = useState(false);
 
   // Memoize calculated stats to prevent unnecessary recalculations
   const calculatedStats = useMemo(() => {
@@ -110,25 +113,38 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
 
   const loadOwnerData = useCallback(async (projects: GameProject[]) => {
     try {
+      // Filter out undefined/null developerIds and get unique values
       const uniqueDeveloperIds = [
-        ...new Set(projects.map((p) => p.developerId)),
+        ...new Set(
+          projects
+            .map((p) => p.creatorId)
+            .filter(
+              (id): id is string => id !== undefined && id !== null && id !== ""
+            )
+        ),
       ];
-      const ownerPromises = uniqueDeveloperIds.map(async (developerId) => {
+
+      // Early return if no valid developer IDs
+      if (uniqueDeveloperIds.length === 0) {
+        return;
+      }
+
+      const ownerPromises = uniqueDeveloperIds.map(async (creatorId) => {
         try {
-          const ownerInfo = await apiService.getUserById(developerId);
-          return { developerId, ownerInfo };
+          const ownerInfo = await apiService.getUserById(creatorId);
+          return { creatorId, ownerInfo };
         } catch (err) {
-          console.error(`Failed to load owner data for ${developerId}:`, err);
-          return { developerId, ownerInfo: null };
+          console.error(`Failed to load owner data for ${creatorId}:`, err);
+          return { creatorId, ownerInfo: null };
         }
       });
 
       const ownerResults = await Promise.all(ownerPromises);
       const ownerDataMap: Record<string, any> = {};
 
-      ownerResults.forEach(({ developerId, ownerInfo }) => {
+      ownerResults.forEach(({ creatorId, ownerInfo }) => {
         if (ownerInfo) {
-          ownerDataMap[developerId] = ownerInfo;
+          ownerDataMap[creatorId] = ownerInfo;
         }
       });
 
@@ -319,6 +335,72 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
   const handleViewProject = (projectId: string) => {
     navigate(`/project-detail/${projectId}`);
   };
+
+  // Handle like/unlike project
+  const handleLikeProject = useCallback(async () => {
+    if (!selectedProject || !user?.id) return;
+
+    // Store current state for potential rollback
+    const previousLikeCount = selectedProject.likeCount;
+    const previousLikedBy = selectedProject.likedBy || [];
+    const wasLiked = previousLikedBy.includes(user.id);
+
+    try {
+      setActionLoading(`like-${selectedProject._id}`);
+
+      // Optimistically update like state immediately
+      const newLikedBy = wasLiked
+        ? previousLikedBy.filter((id) => id !== user.id)
+        : [...previousLikedBy, user.id];
+
+      const updatedProject: GameProject = {
+        ...selectedProject,
+        likeCount: wasLiked
+          ? Math.max(0, previousLikeCount - 1)
+          : previousLikeCount + 1,
+        likedBy: newLikedBy,
+      };
+
+      setSelectedProject(updatedProject);
+      setIsLiked(!wasLiked);
+
+      // Update in projects list
+      setProjects((prevProjects) =>
+        prevProjects.map((p) =>
+          p._id === selectedProject._id ? updatedProject : p
+        )
+      );
+
+      // Call API
+      await apiService.likeGameProject(selectedProject._id);
+    } catch (err) {
+      // Revert optimistic update on error
+      setSelectedProject((prevProject) => {
+        if (!prevProject) return prevProject;
+        return {
+          ...prevProject,
+          likeCount: previousLikeCount,
+          likedBy: previousLikedBy,
+        };
+      });
+      setIsLiked(wasLiked);
+      setError(
+        err instanceof Error ? err.message : "Failed to like/unlike project"
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  }, [selectedProject, user?.id]);
+
+  // Update isLiked state when selectedProject changes
+  useEffect(() => {
+    if (selectedProject && user?.id) {
+      const liked = selectedProject.likedBy?.includes(user.id) || false;
+      setIsLiked(liked);
+    } else {
+      setIsLiked(false);
+    }
+  }, [selectedProject, user?.id]);
 
   // GSAP animations for project cards
   useEffect(() => {
@@ -610,33 +692,18 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     total}
                 </div>
                 <div className="text-sm text-gray-400">Total Projects</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.totalProjects || "N/A"} | Calc:{" "}
-                  {calculatedStats?.totalProjects || "N/A"} | Total: {total}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-green-400">
                   {stats?.ideaSales || calculatedStats?.ideaSales || 0}
                 </div>
                 <div className="text-sm text-gray-400">Idea Sales</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.ideaSales || "N/A"} | Calc:{" "}
-                  {calculatedStats?.ideaSales || "N/A"}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-blue-400">
                   {stats?.productSales || calculatedStats?.productSales || 0}
                 </div>
                 <div className="text-sm text-gray-400">Product Sales</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.productSales || "N/A"} | Calc:{" "}
-                  {calculatedStats?.productSales || "N/A"}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-purple-400">
@@ -645,11 +712,6 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     0}
                 </div>
                 <div className="text-sm text-gray-400">Collaborations</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.collaborations || "N/A"} | Calc:{" "}
-                  {calculatedStats?.collaborations || "N/A"}
-                </div>
               </div>
             </div>
 
@@ -766,10 +828,12 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                           </div>
                         )}
 
-                        {project.devCollaborationData && (
+                        {project.creatorCollaborationData && (
                           <div className="text-base sm:text-lg font-bold text-purple-400">
                             Budget:{" "}
-                            {formatPrice(project.devCollaborationData.budget)}
+                            {formatPrice(
+                              project.creatorCollaborationData.budget
+                            )}
                           </div>
                         )}
 
@@ -792,7 +856,7 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
 
                         {(project.ideaSaleData?.gameGenre ||
                           project.productSaleData?.gameGenre ||
-                          project.devCollaborationData?.gameGenre) && (
+                          project.creatorCollaborationData?.gameGenre) && (
                           <div className="mt-2">
                             <span className="text-xs text-gray-500">
                               Genre:{" "}
@@ -800,7 +864,7 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                             <span className="text-xs text-gray-300 truncate block sm:inline">
                               {project.ideaSaleData?.gameGenre ||
                                 project.productSaleData?.gameGenre ||
-                                project.devCollaborationData?.gameGenre}
+                                project.creatorCollaborationData?.gameGenre}
                             </span>
                           </div>
                         )}
@@ -997,7 +1061,10 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                   {selectedProject.title}
                 </h2>
                 <button
-                  onClick={() => setSelectedProject(null)}
+                  onClick={() => {
+                    setSelectedProject(null);
+                    setIsLiked(false);
+                  }}
                   className="text-gray-400 hover:text-white text-2xl"
                 >
                   ×
@@ -1029,25 +1096,26 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     </div>
                     {(selectedProject.ideaSaleData?.gameGenre ||
                       selectedProject.productSaleData?.gameGenre ||
-                      selectedProject.devCollaborationData?.gameGenre) && (
+                      selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.gameGenre ||
                             selectedProject.productSaleData?.gameGenre ||
-                            selectedProject.devCollaborationData?.gameGenre}
+                            selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
                     {(selectedProject.ideaSaleData?.targetPlatform ||
                       selectedProject.productSaleData?.targetPlatform ||
-                      selectedProject.devCollaborationData?.targetPlatform) && (
+                      selectedProject.creatorCollaborationData
+                        ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.targetPlatform ||
                             selectedProject.productSaleData?.targetPlatform ||
-                            selectedProject.devCollaborationData
+                            selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
                       </div>
@@ -1120,26 +1188,26 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     </div>
                   )}
 
-                  {selectedProject.devCollaborationData && (
+                  {selectedProject.creatorCollaborationData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
                       <h3 className="text-lg font-semibold text-white mb-2">
                         Collaboration Details
                       </h3>
                       <p className="text-gray-300 mb-2">
-                        {selectedProject.devCollaborationData.description}
+                        {selectedProject.creatorCollaborationData.description}
                       </p>
                       <div className="text-xl font-bold text-purple-400 mb-2">
                         Budget:{" "}
                         {formatPrice(
-                          selectedProject.devCollaborationData.budget
+                          selectedProject.creatorCollaborationData.budget
                         )}
                       </div>
                       <div className="text-sm text-gray-400 mb-2">
                         Timeline:{" "}
-                        {selectedProject.devCollaborationData.timeline}
+                        {selectedProject.creatorCollaborationData.timeline}
                       </div>
                       <p className="text-gray-300 text-sm">
-                        {selectedProject.devCollaborationData.proposal}
+                        {selectedProject.creatorCollaborationData.proposal}
                       </p>
                     </div>
                   )}
@@ -1182,11 +1250,11 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
 
                   {(selectedProject.ideaSaleData?.tags ||
                     selectedProject.productSaleData?.tags ||
-                    selectedProject.devCollaborationData?.tags) &&
+                    selectedProject.creatorCollaborationData?.tags) &&
                     (
                       selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
-                      selectedProject.devCollaborationData?.tags ||
+                      selectedProject.creatorCollaborationData?.tags ||
                       []
                     ).length > 0 && (
                       <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -1197,7 +1265,7 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                           {(
                             selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
-                            selectedProject.devCollaborationData?.tags ||
+                            selectedProject.creatorCollaborationData?.tags ||
                             []
                           ).map((tag, index) => (
                             <span
@@ -1268,12 +1336,36 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     )}
 
                     <button
-                      onClick={() =>
-                        apiService.likeGameProject(selectedProject._id)
+                      onClick={handleLikeProject}
+                      disabled={
+                        actionLoading === `like-${selectedProject._id}` ||
+                        !user?.id
                       }
-                      className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+                      className={`w-full px-4 py-2 font-medium rounded-lg transition-colors flex items-center justify-center ${
+                        isLiked
+                          ? "bg-red-600 hover:bg-red-700 text-white"
+                          : "bg-gray-600 hover:bg-gray-700 text-white"
+                      } ${
+                        actionLoading === `like-${selectedProject._id}`
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
                     >
-                      <HeartIcon className="w-4 h-4 inline mr-1" /> Like Project
+                      {actionLoading === `like-${selectedProject._id}` ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          {isLiked ? "Unliking..." : "Liking..."}
+                        </>
+                      ) : (
+                        <>
+                          <HeartIcon
+                            className={`w-4 h-4 inline mr-1 ${
+                              isLiked ? "fill-current" : ""
+                            }`}
+                          />
+                          {isLiked ? "Unlike Project" : "Like Project"}
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

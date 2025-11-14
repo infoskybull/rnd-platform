@@ -3,18 +3,14 @@ import {
   WalletCheckResponse,
   Web3WalletCredentials,
 } from "../types";
-
-const API_BASE_URL =
-  (window as any).__API_BASE_URL__ ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "http://localhost:3000/api";
+import { apiService } from "./api";
 
 // Helper function to map frontend wallet types to backend wallet types
 const mapWalletType = (frontendType: string): string => {
   const mapping: { [key: string]: string } = {
     ton: "ton_wallet",
     metamask: "metamask",
-    bnb: "bnb_wallet",
+    ethereum: "ethereum_wallet",
     sui: "sui_wallet",
     solana: "solana_wallet",
   };
@@ -30,23 +26,16 @@ export const walletService = {
     walletType: string
   ): Promise<WalletCheckResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/check`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          address,
-          walletType: mapWalletType(walletType),
-        } as WalletCheckRequest),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
+      return await apiService.request<WalletCheckResponse>(
+        "/auth/wallet/check",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            address,
+            walletType: mapWalletType(walletType),
+          } as WalletCheckRequest),
+        }
+      );
     } catch (error) {
       console.error("Error checking wallet:", error);
       throw error;
@@ -61,23 +50,17 @@ export const walletService = {
     walletType: string
   ): Promise<{ success: boolean; message: string; data: { message: string } }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/message`, {
+      return await apiService.request<{
+        success: boolean;
+        message: string;
+        data: { message: string };
+      }>("/auth/wallet/message", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           address,
           walletType: mapWalletType(walletType),
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error generating auth message:", error);
       throw error;
@@ -94,11 +77,8 @@ export const walletService = {
     signature: string
   ): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/connect`, {
+      return await apiService.request<any>("/auth/wallet/connect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           walletType: mapWalletType(walletType),
           address,
@@ -106,13 +86,6 @@ export const walletService = {
           signature,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error connecting wallet:", error);
       throw error;
@@ -126,11 +99,8 @@ export const walletService = {
     credentials: Web3WalletCredentials
   ): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/connect`, {
+      return await apiService.request<any>("/auth/wallet/connect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           walletType: mapWalletType(credentials.walletType),
           address: credentials.walletAddress,
@@ -138,13 +108,6 @@ export const walletService = {
           signature: credentials.signature,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error authenticating with wallet:", error);
       throw error;
@@ -162,12 +125,10 @@ export const walletService = {
     accessToken: string
   ): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/link`, {
+      // Note: apiService will automatically add Authorization header from stored token
+      // But we can also pass it explicitly if needed
+      return await apiService.request<any>("/auth/wallet/link", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: JSON.stringify({
           walletType: mapWalletType(walletType),
           address,
@@ -175,13 +136,6 @@ export const walletService = {
           signature,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error linking wallet to account:", error);
       throw error;
@@ -193,20 +147,10 @@ export const walletService = {
    */
   async getUserWallets(accessToken: string): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/list`, {
+      // apiService will automatically add Authorization header from stored token
+      return await apiService.request<any>("/auth/wallet/list", {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error getting user wallets:", error);
       throw error;
@@ -221,24 +165,14 @@ export const walletService = {
     userData?: any
   ): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/signup`, {
+      return await apiService.request<any>("/auth/wallet/signup", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ...credentials,
           walletType: mapWalletType(credentials.walletType),
           userData,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error creating account with wallet:", error);
       throw error;
@@ -255,11 +189,8 @@ export const walletService = {
     timestamp?: string
   ): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/wallet/simple-login`, {
+      return await apiService.request<any>("/auth/wallet/simple-login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           walletType: mapWalletType(walletType),
           address,
@@ -267,13 +198,6 @@ export const walletService = {
           timestamp: timestamp || Date.now().toString(),
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
     } catch (error) {
       console.error("Error with simple login:", error);
       throw error;

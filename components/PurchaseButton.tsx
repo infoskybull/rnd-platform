@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 import { GameProject } from "../types";
-import { apiService } from "../services/api";
-import { ShoppingCart, Loader2 } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 
 interface PurchaseButtonProps {
   project: GameProject;
@@ -20,26 +20,11 @@ const PurchaseButton: React.FC<PurchaseButtonProps> = ({
   size = "md",
   showPrice = true,
 }) => {
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handlePurchase = async () => {
-    if (loading) return;
-
-    setLoading(true);
-    try {
-      const result = await apiService.purchaseGameProject(project._id);
-      onPurchaseSuccess?.(result);
-
-      // Show success message (you can replace this with a toast notification)
-      console.log("Project purchased successfully!", result);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to purchase project";
-      onPurchaseError?.(errorMessage);
-      console.error("Purchase failed:", error);
-    } finally {
-      setLoading(false);
-    }
+  const handlePurchase = () => {
+    // Navigate to payment page with projectId
+    navigate(`/payment?projectId=${project._id}`);
   };
 
   const getPrice = () => {
@@ -95,32 +80,21 @@ const PurchaseButton: React.FC<PurchaseButtonProps> = ({
   return (
     <button
       onClick={handlePurchase}
-      disabled={loading}
       className={`
         ${getSizeClasses()}
         bg-green-600 hover:bg-green-700 
-        disabled:bg-gray-600 disabled:cursor-not-allowed 
         text-white font-medium rounded-lg 
         transition-colors duration-200 
         flex items-center justify-center gap-2
         ${className}
       `}
     >
-      {loading ? (
-        <>
-          <Loader2 className={`${getIconSize()} animate-spin`} />
-          <span>Purchasing...</span>
-        </>
-      ) : (
-        <>
-          <ShoppingCart className={getIconSize()} />
-          <span>
-            {showPrice && price
-              ? `Purchase - ${formatPrice(price)}`
-              : "Purchase"}
-          </span>
-        </>
-      )}
+      <ShoppingCart className={getIconSize()} />
+      <span>
+        {showPrice && price
+          ? `Purchase - ${formatPrice(price)}`
+          : "Purchase"}
+      </span>
     </button>
   );
 };

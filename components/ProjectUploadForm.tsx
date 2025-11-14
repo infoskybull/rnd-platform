@@ -60,7 +60,7 @@ interface ProjectFormData {
     targetPlatform?: string;
     tags?: string[];
   };
-  devCollaborationData?: {
+  creatorCollaborationData?: {
     description: string;
     proposal: string;
     budget: number;
@@ -661,10 +661,10 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                 Collaboration Description *
               </label>
               <textarea
-                value={formData.devCollaborationData?.description || ""}
+                value={formData.creatorCollaborationData?.description || ""}
                 onChange={(e) =>
                   handleFormChange(
-                    "devCollaborationData.description",
+                    "creatorCollaborationData.description",
                     e.target.value
                   )
                 }
@@ -679,10 +679,10 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                 Proposal *
               </label>
               <textarea
-                value={formData.devCollaborationData?.proposal || ""}
+                value={formData.creatorCollaborationData?.proposal || ""}
                 onChange={(e) =>
                   handleFormChange(
-                    "devCollaborationData.proposal",
+                    "creatorCollaborationData.proposal",
                     e.target.value
                   )
                 }
@@ -699,10 +699,10 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={formData.devCollaborationData?.budget || ""}
+                  value={formData.creatorCollaborationData?.budget || ""}
                   onChange={(e) =>
                     handleFormChange(
-                      "devCollaborationData.budget",
+                      "creatorCollaborationData.budget",
                       parseFloat(e.target.value) || 0
                     )
                   }
@@ -719,10 +719,10 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.devCollaborationData?.timeline || ""}
+                  value={formData.creatorCollaborationData?.timeline || ""}
                   onChange={(e) =>
                     handleFormChange(
-                      "devCollaborationData.timeline",
+                      "creatorCollaborationData.timeline",
                       e.target.value
                     )
                   }
@@ -1214,7 +1214,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                             tags: [],
                           },
                           productSaleData: undefined,
-                          devCollaborationData: undefined,
+                          creatorCollaborationData: undefined,
                         }));
                       } else if (newType === "product_sale") {
                         setFormData((prev) => ({
@@ -1229,13 +1229,13 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                             tags: [],
                           },
                           ideaSaleData: undefined,
-                          devCollaborationData: undefined,
+                          creatorCollaborationData: undefined,
                         }));
                       } else if (newType === "dev_collaboration") {
                         setFormData((prev) => ({
                           ...prev,
                           projectType: newType,
-                          devCollaborationData: {
+                          creatorCollaborationData: {
                             description: "",
                             proposal: "",
                             budget: 0,
@@ -1270,7 +1270,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                       value={
                         formData.ideaSaleData?.gameGenre ||
                         formData.productSaleData?.gameGenre ||
-                        formData.devCollaborationData?.gameGenre ||
+                        formData.creatorCollaborationData?.gameGenre ||
                         ""
                       }
                       onChange={(e) => {
@@ -1283,7 +1283,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                           formData.projectType === "dev_collaboration"
                         ) {
                           handleFormChange(
-                            "devCollaborationData.gameGenre",
+                            "creatorCollaborationData.gameGenre",
                             genre
                           );
                         }
@@ -1311,7 +1311,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                       value={
                         formData.ideaSaleData?.targetPlatform ||
                         formData.productSaleData?.targetPlatform ||
-                        formData.devCollaborationData?.targetPlatform ||
+                        formData.creatorCollaborationData?.targetPlatform ||
                         "PC"
                       }
                       onChange={(e) => {
@@ -1330,7 +1330,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                           formData.projectType === "dev_collaboration"
                         ) {
                           handleFormChange(
-                            "devCollaborationData.targetPlatform",
+                            "creatorCollaborationData.targetPlatform",
                             platform
                           );
                         }

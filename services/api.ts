@@ -1,13 +1,24 @@
 const API_BASE_URL =
-  (window as any).__API_BASE_URL__ ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "http://localhost:3000/api";
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8080/api";
+
+export const getApiBaseOrigin = (): string => {
+  try {
+    const url = new URL(API_BASE_URL);
+    // If path ends with /api, strip it for socket namespace root
+    const origin = `${url.protocol}//${url.host}`;
+    return origin;
+  } catch (_) {
+    // Fallback: rudimentary strip of trailing /api
+    return API_BASE_URL.replace(/\/?api$/i, "");
+  }
+};
 
 // API service for real database integration
 import {
   clearAllLocalStorage,
   resetAllWeb3Wallets,
 } from "../utils/storageUtils";
+import type { CurrentPlanDetails } from "../types";
 
 export interface LoginRequest {
   email: string;
@@ -50,13 +61,32 @@ export interface UserProfile {
   email: string;
   firstName: string;
   lastName: string;
-  role?: "publisher" | "creator";
+  isKYCVerified: boolean;
+  role?: "publisher" | "creator" | "admin";
+  adminChatId?: string | null; // Admin chat ID for support
   createdAt: string;
+  // Wallet addresses
+  tonWalletAddress?: string;
+  ethereumWalletAddress?: string;
+  suiWalletAddress?: string;
+  solanaWalletAddress?: string;
+  authProviders?: string[]; // List of auth providers
+  currentPlan?: CurrentPlanDetails | null;
+  plan?: string | null;
+  planType?: string;
+}
+
+export interface CurrentUserResponse {
+  success: boolean;
+  data: UserProfile;
 }
 
 class ApiService {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  private isRefreshing: boolean = false;
+  private refreshPromise: Promise<void> | null = null;
+  private refreshSubscribers: Array<(token: string) => void> = [];
 
   constructor() {
     // Load tokens from localStorage on initialization
@@ -85,6 +115,12 @@ class ApiService {
     return this.refreshToken;
   }
 
+  // Public method to make API requests with automatic refreshToken handling
+  // Use this instead of fetch() directly to ensure refreshToken is handled automatically
+  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.makeRequest<T>(endpoint, options);
+  }
+
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -111,20 +147,88 @@ class ApiService {
     }
 
     // List of public endpoints that don't require authentication
+    // These endpoints should not trigger refreshToken logic
     const publicEndpoints = [
+      // Authentication APIs
       "/auth/login",
       "/auth/register",
-      "/auth/forgot-password",
-      "/auth/reset-password",
-      "/auth/verify-reset-code",
+      "/auth/login-passport",
       "/auth/refresh-token",
       "/auth/login/2fa",
+
+      // OAuth Authentication
+      "/auth/google",
+      "/auth/google/callback",
+      "/auth/discord",
+      "/auth/discord/callback",
+      "/auth/telegram",
+
+      // Wallet Authentication
+      "/auth/wallet/connect",
+      "/auth/wallet/check",
+      "/auth/wallet/message",
+      "/auth/wallet/signup",
+      "/auth/wallet/simple-login",
+
+      // Password Recovery
+      "/auth/forgot-password",
+      "/auth/verify-reset-code",
+      "/auth/reset-password",
+
+      // Game Projects APIs (Public)
+      "/game-projects",
+      "/game-projects/stats",
+      "/game-projects/featured",
+      "/game-projects/search",
+      "/game-projects/for-sale",
+
+      // File Upload & Processing (Webhooks - typically public/internal)
+      "/files/webhook/process-file",
+      "/files/sqs/status",
+      "/files/sqs/process-once",
+
+      // Health Check APIs
       "/health",
+      "/", // Root health check
     ];
 
-    const isPublicEndpoint = publicEndpoints.some((publicPath) =>
-      endpoint.startsWith(publicPath)
-    );
+    // Check if endpoint is public
+    // For dynamic routes like /game-projects/:id, we need exact match or specific path matching
+    // Extract path without query parameters for matching
+    const [endpointPath] = endpoint.split("?");
+
+    const isPublicEndpoint = publicEndpoints.some((publicPath) => {
+      // Exact match (ignoring query parameters)
+      if (endpointPath === publicPath) {
+        return true;
+      }
+
+      // For paths that start with the publicPath followed by "/"
+      // This handles dynamic routes like /game-projects/:id
+      if (endpointPath.startsWith(publicPath + "/")) {
+        // Check if it's a protected sub-path that should NOT be public
+        const protectedSubPaths = [
+          "/game-projects/my-projects",
+          "/game-projects/inventory",
+          "/game-projects/purchase-history",
+          "/game-projects/publisher-stats",
+        ];
+
+        // If it matches a protected sub-path, it's not public
+        const isProtected = protectedSubPaths.some((protectedPath) =>
+          endpointPath.startsWith(protectedPath)
+        );
+
+        return !isProtected;
+      }
+
+      // For root path
+      if (publicPath === "/" && (endpointPath === "/" || endpointPath === "")) {
+        return true;
+      }
+
+      return false;
+    });
 
     // Add authorization header if access token exists
     if (token) {
@@ -170,15 +274,22 @@ class ApiService {
 
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        let errorData: any = null;
 
         try {
-          const errorData = await response.json();
+          errorData = await response.json();
           console.error(`API Error [${endpoint}]:`, {
             status: response.status,
             statusText: response.statusText,
             errorData,
           });
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          // Ensure errorMessage is always a string
+          const messageCandidate =
+            errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            typeof messageCandidate === "string"
+              ? messageCandidate
+              : JSON.stringify(messageCandidate);
         } catch (jsonError) {
           console.error(
             `API Error [${endpoint}] - Failed to parse error response:`,
@@ -190,75 +301,128 @@ class ApiService {
           );
         }
 
-        // If unauthorized and we have a refresh token, try to refresh
-        // Note: Skip refresh for login/register/public endpoints, but allow for protected auth endpoints like change-password and 2FA
-        const shouldSkipRefresh =
-          endpoint.includes("/auth/login") ||
-          endpoint.includes("/auth/register") ||
-          endpoint.includes("/auth/forgot-password") ||
-          endpoint.includes("/auth/reset-password") ||
-          endpoint.includes("/auth/verify-reset-code") ||
-          endpoint.includes("/auth/login/2fa") ||
-          endpoint.includes("/auth/refresh-token");
+        // Check if we have token and this is a protected endpoint
+        const hasToken =
+          !isPublicEndpoint &&
+          (this.accessToken || localStorage.getItem("accessToken"));
+        const hasRefreshToken =
+          this.refreshToken || localStorage.getItem("refreshToken");
 
-        if (response.status === 401 && !shouldSkipRefresh) {
-          // Check for refresh token in localStorage if not in memory
-          const refreshTokenToUse =
-            this.refreshToken || localStorage.getItem("refreshToken");
+        // Check if this is a token-related error that should trigger refresh
+        // Ensure errorMessage is string before calling toLowerCase
+        const errorMessageLower =
+          typeof errorMessage === "string"
+            ? errorMessage.toLowerCase()
+            : String(errorMessage).toLowerCase();
+        // Helper function to safely convert to string and check
+        const safeStringCheck = (value: any, searchTerm: string): boolean => {
+          if (!value) return false;
+          const str = typeof value === "string" ? value : String(value);
+          return str.toLowerCase().includes(searchTerm);
+        };
 
-          if (refreshTokenToUse) {
-            try {
-              console.log(
-                `[API] Token expired for ${endpoint}, attempting refresh...`
+        const isTokenError =
+          response.status === 401 ||
+          response.status === 403 ||
+          (errorData &&
+            (safeStringCheck(errorData.message, "token") ||
+              safeStringCheck(errorData.message, "expired") ||
+              safeStringCheck(errorData.message, "unauthorized") ||
+              safeStringCheck(errorData.message, "authentication") ||
+              safeStringCheck(errorData.message, "invalid token") ||
+              safeStringCheck(errorData.message, "token expired") ||
+              safeStringCheck(errorData.error, "token") ||
+              safeStringCheck(errorData.error, "expired") ||
+              safeStringCheck(errorData.error, "unauthorized"))) ||
+          errorMessageLower.includes("token") ||
+          errorMessageLower.includes("expired") ||
+          errorMessageLower.includes("unauthorized");
+
+        // For ANY error on protected endpoints with token, try refreshing token once
+        // This ensures we catch token expiration even if server doesn't return proper error codes
+        if (hasToken && hasRefreshToken) {
+          console.log(
+            `[API Interceptor] Error ${response.status} on protected endpoint ${endpoint}, attempting token refresh...`,
+            {
+              status: response.status,
+              isTokenError,
+              hasToken: true,
+              hasRefreshToken: true,
+              errorMessage,
+              endpoint,
+            }
+          );
+
+          try {
+            // Always try to refresh token for any error on protected endpoints
+            // The handleUnauthorizedResponse will handle retry logic
+            if (
+              isTokenError ||
+              response.status === 401 ||
+              response.status === 403
+            ) {
+              // For token-related errors, use full retry logic
+              return await this.handleUnauthorizedResponse<T>(
+                endpoint,
+                url,
+                config,
+                headers,
+                errorMessage
               );
-              await this.refreshAccessToken();
-
-              // Get fresh token after refresh
-              const freshToken =
+            } else {
+              // For other errors, try refresh but only retry if we get a fresh token
+              // Save old token to compare
+              const oldToken =
                 this.accessToken || localStorage.getItem("accessToken");
+              await this.refreshAccessToken();
+              const freshToken = await this.waitForTokenRefresh();
 
-              if (!freshToken) {
-                throw new Error("Failed to get new token after refresh");
-              }
+              if (freshToken) {
+                // Got token (new or same), retry the request
+                console.log(
+                  `[API Interceptor] Token refresh completed, retrying ${endpoint} with ${
+                    freshToken !== oldToken ? "new" : "same"
+                  } token...`
+                );
+                const retryHeaders = {
+                  ...headers,
+                  Authorization: `Bearer ${freshToken}`,
+                };
+                const retryConfig: RequestInit = {
+                  ...config,
+                  headers: retryHeaders,
+                };
 
-              // Retry the original request with new token
-              const retryHeaders = {
-                ...headers,
-                Authorization: `Bearer ${freshToken}`,
-              };
+                const retryResponse = await fetch(url, retryConfig);
 
-              const retryConfig: RequestInit = {
-                ...config,
-                headers: retryHeaders,
-              };
-
-              console.log(
-                `[API] Retrying request to ${endpoint} with refreshed token`
-              );
-              const retryResponse = await fetch(url, retryConfig);
-
-              if (retryResponse.ok) {
-                const contentType = retryResponse.headers.get("Content-Type");
-                if (contentType && contentType.includes("application/json")) {
-                  return await retryResponse.json();
+                if (retryResponse.ok) {
+                  const contentType = retryResponse.headers.get("Content-Type");
+                  if (contentType && contentType.includes("application/json")) {
+                    console.log(
+                      `[API Interceptor] Retry successful for ${endpoint} after token refresh`
+                    );
+                    return await retryResponse.json();
+                  } else {
+                    return {} as T;
+                  }
                 } else {
-                  return {} as T;
+                  // Retry still failed, will throw original error
+                  console.warn(
+                    `[API Interceptor] Retry after token refresh still failed for ${endpoint} with status ${retryResponse.status}`
+                  );
                 }
               } else {
-                // Retry also failed, throw original error with retry response
-                try {
-                  const retryErrorData = await retryResponse.json();
-                  throw new Error(retryErrorData.message || errorMessage);
-                } catch (parseError) {
-                  throw new Error(errorMessage);
-                }
+                console.warn(
+                  `[API Interceptor] No fresh token received after refresh attempt for ${endpoint}`
+                );
               }
-            } catch (refreshError) {
-              // Refresh failed, logout user
-              console.warn("Token refresh failed:", refreshError);
-              this.logout();
-              throw new Error("Session expired. Please login again.");
             }
+          } catch (refreshError) {
+            // If refresh failed or retry still failed, log and continue to throw original error
+            console.error(
+              `[API Interceptor] Token refresh/retry failed for ${endpoint}:`,
+              refreshError
+            );
           }
         }
 
@@ -276,6 +440,66 @@ class ApiService {
         return {} as T;
       }
     } catch (error) {
+      // Handle network errors and fetch failures
+      // If we have a token and it's not a public endpoint,
+      // the error might be due to expired token, try refreshing once
+      if (
+        error instanceof TypeError &&
+        (error.message.includes("fetch") ||
+          error.message.includes("network")) &&
+        !isPublicEndpoint &&
+        (this.accessToken || localStorage.getItem("accessToken"))
+      ) {
+        console.warn(
+          `[API] Network error on ${endpoint}, checking if token refresh is needed...`
+        );
+
+        // Check if we have refresh token available
+        const refreshTokenToUse =
+          this.refreshToken || localStorage.getItem("refreshToken");
+
+        if (refreshTokenToUse) {
+          try {
+            // Try to refresh token once before giving up
+            await this.refreshAccessToken();
+            const freshToken = await this.waitForTokenRefresh();
+
+            if (freshToken) {
+              // Retry the request with fresh token
+              const retryHeaders = {
+                ...headers,
+                Authorization: `Bearer ${freshToken}`,
+              };
+              const retryConfig: RequestInit = {
+                ...config,
+                headers: retryHeaders,
+              };
+
+              console.log(
+                `[API] Retrying request to ${endpoint} after token refresh (network error recovery)`
+              );
+
+              const retryResponse = await fetch(url, retryConfig);
+
+              if (retryResponse.ok) {
+                const contentType = retryResponse.headers.get("Content-Type");
+                if (contentType && contentType.includes("application/json")) {
+                  return await retryResponse.json();
+                } else {
+                  return {} as T;
+                }
+              }
+            }
+          } catch (refreshError) {
+            console.error(
+              "[API] Token refresh failed during network error recovery:",
+              refreshError
+            );
+            // Continue to throw original error
+          }
+        }
+      }
+
       if (error instanceof Error) {
         throw error;
       }
@@ -283,8 +507,131 @@ class ApiService {
     }
   }
 
-  // Refresh access token using refresh token
+  // Response interceptor: Handle 401 Unauthorized or 403 Forbidden - refresh token and retry
+  private async handleUnauthorizedResponse<T>(
+    endpoint: string,
+    url: string,
+    originalConfig: RequestInit,
+    originalHeaders: Record<string, string>,
+    originalErrorMessage: string
+  ): Promise<T> {
+    // Check if this is a refresh token endpoint (avoid infinite loop)
+    if (endpoint.includes("/auth/refresh-token")) {
+      console.error(
+        "[API Interceptor] Refresh token endpoint returned 401/403, logging out"
+      );
+      this.logout();
+      throw new Error("Session expired. Please login again.");
+    }
+
+    // Check for refresh token
+    const refreshTokenToUse =
+      this.refreshToken || localStorage.getItem("refreshToken");
+
+    if (!refreshTokenToUse) {
+      console.warn("[API Interceptor] No refresh token available, logging out");
+      if (this.accessToken || localStorage.getItem("accessToken")) {
+        this.logout();
+      }
+      throw new Error("Session expired. Please login again.");
+    }
+
+    try {
+      console.log(
+        `[API Interceptor] Unauthorized/Forbidden response for ${endpoint}, attempting token refresh...`
+      );
+
+      // Refresh token (will wait if already refreshing)
+      await this.refreshAccessToken();
+
+      // Wait for token refresh to complete and get fresh token
+      const freshToken = await this.waitForTokenRefresh();
+
+      if (!freshToken) {
+        throw new Error("Failed to get new token after refresh");
+      }
+
+      // Retry the original request with new token
+      const retryHeaders = {
+        ...originalHeaders,
+        Authorization: `Bearer ${freshToken}`,
+      };
+
+      const retryConfig: RequestInit = {
+        ...originalConfig,
+        headers: retryHeaders,
+      };
+
+      console.log(
+        `[API Interceptor] Retrying request to ${endpoint} with refreshed token`
+      );
+      const retryResponse = await fetch(url, retryConfig);
+
+      if (retryResponse.ok) {
+        const contentType = retryResponse.headers.get("Content-Type");
+        if (contentType && contentType.includes("application/json")) {
+          const jsonResponse = await retryResponse.json();
+          console.log(`[API Interceptor] Request succeeded after retry:`, {
+            endpoint,
+            status: retryResponse.status,
+          });
+          return jsonResponse;
+        } else {
+          return {} as T;
+        }
+      } else {
+        // Retry also failed
+        let retryErrorMessage = `HTTP ${retryResponse.status}: ${retryResponse.statusText}`;
+        try {
+          const retryErrorData = await retryResponse.json();
+          retryErrorMessage =
+            retryErrorData.message || retryErrorData.error || retryErrorMessage;
+        } catch (parseError) {
+          // Ignore parse errors
+        }
+
+        // If still 401 after refresh, token is invalid
+        if (retryResponse.status === 401) {
+          console.error(
+            "[API Interceptor] Still unauthorized after token refresh, logging out"
+          );
+          this.logout();
+          throw new Error("Session expired. Please login again.");
+        }
+
+        throw new Error(retryErrorMessage);
+      }
+    } catch (refreshError) {
+      // Refresh failed, logout user
+      console.error("[API Interceptor] Token refresh failed:", refreshError);
+
+      // Only logout if not already logged out
+      if (this.accessToken || localStorage.getItem("accessToken")) {
+        this.logout();
+      }
+
+      // Re-throw with user-friendly message
+      if (refreshError instanceof Error) {
+        if (
+          refreshError.message.includes("No refresh token") ||
+          refreshError.message.includes("Session expired") ||
+          refreshError.message.includes("expired")
+        ) {
+          throw new Error("Session expired. Please login again.");
+        }
+        throw refreshError;
+      }
+      throw new Error("Session expired. Please login again.");
+    }
+  }
+
+  // Refresh access token using refresh token - with queue for concurrent requests
   private async refreshAccessToken(): Promise<void> {
+    // If already refreshing, wait for the existing refresh to complete
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
     // Always check localStorage for fresh refresh token
     if (!this.refreshToken) {
       this.refreshToken = localStorage.getItem("refreshToken");
@@ -294,45 +641,130 @@ class ApiService {
       throw new Error("No refresh token available");
     }
 
-    console.log("[API] Attempting to refresh access token...");
-    const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken: this.refreshToken }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = "Failed to refresh token";
+    // Set refreshing flag and create promise
+    this.isRefreshing = true;
+    this.refreshPromise = (async () => {
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.message || errorMessage;
-      } catch (e) {
-        // If not valid JSON, use the text as error message
-        errorMessage = errorText || errorMessage;
-      }
+        console.log("[API Interceptor] Attempting to refresh access token...");
+        const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken: this.refreshToken }),
+        });
 
-      if (response.status === 404) {
-        throw new Error("Refresh endpoint not implemented");
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMessage = "Failed to refresh token";
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            // If not valid JSON, use the text as error message
+            errorMessage = errorText || errorMessage;
+          }
+
+          if (response.status === 404) {
+            throw new Error("Refresh endpoint not implemented");
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+
+        // Extract tokens from response - handle different response formats
+        const newAccessToken = data.data?.accessToken || data.accessToken;
+        const newRefreshToken =
+          data.data?.refreshToken || data.refreshToken || this.refreshToken;
+
+        if (!newAccessToken) {
+          throw new Error("No access token received from refresh");
+        }
+
+        // Update tokens before notifying subscribers
+        this.setTokens(newAccessToken, newRefreshToken);
+        console.log("[API Interceptor] Token refreshed successfully", {
+          hasNewAccessToken: !!newAccessToken,
+          hasNewRefreshToken: !!newRefreshToken,
+          tokenPreview: newAccessToken?.substring(0, 20) + "...",
+        });
+
+        // Notify all subscribers (queued requests) that token is refreshed
+        // Use newAccessToken directly since we just set it
+        const subscribers = [...this.refreshSubscribers]; // Copy array to avoid issues during iteration
+        this.refreshSubscribers = []; // Clear before calling to prevent double calls
+        subscribers.forEach((callback) => {
+          try {
+            callback(newAccessToken);
+          } catch (err) {
+            console.error("Error in refresh subscriber callback:", err);
+          }
+        });
+      } catch (error) {
+        // If refresh fails, clear tokens and logout
+        console.error("[API Interceptor] Token refresh failed:", error);
+        this.logout();
+        throw error;
+      } finally {
+        // Reset refreshing state
+        this.isRefreshing = false;
+        this.refreshPromise = null;
       }
-      throw new Error(errorMessage);
+    })();
+
+    return this.refreshPromise;
+  }
+
+  // Wait for token refresh to complete (for queued requests)
+  private async waitForTokenRefresh(): Promise<string | null> {
+    // If already refreshing, subscribe to get notified when token is ready
+    if (this.isRefreshing && this.refreshPromise) {
+      return new Promise((resolve, reject) => {
+        let resolved = false;
+
+        // Subscribe to get notified immediately when token is ready
+        this.refreshSubscribers.push((token) => {
+          if (!resolved) {
+            resolved = true;
+            resolve(token);
+          }
+        });
+
+        // Also wait for the promise to complete as fallback
+        this.refreshPromise!.then(() => {
+          if (!resolved) {
+            resolved = true;
+            // After refresh completes, get the latest token
+            const token =
+              this.accessToken || localStorage.getItem("accessToken");
+            resolve(token);
+          }
+        }).catch((error) => {
+          if (!resolved) {
+            resolved = true;
+            reject(error);
+          }
+        });
+      });
     }
 
-    const data = await response.json();
-
-    // Extract tokens from response - handle different response formats
-    const newAccessToken = data.data?.accessToken || data.accessToken;
-    const newRefreshToken =
-      data.data?.refreshToken || data.refreshToken || this.refreshToken;
-
-    if (!newAccessToken) {
-      throw new Error("No access token received from refresh");
+    // If not refreshing, check if we just finished refreshing
+    // Wait a small amount to ensure token is synced to localStorage
+    if (!this.isRefreshing && this.refreshPromise) {
+      // Wait for the promise if it's still pending
+      try {
+        await this.refreshPromise;
+        // Get token after refresh completes
+        return this.accessToken || localStorage.getItem("accessToken");
+      } catch (error) {
+        // Refresh failed, return current token (will likely fail on retry)
+        return this.accessToken || localStorage.getItem("accessToken");
+      }
     }
 
-    this.setTokens(newAccessToken, newRefreshToken);
-    console.log("[API] Token refreshed successfully");
+    // If not refreshing, return current token immediately
+    return this.accessToken || localStorage.getItem("accessToken");
   }
 
   // Health check
@@ -704,14 +1136,38 @@ class ApiService {
   }
 
   // User management endpoints (protected)
-  async getCurrentUser(): Promise<UserProfile> {
+  async getCurrentUser(): Promise<CurrentUserResponse> {
     console.log(
       "Getting current user with token:",
       this.accessToken ? "present" : "missing"
     );
-    const userProfile = await this.makeRequest<UserProfile>("/users/me");
-    console.log("getCurrentUser response:", userProfile);
-    return userProfile;
+    const response = await this.makeRequest<CurrentUserResponse>("/users/me");
+    if (response?.data?.currentPlan) {
+      const plan = response.data.currentPlan;
+      const { _id, ...planWithoutInternalId } = plan;
+      const normalizedPlan: CurrentPlanDetails = {
+        ...planWithoutInternalId,
+        id:
+          plan.id ||
+          (typeof _id === "string" ? _id : (_id as any)?.toString?.()) ||
+          undefined,
+      };
+      response.data = {
+        ...response.data,
+        currentPlan: normalizedPlan,
+        plan: normalizedPlan.planType ?? response.data.plan ?? null,
+        planType: normalizedPlan.planType ?? response.data.planType ?? null,
+      };
+    } else {
+      response.data = {
+        ...response.data,
+        currentPlan: null,
+        plan: response.data.plan ?? response.data.planType ?? null,
+        planType: response.data.planType ?? response.data.plan ?? null,
+      };
+    }
+    console.log("getCurrentUser response:", response);
+    return response;
   }
 
   async getAllUsers(): Promise<UserProfile[]> {
@@ -861,10 +1317,327 @@ class ApiService {
     });
   }
 
-  async purchaseGameProject(id: string): Promise<any> {
+  async purchaseGameProject(
+    id: string,
+    paymentDetails?: {
+      paymentMethod?: string;
+      paypalOrderId?: string;
+      payerId?: string;
+      paymentStatus?: string;
+    }
+  ): Promise<any> {
     return this.makeRequest(`/game-projects/${id}/purchase`, {
       method: "POST",
+      body: JSON.stringify(paymentDetails || {}),
     });
+  }
+
+  // Payment API - Create payment for project purchase
+  async createPayment(data: {
+    paymentType:
+      | "project_purchase"
+      | "subscription"
+      | "collaboration_budget"
+      | "contract_advance"
+      | "contract_milestone"
+      | "contract_completion";
+    projectId?: string;
+    collaborationId?: string;
+    contractId?: string;
+    planType?: string; // For subscription payments
+    amount: number;
+    currency?: string;
+    description?: string;
+    paymentMethod?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      paymentId: string;
+      approvalUrl: string;
+      paypalOrderId: string;
+    };
+  }> {
+    return this.makeRequest("/payment", {
+      method: "POST",
+      body: JSON.stringify({
+        paymentType: data.paymentType,
+        projectId: data.projectId,
+        collaborationId: data.collaborationId,
+        contractId: data.contractId,
+        planType: data.planType,
+        amount: data.amount,
+        currency: data.currency || "USD",
+        description: data.description,
+        paymentMethod: data.paymentMethod || "paypal",
+      }),
+    });
+  }
+
+  // Payment API - Complete payment after user approval
+  async completePayment(orderId: string): Promise<{
+    success: boolean;
+    data: {
+      _id: string;
+      payerId: string;
+      payeeId: string;
+      paymentType: string;
+      status: string;
+      paymentMethod: string;
+      amount: number;
+      currency: string;
+      description: string;
+      paypalOrderId: string;
+      paypalCaptureId: string;
+      projectId?: string;
+      collaborationId?: string;
+      contractId?: string;
+      completedAt: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+  }> {
+    return this.makeRequest("/payment/complete", {
+      method: "POST",
+      body: JSON.stringify({ orderId }),
+    });
+  }
+
+  // ========== SUBSCRIPTION API ==========
+
+  /**
+   * Get all subscription plans
+   * GET /subscription/plans
+   */
+  async getSubscriptionPlans(): Promise<{
+    success: boolean;
+    data: Array<{
+      _id: string;
+      planType: "free" | "pro" | "business";
+      name: string;
+      description: string;
+      price: number;
+      currency: string;
+      billingPeriod: string;
+      maxPrototypes: number;
+      maxPrototypesPerMonth: number;
+      maxAIRequests: number;
+      maxAIRequestsPerMonth: number;
+      maxTotalPrototypes: number;
+      hasAdvancedFeatures: boolean;
+      hasAnalyticsAccess: boolean;
+      hasPrioritySupport: boolean;
+      has247Support: boolean;
+      hasCustomIntegrations: boolean;
+      hasAdvancedAnalytics: boolean;
+      isActive: boolean;
+      isPopular: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  }> {
+    return this.makeRequest("/subscription/plans", { method: "GET" });
+  }
+
+  /**
+   * Get current user's subscription plan
+   * GET /subscription/my-plan
+   */
+  async getMySubscriptionPlan(): Promise<{
+    success: boolean;
+    data: {
+      plan: {
+        _id: string;
+        planType: "free" | "pro" | "business";
+        name: string;
+        description: string;
+        price: number;
+        currency: string;
+        billingPeriod: string;
+        maxPrototypes: number;
+        maxPrototypesPerMonth: number;
+        maxAIRequests: number;
+        maxAIRequestsPerMonth: number;
+        maxTotalPrototypes: number;
+        hasAdvancedFeatures: boolean;
+        hasAnalyticsAccess: boolean;
+        hasPrioritySupport: boolean;
+        has247Support: boolean;
+        hasCustomIntegrations: boolean;
+        hasAdvancedAnalytics: boolean;
+        isActive: boolean;
+        isPopular: boolean;
+      };
+      subscription: {
+        _id: string;
+        userId: string;
+        planId: string;
+        planType: "free" | "pro" | "business";
+        status: string;
+        startDate: string;
+        endDate: string | null;
+        cancelledAt: string | null;
+        expiresAt: string | null;
+        paymentId: string | null;
+        paymentMethod: string | null;
+        autoRenew: boolean;
+        prototypesCreated: number;
+        aiRequestsUsed: number;
+        lastResetDate: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+      usage: {
+        prototypesCreated: number;
+        aiRequestsUsed: number;
+        plan: any;
+        limits: {
+          maxPrototypes: number;
+          maxPrototypesPerMonth: number;
+          maxAIRequests: number;
+          maxAIRequestsPerMonth: number;
+          maxTotalPrototypes: number;
+        };
+      };
+    };
+  }> {
+    return this.makeRequest("/subscription/my-plan", { method: "GET" });
+  }
+
+  /**
+   * Get usage statistics
+   * GET /subscription/usage
+   */
+  async getSubscriptionUsage(): Promise<{
+    success: boolean;
+    data: {
+      prototypesCreated: number;
+      aiRequestsUsed: number;
+      plan: {
+        planType: string;
+        name: string;
+        maxPrototypes: number;
+        maxPrototypesPerMonth: number;
+        maxAIRequests: number;
+        maxAIRequestsPerMonth: number;
+        maxTotalPrototypes: number;
+      };
+      limits: {
+        maxPrototypes: number;
+        maxPrototypesPerMonth: number;
+        maxAIRequests: number;
+        maxAIRequestsPerMonth: number;
+        maxTotalPrototypes: number;
+      };
+    };
+  }> {
+    return this.makeRequest("/subscription/usage", { method: "GET" });
+  }
+
+  // Payment API - Refund payment
+  async refundPayment(
+    paymentId: string,
+    data?: {
+      amount?: number;
+      reason?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: {
+      _id: string;
+      status: string;
+      refundDetails: {
+        amount: string;
+        refundId: string;
+        status: string;
+        reason?: string;
+        refundedAt: string;
+      };
+    };
+  }> {
+    return this.makeRequest("/payment/refund", {
+      method: "POST",
+      body: JSON.stringify({
+        paymentId,
+        amount: data?.amount,
+        reason: data?.reason,
+      }),
+    });
+  }
+
+  // Payment API - Get payment details
+  async getPaymentDetails(paymentId: string): Promise<{
+    success: boolean;
+    data: {
+      _id: string;
+      payerId: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      };
+      payeeId: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      };
+      paymentType: string;
+      status: string;
+      amount: number;
+      currency: string;
+      projectId?: {
+        id: string;
+        title: string;
+      };
+      collaborationId?: string;
+      contractId?: string;
+      completedAt: string;
+      createdAt: string;
+    };
+  }> {
+    return this.makeRequest(`/payment/${paymentId}`);
+  }
+
+  // Payment API - Get payment list
+  async getPayments(filters?: {
+    paymentType?: string;
+    status?: string;
+    projectId?: string;
+    collaborationId?: string;
+    contractId?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    data: Array<{
+      _id: string;
+      paymentType: string;
+      status: string;
+      amount: number;
+      currency: string;
+      createdAt: string;
+    }>;
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const queryParams = new URLSearchParams();
+
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+          queryParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const queryString = queryParams.toString();
+    const endpoint = `/payment${queryString ? `?${queryString}` : ""}`;
+
+    return this.makeRequest(endpoint);
   }
 
   // Purchase and Inventory Management APIs - Updated to match documentation
@@ -1102,6 +1875,68 @@ class ApiService {
     });
   }
 
+  // Update Milestone Status
+  // PATCH /api/collaborations/:id/milestones/status
+  // Requires: milestoneIndex (number, min 0)
+  // Optional: isCompleted (boolean), dueDate (ISO 8601 string), description (string), deliverables (string)
+  async updateMilestoneStatus(
+    collaborationId: string,
+    milestoneData: {
+      milestoneIndex: number; // Required: Index of milestone in milestones array (0-based)
+      isCompleted?: boolean; // Optional: Completion status
+      dueDate?: string; // Optional: ISO 8601 date string
+      description?: string; // Optional: Milestone description
+      deliverables?: string; // Optional: Deliverables for this milestone
+    }
+  ): Promise<any> {
+    return this.makeRequest(
+      `/collaborations/${collaborationId}/milestones/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(milestoneData),
+      }
+    );
+  }
+
+  // Collaboration Chat - Messages
+  async getCollaborationMessages(collaborationId: string): Promise<any[]> {
+    return this.makeRequest(`/collaborations/${collaborationId}/messages`, {
+      method: "GET",
+    });
+  }
+
+  async sendCollaborationMessage(
+    collaborationId: string,
+    payload: {
+      content: string;
+      type?: "text" | "file" | "system";
+      attachments?: string[];
+      replyTo?: string | null;
+    }
+  ): Promise<any> {
+    return this.makeRequest(`/collaborations/${collaborationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // Reports - Creator/Publisher: report a chat message in a collaboration
+  async reportCollaborationMessage(
+    collaborationId: string,
+    messageId: string,
+    payload: { reason: string; attachments?: string[] }
+  ): Promise<any> {
+    return this.makeRequest(
+      `/collaborations/${collaborationId}/messages/${encodeURIComponent(
+        messageId
+      )}/report`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  }
+
   async acceptCollaboration(collaborationId: string): Promise<any> {
     return this.makeRequest(`/collaborations/${collaborationId}/accept`, {
       method: "POST",
@@ -1221,7 +2056,7 @@ class ApiService {
     projectType: "idea_sale" | "product_sale" | "dev_collaboration";
     ideaSaleData?: any;
     productSaleData?: any;
-    devCollaborationData?: any;
+    creatorCollaborationData?: any;
     fileKeys?: string[]; // S3 keys from presigned-url response
     fileUrls?: string[]; // Upload URLs from presigned-url response
     attachments?: string[]; // Additional attachments like banner images
@@ -1374,6 +2209,23 @@ class ApiService {
     return this.makeRequest(endpoint);
   }
 
+  async getCreatorEarningsChart(filters: any = {}): Promise<any> {
+    const queryParams = new URLSearchParams();
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        queryParams.append(key, value.toString());
+      }
+    });
+
+    const queryString = queryParams.toString();
+    const endpoint = `/analytics/creator/earnings-chart${
+      queryString ? `?${queryString}` : ""
+    }`;
+
+    return this.makeRequest(endpoint);
+  }
+
   // Publisher Analytics API Methods
   async getPublisherBudgetAnalytics(filters?: any) {
     const params = new URLSearchParams();
@@ -1469,6 +2321,171 @@ class ApiService {
       params.toString() ? `?${params.toString()}` : ""
     }`;
     return this.makeRequest(endpoint);
+  }
+
+  // ========== USER-TO-USER CHAT ==========
+
+  /**
+   * Get all chats for current user
+   * GET /chats
+   */
+  async getChats(): Promise<{
+    success: boolean;
+    data: Array<{
+      id: string;
+      otherUser: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatar?: string;
+      };
+      lastMessage?: {
+        id: string;
+        content: string;
+        messageType: string;
+        senderId: string;
+        attachments: string[];
+        replyTo?: string;
+        createdAt: string;
+      };
+      lastMessageAt?: string;
+      unreadCount: number;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  }> {
+    return this.makeRequest("/chats", { method: "GET" });
+  }
+
+  /**
+   * Create or get existing chat with a user
+   * POST /chats
+   */
+  async createOrGetChat(userId: string): Promise<{
+    success: boolean;
+    data: {
+      id: string;
+      otherUser: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatar?: string;
+      };
+      lastMessage?: any;
+      lastMessageAt?: string;
+      unreadCount: number;
+      createdAt: string;
+      updatedAt: string;
+    };
+  }> {
+    return this.makeRequest("/chats", {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+  }
+
+  /**
+   * Get messages for a chat
+   * GET /chats/:chatId/messages
+   */
+  async getChatMessages(chatId: string): Promise<{
+    success: boolean;
+    data: Array<{
+      id: string;
+      content: string;
+      messageType: "text" | "file" | "system";
+      senderId: string;
+      attachments: string[];
+      replyTo?: string;
+      createdAt: string;
+    }>;
+  }> {
+    return this.makeRequest(`/chats/${chatId}/messages`, { method: "GET" });
+  }
+
+  /**
+   * Send message to a chat
+   * POST /chats/:chatId/messages
+   */
+  async sendChatMessage(
+    chatId: string,
+    payload: {
+      content: string;
+      type?: "text" | "file" | "system";
+      attachments?: string[];
+      replyTo?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: {
+      id: string;
+      content: string;
+      messageType: string;
+      senderId: string;
+      attachments: string[];
+      replyTo?: string;
+      createdAt: string;
+    };
+  }> {
+    return this.makeRequest(`/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Mark messages as read in a chat
+   * POST /chats/:chatId/read
+   */
+  async markChatAsRead(chatId: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.makeRequest(`/chats/${chatId}/read`, { method: "POST" });
+  }
+
+  /**
+   * Get total unread count across all chats
+   * GET /chats/unread/count
+   */
+  async getUnreadCount(): Promise<{
+    success: boolean;
+    data: { unreadCount: number };
+  }> {
+    return this.makeRequest("/chats/unread/count", { method: "GET" });
+  }
+
+  /**
+   * Search users
+   * GET /users?search=...&limit=...
+   */
+  async searchUsers(params?: { search?: string; limit?: number }): Promise<{
+    success: boolean;
+    data: Array<{
+      _id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role?: string;
+      avatar?: string;
+      isActive: boolean;
+      adminChatId?: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.search) {
+      queryParams.append("search", params.search);
+    }
+    if (params?.limit) {
+      queryParams.append("limit", params.limit.toString());
+    }
+    const queryString = queryParams.toString();
+    const endpoint = `/users${queryString ? `?${queryString}` : ""}`;
+    return this.makeRequest(endpoint, { method: "GET" });
   }
 }
 

@@ -31,7 +31,7 @@ export interface PublisherCollaborationPerformance {
   collaborationSuccessRate: number;
   averageProjectRating: number;
   topPerformingDevelopers: Array<{
-    developerId: string;
+    creatorId: string;
     developerName: string;
     completedProjects: number;
     averageRating: number;

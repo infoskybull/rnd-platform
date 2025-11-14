@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import ResponsiveNavbar from "../components/ResponsiveNavbar";
 
 interface Plan {
   id: "free" | "pro" | "business";
@@ -14,10 +15,16 @@ interface Plan {
 
 const PlanPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { user, logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<
     "free" | "pro" | "business" | null
   >(null);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   const plans: Plan[] = [
     {
@@ -65,7 +72,36 @@ const PlanPage: React.FC = () => {
     },
   ];
 
-  const currentPlanId = user?.plan || "free";
+  const currentPlanCodeFromPlan =
+    typeof user?.currentPlan?.planType === "string"
+      ? user.currentPlan.planType.toLowerCase()
+      : null;
+  const currentPlanId =
+    currentPlanCodeFromPlan ||
+    (typeof user?.plan === "string" ? user.plan.toLowerCase() : null) ||
+    "free";
+
+  const { requiredPage, requiredPageLabel, requestedPlanTier } = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const required = params.get("required") || undefined;
+    const requestedPlan =
+      params.get("upgrade") || params.get("target") || undefined;
+    const formattedRequestedPlan = requestedPlan
+      ? `${requestedPlan.charAt(0).toUpperCase()}${requestedPlan
+          .slice(1)
+          .toLowerCase()}`
+      : undefined;
+    const pageLabel = required
+      ? `${required
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase())}`
+      : undefined;
+    return {
+      requiredPage: required,
+      requiredPageLabel: pageLabel,
+      requestedPlanTier: formattedRequestedPlan,
+    };
+  }, [location.search]);
 
   const handleSelectPlan = (planId: "free" | "pro" | "business") => {
     if (planId === currentPlanId) {
@@ -79,30 +115,17 @@ const PlanPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200">
-      {/* Header */}
-      <header className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-gray-400 hover:text-white transition-colors flex items-center space-x-2"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            <span>Back</span>
-          </button>
-        </div>
-      </header>
+      {/* Navbar */}
+      <ResponsiveNavbar
+        title="RnD Game Plans"
+        titleColor="text-indigo-400"
+        user={user}
+        onLogout={handleLogout}
+        backButton={{
+          text: "Back",
+          onClick: () => navigate(-1),
+        }}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
@@ -120,8 +143,25 @@ const PlanPage: React.FC = () => {
           <div className="mb-8 text-center">
             <span className="inline-block px-4 py-2 bg-indigo-900/30 border border-indigo-500 text-indigo-300 rounded-full text-sm">
               Current Plan:{" "}
-              <span className="font-medium capitalize">{currentPlanId}</span>
+              <span className="font-medium capitalize">
+                {user?.currentPlan?.name || currentPlanId}
+              </span>
             </span>
+          </div>
+        )}
+
+        {requiredPage && (
+          <div className="mb-8 mx-auto max-w-3xl">
+            <div className="rounded-xl border border-yellow-500/60 bg-yellow-500/10 px-6 py-4 text-sm text-yellow-100">
+              <p className="font-medium text-yellow-200">
+                Upgrade recommended for {requiredPageLabel || requiredPage}.
+              </p>
+              <p className="mt-1 text-yellow-100/90">
+                {requestedPlanTier
+                  ? `This experience works best with the ${requestedPlanTier} plan or higher.`
+                  : "Choose a plan below to unlock this experience."}
+              </p>
+            </div>
           </div>
         )}
 

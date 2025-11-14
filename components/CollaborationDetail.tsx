@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiService } from "../services/api";
 import { useCollaborations } from "../hooks/useCollaborations";
 import { Collaboration, AddUpdateRequest } from "../types";
 
@@ -421,6 +422,45 @@ const CollaborationDetail: React.FC<CollaborationDetailProps> = ({
                           Attachment {idx + 1}
                         </a>
                       ))}
+                    </div>
+                  )}
+                  {update.type === "message" && (
+                    <div className="mt-3">
+                      <button
+                        onClick={async () => {
+                          const reason = window.prompt(
+                            "Nhập lý do report tin nhắn",
+                            "Tin nhắn có nội dung spam/vi phạm"
+                          );
+                          if (!reason) return;
+                          const attachmentsInput = window.prompt(
+                            "Nhập URLs đính kèm (phân tách bằng dấu phẩy)",
+                            ""
+                          );
+                          const attachments = attachmentsInput
+                            ? attachmentsInput
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                            : [];
+                          try {
+                            await apiService.reportCollaborationMessage(
+                              collaborationId,
+                              (update as any).id ||
+                                (update as any)._id ||
+                                (update as any).messageId ||
+                                `${index}`,
+                              { reason, attachments }
+                            );
+                            alert("Report submitted");
+                          } catch (err: any) {
+                            alert(err?.message || "Failed to submit report");
+                          }
+                        }}
+                        className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                      >
+                        Report message
+                      </button>
                     </div>
                   )}
                 </div>

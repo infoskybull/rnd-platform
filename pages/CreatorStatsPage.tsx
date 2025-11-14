@@ -6,7 +6,6 @@ import RoleBadge from "../components/RoleBadge";
 import Sidebar from "../components/Sidebar";
 import StatsTab from "../components/dashboard/StatsTab";
 import { Menu, X } from "lucide-react";
-import { useSidebar } from "../contexts/SidebarContext";
 
 interface CreatorStatsPageProps {
   user: User;

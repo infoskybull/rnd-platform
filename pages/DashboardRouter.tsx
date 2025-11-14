@@ -31,7 +31,7 @@ const DashboardRouter: React.FC = () => {
 
   // Redirect to appropriate dashboard based on user role
   if (user.role === "admin") {
-    return <Navigate to="/admin/management" replace />;
+    return <Navigate to="/admin/accounts" replace />;
   } else if (user.role === "publisher") {
     return <Navigate to="/dashboard/publisher/browse-games" replace />;
   } else if (user.role === "creator") {

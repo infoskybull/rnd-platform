@@ -25,6 +25,7 @@ import ContractsTab from "./dashboard/ContractsTab";
 import StatsTab from "./dashboard/StatsTab";
 import HistoryTab from "./dashboard/HistoryTab";
 import SettingsTab from "./dashboard/SettingsTab";
+import MessagesTab from "./dashboard/MessagesTab";
 import PurchaseButton from "./PurchaseButton";
 import { Menu, X, User as UserIcon } from "lucide-react";
 import { getProjectBanner, handleBannerError } from "../utils/projectUtils";
@@ -41,6 +42,55 @@ interface PublisherDashboardProps {
   user: User;
   onLogout: () => void;
 }
+
+// Helper functions - moved outside component to prevent recreation on each render
+const formatPrice = (price: number) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(price);
+};
+
+const getProjectTypeLabel = (type: ProjectType) => {
+  switch (type) {
+    case "idea_sale":
+      return "Idea Sale";
+    case "product_sale":
+      return "Product Sale";
+    case "dev_collaboration":
+      return "Dev Collaboration";
+    default:
+      return type;
+  }
+};
+
+const getStatusColor = (status: ProjectStatus) => {
+  switch (status) {
+    case "published":
+      return "bg-green-100 text-green-800";
+    case "sold":
+      return "bg-blue-100 text-blue-800";
+    case "in_collaboration":
+      return "bg-purple-100 text-purple-800";
+    case "completed":
+      return "bg-gray-100 text-gray-800";
+    case "cancelled":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-yellow-100 text-yellow-800";
+  }
+};
+
+const getOwnerName = (project: GameProject) => {
+  const owner = project.owner;
+  if (owner) {
+    // Use email if firstName/lastName are not available
+    return owner.firstName && owner.lastName
+      ? `${owner.firstName} ${owner.lastName}`
+      : owner.email || "Unknown Creator";
+  }
+  return "Unknown Creator";
+};
 
 const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
   user,
@@ -100,6 +150,27 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
   const [allProjects, setAllProjects] = useState<GameProject[]>([]);
   const [ownerData, setOwnerData] = useState<Record<string, any>>({});
 
+  // Use refs to prevent duplicate API calls
+  const isLoadingProjectsRef = useRef(false);
+  const isLoadingAllProjectsRef = useRef(false);
+  const hasLoadedInitialDataRef = useRef(false);
+
+  // Memoize filters object to prevent unnecessary recreations
+  const memoizedFilters = useMemo(
+    () => filters,
+    [
+      filters.page,
+      filters.limit,
+      filters.status,
+      filters.projectType,
+      filters.gameGenre,
+      filters.targetPlatform,
+      filters.search,
+      filters.sortBy,
+      filters.sortOrder,
+    ]
+  );
+
   // Memoize calculated stats to prevent unnecessary recalculations
   const calculatedStats = useMemo(() => {
     if (allProjects.length === 0) return null;
@@ -118,25 +189,23 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
 
   const loadOwnerData = useCallback(async (projects: GameProject[]) => {
     try {
-      const uniqueDeveloperIds = [
-        ...new Set(projects.map((p) => p.developerId)),
-      ];
-      const ownerPromises = uniqueDeveloperIds.map(async (developerId) => {
+      const uniqueDeveloperIds = [...new Set(projects.map((p) => p.creatorId))];
+      const ownerPromises = uniqueDeveloperIds.map(async (creatorId) => {
         try {
-          const ownerInfo = await apiService.getUserById(developerId);
-          return { developerId, ownerInfo };
+          const ownerInfo = await apiService.getUserById(creatorId);
+          return { creatorId, ownerInfo };
         } catch (err) {
-          console.error(`Failed to load owner data for ${developerId}:`, err);
-          return { developerId, ownerInfo: null };
+          console.error(`Failed to load owner data for ${creatorId}:`, err);
+          return { creatorId, ownerInfo: null };
         }
       });
 
       const ownerResults = await Promise.all(ownerPromises);
       const ownerDataMap: Record<string, any> = {};
 
-      ownerResults.forEach(({ developerId, ownerInfo }) => {
+      ownerResults.forEach(({ creatorId, ownerInfo }) => {
         if (ownerInfo) {
-          ownerDataMap[developerId] = ownerInfo;
+          ownerDataMap[creatorId] = ownerInfo;
         }
       });
 
@@ -147,14 +216,20 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
   }, []);
 
   const loadProjects = useCallback(async () => {
+    // Prevent duplicate calls
+    if (isLoadingProjectsRef.current) {
+      console.log("Already loading projects, skipping duplicate call");
+      return;
+    }
+
     try {
+      isLoadingProjectsRef.current = true;
       setLoading(true);
       setError(null);
-
-      console.log("Loading projects with filters:", filters);
+      console.log("Loading projects with filters:", memoizedFilters);
 
       // Use the new getProjectsForSale API for publishers
-      const response = await apiService.getProjectsForSale(filters);
+      const response = await apiService.getProjectsForSale(memoizedFilters);
       console.log("API response:", response);
 
       const projects = response.data?.projects || response.projects || [];
@@ -183,11 +258,19 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
       setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setLoading(false);
+      isLoadingProjectsRef.current = false;
     }
-  }, [filters, loadOwnerData]);
+  }, [memoizedFilters, loadOwnerData]);
 
   const loadAllProjects = useCallback(async () => {
+    // Prevent duplicate calls and only load once for stats
+    if (isLoadingAllProjectsRef.current || allProjects.length > 0) {
+      console.log("Skipping loadAllProjects - already loaded or loading");
+      return;
+    }
+
     try {
+      isLoadingAllProjectsRef.current = true;
       // Load all projects without filters for stats calculation
       const response = await apiService.getProjectsForSale({
         page: 1,
@@ -200,8 +283,10 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
       // Stats will be calculated automatically via useMemo when allProjects changes
     } catch (err) {
       console.error("Failed to load all projects for stats:", err);
+    } finally {
+      isLoadingAllProjectsRef.current = false;
     }
-  }, []);
+  }, [allProjects.length]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -220,57 +305,72 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
     }
   }, [calculatedStats, stats]);
 
-  // Load data on mount
+  // Load initial data on mount - only once
   useEffect(() => {
+    if (hasLoadedInitialDataRef.current) return;
+    hasLoadedInitialDataRef.current = true;
+
+    // Load projects with current filters
     loadProjects();
+    // Load all projects for stats (only once)
     loadAllProjects();
+    // Load stats from API
     loadStats();
   }, []); // Empty dependency array - only run on mount
 
-  // Reload projects when filters change
+  // Reload projects when filters change (but not on initial mount)
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    // Only reload if initial data has been loaded
+    if (hasLoadedInitialDataRef.current) {
+      loadProjects();
+    }
+  }, [memoizedFilters, loadProjects]);
 
-  const handleFilterChange = (newFilters: Partial<GameProjectFilters>) => {
-    const updatedFilters = { ...filters, ...newFilters, page: 1 };
-    setFilters(updatedFilters);
+  const handleFilterChange = useCallback(
+    (newFilters: Partial<GameProjectFilters>) => {
+      setFilters((prevFilters) => {
+        const updatedFilters = { ...prevFilters, ...newFilters, page: 1 };
 
-    // Update URL params
-    const newSearchParams = new URLSearchParams();
-    Object.entries(updatedFilters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== "") {
-        newSearchParams.set(key, value.toString());
-      }
-    });
-    setSearchParams(newSearchParams);
-  };
+        // Update URL params
+        const newSearchParams = new URLSearchParams();
+        Object.entries(updatedFilters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            newSearchParams.set(key, value.toString());
+          }
+        });
+        setSearchParams(newSearchParams);
+
+        return updatedFilters;
+      });
+    },
+    [setSearchParams]
+  );
 
   const handlePageChange = useCallback(
     (page: number) => {
       console.log("handlePageChange called with page:", page);
-      console.log("Current filters.page:", filters.page);
-      console.log("Current totalPages:", totalPages);
 
-      // Validate page number
-      const validPage = Math.max(1, Math.min(page, totalPages || 1));
-      console.log("Valid page:", validPage);
+      setFilters((prevFilters) => {
+        // Validate page number
+        const validPage = Math.max(1, Math.min(page, totalPages || 1));
+        console.log("Valid page:", validPage);
 
-      const updatedFilters = { ...filters, page: validPage };
-      console.log("Updated filters:", updatedFilters);
+        const updatedFilters = { ...prevFilters, page: validPage };
+        console.log("Updated filters:", updatedFilters);
 
-      setFilters(updatedFilters);
+        // Update URL params
+        const newSearchParams = new URLSearchParams();
+        Object.entries(updatedFilters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            newSearchParams.set(key, value.toString());
+          }
+        });
+        setSearchParams(newSearchParams);
 
-      // Update URL params
-      const newSearchParams = new URLSearchParams();
-      Object.entries(updatedFilters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== "") {
-          newSearchParams.set(key, value.toString());
-        }
+        return updatedFilters;
       });
-      setSearchParams(newSearchParams);
     },
-    [filters, totalPages, setSearchParams]
+    [totalPages, setSearchParams]
   );
 
   // Add keyboard navigation for pagination
@@ -305,28 +405,49 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filters.page, totalPages, handlePageChange]);
+  }, [totalPages, handlePageChange]);
 
-  const handleStartCollaboration = async (projectId: string) => {
-    try {
-      setActionLoading(`collaborate-${projectId}`);
-      await apiService.startCollaboration(projectId);
-      // Refresh projects and stats to update status
+  // Memoize purchase success/error handlers to prevent recreation
+  const handlePurchaseSuccess = useCallback(
+    (result: any) => {
+      console.log("Purchase successful:", result);
+      // Refresh projects and stats
       loadProjects();
       loadAllProjects();
-      setSelectedProject(null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to start collaboration"
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
+    },
+    [loadProjects, loadAllProjects]
+  );
 
-  const handleViewProject = (projectId: string) => {
-    navigate(`/project-detail/${projectId}`);
-  };
+  const handlePurchaseError = useCallback((error: string) => {
+    setError(error);
+  }, []);
+
+  const handleStartCollaboration = useCallback(
+    async (projectId: string) => {
+      try {
+        setActionLoading(`collaborate-${projectId}`);
+        await apiService.startCollaboration(projectId);
+        // Refresh projects and stats to update status
+        loadProjects();
+        loadAllProjects();
+        setSelectedProject(null);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to start collaboration"
+        );
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [loadProjects, loadAllProjects]
+  );
+
+  const handleViewProject = useCallback(
+    (projectId: string) => {
+      navigate(`/project-detail/${projectId}`);
+    },
+    [navigate]
+  );
 
   // GSAP animations for project cards
   useEffect(() => {
@@ -362,8 +483,8 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
     }
   }, [projects, loading]);
 
-  // Hover animations for cards
-  const handleCardHover = (index: number, isHovering: boolean) => {
+  // Hover animations for cards - memoized to prevent recreation
+  const handleCardHover = useCallback((index: number, isHovering: boolean) => {
     const card = cardRefs.current[index];
     if (!card) return;
 
@@ -382,57 +503,10 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
         ease: "power2.out",
       });
     }
-  };
+  }, []);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(price);
-  };
-
-  const getProjectTypeLabel = (type: ProjectType) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
-  };
-
-  const getStatusColor = (status: ProjectStatus) => {
-    switch (status) {
-      case "published":
-        return "bg-green-100 text-green-800";
-      case "sold":
-        return "bg-blue-100 text-blue-800";
-      case "in_collaboration":
-        return "bg-purple-100 text-purple-800";
-      case "completed":
-        return "bg-gray-100 text-gray-800";
-      case "cancelled":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-yellow-100 text-yellow-800";
-    }
-  };
-
-  const getOwnerName = (project: GameProject) => {
-    const owner = project.owner;
-    if (owner) {
-      // Use email if firstName/lastName are not available
-      return owner.firstName && owner.lastName
-        ? `${owner.firstName} ${owner.lastName}`
-        : owner.email || "Unknown Creator";
-    }
-    return "Unknown Creator";
-  };
-
-  const renderTabContent = () => {
+  // Memoize tab content to prevent unnecessary re-renders
+  const renderTabContent = useMemo(() => {
     switch (activeTab) {
       case "browse-games":
         return (
@@ -531,33 +605,18 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     total}
                 </div>
                 <div className="text-sm text-gray-400">Total Projects</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.totalProjects || "N/A"} | Calc:{" "}
-                  {calculatedStats?.totalProjects || "N/A"} | Total: {total}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-green-400">
                   {stats?.ideaSales || calculatedStats?.ideaSales || 0}
                 </div>
                 <div className="text-sm text-gray-400">Idea Sales</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.ideaSales || "N/A"} | Calc:{" "}
-                  {calculatedStats?.ideaSales || "N/A"}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-blue-400">
                   {stats?.productSales || calculatedStats?.productSales || 0}
                 </div>
                 <div className="text-sm text-gray-400">Product Sales</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.productSales || "N/A"} | Calc:{" "}
-                  {calculatedStats?.productSales || "N/A"}
-                </div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-purple-400">
@@ -566,11 +625,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     0}
                 </div>
                 <div className="text-sm text-gray-400">Collaborations</div>
-                {/* Debug info */}
-                <div className="text-xs text-gray-500 mt-1">
-                  API: {stats?.collaborations || "N/A"} | Calc:{" "}
-                  {calculatedStats?.collaborations || "N/A"}
-                </div>
               </div>
             </div>
 
@@ -687,10 +741,12 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                           </div>
                         )}
 
-                        {project.devCollaborationData && (
+                        {project.creatorCollaborationData && (
                           <div className="text-base sm:text-lg font-bold text-purple-400">
                             Budget:{" "}
-                            {formatPrice(project.devCollaborationData.budget)}
+                            {formatPrice(
+                              project.creatorCollaborationData.budget
+                            )}
                           </div>
                         )}
 
@@ -699,21 +755,14 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                           <PurchaseButton
                             project={project}
                             size="sm"
-                            onPurchaseSuccess={(result) => {
-                              console.log("Purchase successful:", result);
-                              // Refresh projects and stats
-                              loadProjects();
-                              loadAllProjects();
-                            }}
-                            onPurchaseError={(error) => {
-                              setError(error);
-                            }}
+                            onPurchaseSuccess={handlePurchaseSuccess}
+                            onPurchaseError={handlePurchaseError}
                           />
                         </div>
 
                         {(project.ideaSaleData?.gameGenre ||
                           project.productSaleData?.gameGenre ||
-                          project.devCollaborationData?.gameGenre) && (
+                          project.creatorCollaborationData?.gameGenre) && (
                           <div className="mt-2">
                             <span className="text-xs text-gray-500">
                               Genre:{" "}
@@ -721,7 +770,7 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                             <span className="text-xs text-gray-300 truncate block sm:inline">
                               {project.ideaSaleData?.gameGenre ||
                                 project.productSaleData?.gameGenre ||
-                                project.devCollaborationData?.gameGenre}
+                                project.creatorCollaborationData?.gameGenre}
                             </span>
                           </div>
                         )}
@@ -910,6 +959,8 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
         return <EnhancedInventoryTab />;
       case "collaborations":
         return <CollaborationsTab userRole="publisher" userId={user.id} />;
+      case "messages":
+        return <MessagesTab />;
       case "contracts":
         return <ContractsTab user={user} />;
       case "stats":
@@ -921,7 +972,29 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
       default:
         return null;
     }
-  };
+  }, [
+    activeTab,
+    projects,
+    loading,
+    error,
+    stats,
+    calculatedStats,
+    total,
+    filters,
+    totalPages,
+    handleFilterChange,
+    handlePageChange,
+    handleCardHover,
+    handlePurchaseSuccess,
+    handlePurchaseError,
+    user,
+    handleViewProject,
+    handleStartCollaboration,
+    actionLoading,
+    selectedProject,
+    setSelectedProject,
+    ownerData,
+  ]);
 
   return (
     <div className="h-screen bg-gray-900 text-gray-200 flex overflow-hidden">
@@ -930,8 +1003,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
         userRole="publisher"
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       {/* Main Content */}
@@ -1016,7 +1087,7 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
         </header>
 
         <div className="flex-1 overflow-y-auto dark-scrollbar">
-          <main className="p-4 sm:p-6">{renderTabContent()}</main>
+          <main className="p-4 sm:p-6">{renderTabContent}</main>
         </div>
       </div>
 
@@ -1062,25 +1133,26 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     </div>
                     {(selectedProject.ideaSaleData?.gameGenre ||
                       selectedProject.productSaleData?.gameGenre ||
-                      selectedProject.devCollaborationData?.gameGenre) && (
+                      selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.gameGenre ||
                             selectedProject.productSaleData?.gameGenre ||
-                            selectedProject.devCollaborationData?.gameGenre}
+                            selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
                     {(selectedProject.ideaSaleData?.targetPlatform ||
                       selectedProject.productSaleData?.targetPlatform ||
-                      selectedProject.devCollaborationData?.targetPlatform) && (
+                      selectedProject.creatorCollaborationData
+                        ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
                           {selectedProject.ideaSaleData?.targetPlatform ||
                             selectedProject.productSaleData?.targetPlatform ||
-                            selectedProject.devCollaborationData
+                            selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
                       </div>
@@ -1153,26 +1225,26 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     </div>
                   )}
 
-                  {selectedProject.devCollaborationData && (
+                  {selectedProject.creatorCollaborationData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
                       <h3 className="text-lg font-semibold text-white mb-2">
                         Collaboration Details
                       </h3>
                       <p className="text-gray-300 mb-2">
-                        {selectedProject.devCollaborationData.description}
+                        {selectedProject.creatorCollaborationData.description}
                       </p>
                       <div className="text-xl font-bold text-purple-400 mb-2">
                         Budget:{" "}
                         {formatPrice(
-                          selectedProject.devCollaborationData.budget
+                          selectedProject.creatorCollaborationData.budget
                         )}
                       </div>
                       <div className="text-sm text-gray-400 mb-2">
                         Timeline:{" "}
-                        {selectedProject.devCollaborationData.timeline}
+                        {selectedProject.creatorCollaborationData.timeline}
                       </div>
                       <p className="text-gray-300 text-sm">
-                        {selectedProject.devCollaborationData.proposal}
+                        {selectedProject.creatorCollaborationData.proposal}
                       </p>
                     </div>
                   )}
@@ -1215,11 +1287,11 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
 
                   {(selectedProject.ideaSaleData?.tags ||
                     selectedProject.productSaleData?.tags ||
-                    selectedProject.devCollaborationData?.tags) &&
+                    selectedProject.creatorCollaborationData?.tags) &&
                     (
                       selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
-                      selectedProject.devCollaborationData?.tags ||
+                      selectedProject.creatorCollaborationData?.tags ||
                       []
                     ).length > 0 && (
                       <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -1230,7 +1302,7 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                           {(
                             selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
-                            selectedProject.devCollaborationData?.tags ||
+                            selectedProject.creatorCollaborationData?.tags ||
                             []
                           ).map((tag, index) => (
                             <span
@@ -1262,15 +1334,10 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                             size="lg"
                             className="w-full"
                             onPurchaseSuccess={(result) => {
-                              console.log("Purchase successful:", result);
-                              // Refresh projects and stats
-                              loadProjects();
-                              loadAllProjects();
+                              handlePurchaseSuccess(result);
                               setSelectedProject(null);
                             }}
-                            onPurchaseError={(error) => {
-                              setError(error);
-                            }}
+                            onPurchaseError={handlePurchaseError}
                           />
                         )}
 

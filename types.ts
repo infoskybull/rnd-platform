@@ -5,6 +5,28 @@ export interface ProjectDetails {
   seller: string;
 }
 
+export interface CurrentPlanDetails {
+  _id?: string;
+  id?: string;
+  planType: "free" | "pro" | "business" | string;
+  name?: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  billingPeriod?: string;
+  maxPrototypes?: number;
+  maxPrototypesPerMonth?: number;
+  maxAIRequests?: number;
+  maxAIRequestsPerMonth?: number;
+  maxTotalPrototypes?: number;
+  hasAdvancedFeatures?: boolean;
+  hasAnalyticsAccess?: boolean;
+  hasPrioritySupport?: boolean;
+  has247Support?: boolean;
+  hasCustomIntegrations?: boolean;
+  hasAdvancedAnalytics?: boolean;
+}
+
 export interface User {
   id: string; // Internal use, mapped from _id
   email: string;
@@ -13,8 +35,16 @@ export interface User {
   name: string; // Computed property for display
   role?: "publisher" | "creator" | "admin"; // User role
   isKYCVerified: boolean;
-  plan?: "free" | "pro" | "business"; // User subscription plan
+  plan?: "free" | "pro" | "business" | string | null; // Derived plan code for legacy UI flows
+  currentPlan?: CurrentPlanDetails | null; // Full plan details for access control
   createdAt: string; // ISO string for Redux serialization
+  adminChatId?: string; // Admin chat ID for user-to-admin support chats
+  // Wallet addresses
+  tonWalletAddress?: string;
+  ethereumWalletAddress?: string;
+  suiWalletAddress?: string;
+  solanaWalletAddress?: string;
+  authProviders?: string[]; // List of auth providers: ["local", "ton_wallet", etc.]
 }
 
 export interface LoginCredentials {
@@ -91,7 +121,7 @@ export interface ProductSaleData {
   isPlayable: boolean;
 }
 
-export interface DevCollaborationData {
+export interface CreatorCollaborationData {
   description: string;
   proposal: string;
   budget: number;
@@ -106,7 +136,7 @@ export interface DevCollaborationData {
 
 export interface GameProject {
   _id: string;
-  developerId: string;
+  creatorId: string;
   owner?: User;
   originalDeveloper?: User; // Creator who originally created the project
   title: string;
@@ -115,7 +145,7 @@ export interface GameProject {
   status: ProjectStatus;
   ideaSaleData?: IdeaSaleData;
   productSaleData?: ProductSaleData;
-  devCollaborationData?: DevCollaborationData;
+  creatorCollaborationData?: CreatorCollaborationData;
   publisherId?: string;
   soldAt?: Date;
   collaborationStartDate?: Date;
@@ -146,7 +176,7 @@ export interface GameProjectListResponse {
 export interface GameProjectFilters {
   projectType?: ProjectType;
   status?: ProjectStatus;
-  developerId?: string;
+  creatorId?: string;
   publisherId?: string;
   search?: string;
   gameGenre?: string;
@@ -210,7 +240,7 @@ export interface ProjectCreationData {
     targetPlatform?: string;
     tags?: string[];
   };
-  devCollaborationData?: {
+  creatorCollaborationData?: {
     description: string;
     proposal: string;
     budget: number;
@@ -241,7 +271,7 @@ export interface PurchaseResponse {
     status: ProjectStatus;
     publisherId: string;
     soldAt: string;
-    developerId: string;
+    creatorId: string;
     owner: User;
     originalDeveloper: User;
   };
@@ -310,7 +340,7 @@ export interface InventoryItem {
     demoUrl?: string;
     screenshots?: string[];
   };
-  devCollaborationData?: {
+  creatorCollaborationData?: {
     description: string;
     budget: number;
     gameGenre: string;
@@ -319,7 +349,7 @@ export interface InventoryItem {
     collaborationType: string;
     estimatedDuration: string;
   };
-  developerId: string;
+  creatorId: string;
   owner: {
     id: string;
     email: string;
@@ -437,7 +467,7 @@ export interface Collaboration {
     firstName: string;
     lastName: string;
   };
-  developerId: string;
+  creatorId: string;
   creator: {
     id: string;
     email: string;
@@ -497,7 +527,7 @@ export interface CollaborationFilters {
   limit?: number;
   projectId?: string;
   publisherId?: string;
-  developerId?: string;
+  creatorId?: string;
   status?: "pending" | "active" | "completed" | "cancelled";
   currentPhase?:
     | "planning"
@@ -562,6 +592,14 @@ export interface AddUpdateRequest {
   title: string;
   description: string;
   attachments?: string[];
+}
+
+export interface UpdateMilestoneStatusRequest {
+  milestoneIndex: number; // Required: Index of milestone in milestones array (0-based)
+  isCompleted?: boolean; // Optional: Completion status
+  dueDate?: string; // Optional: ISO 8601 date string
+  description?: string; // Optional: Milestone description
+  deliverables?: string; // Optional: Deliverables for this milestone
 }
 
 // Analytics API Types - Updated to match API documentation
@@ -674,10 +712,32 @@ export interface SpendingTrends {
   period: string;
   trends: Array<{
     period: string;
-    count: number;
-    totalSpent: number;
+    spending: number;
+    growth: number; // Phần trăm tăng trưởng
   }>;
-  lastUpdated: string;
+  lastUpdated: Date | string;
+}
+
+export interface EarningsChartData {
+  period: string; // "6months" | "12months" | "24months"
+  data: Array<{
+    month: string; // Format: "YYYY-MM" (e.g., "2024-01")
+    monthLabel: string; // Format: "Jan 2024" hoặc "Tháng 1/2024"
+    projectCount: number; // Số project trong tháng
+    totalEarnings: number; // Tổng earnings của tháng (USD)
+    averageEarningsPerProject?: number; // Trung bình earnings mỗi project (optional)
+    growth?: number; // Growth percentage so với tháng trước (optional)
+  }>;
+  summary?: {
+    totalProjects: number; // Tổng số project trong period
+    totalEarnings: number; // Tổng earnings trong period
+    averageMonthlyEarnings: number; // Trung bình earnings mỗi tháng
+    bestMonth?: {
+      month: string;
+      earnings: number;
+    };
+  };
+  lastUpdated?: string; // ISO 8601 timestamp
 }
 
 // Publisher-specific analytics interfaces
@@ -711,7 +771,7 @@ export interface PublisherCollaborationPerformance {
   collaborationSuccessRate: number;
   averageProjectRating: number;
   topPerformingDevelopers: Array<{
-    developerId: string;
+    creatorId: string;
     developerName: string;
     completedProjects: number;
     averageRating: number;
@@ -860,18 +920,18 @@ export interface ContractMilestone {
 }
 
 export interface ContractSignature {
-  userId: string;
+  userId?: string; // Optional - may not be in response
   signatureData: string;
   ipAddress: string;
   userAgent: string;
-  signedAt: Date;
+  signedAt: Date | string; // Can be Date or ISO string
 }
 
 export interface Contract {
   _id: string;
   collaborationId: string;
   publisherId: string;
-  developerId: string;
+  creatorId?: string; // Alternative field name
   contractTitle: string;
   contractDescription: string;
   contractType:
@@ -879,7 +939,8 @@ export interface Contract {
     | "publishing"
     | "marketing"
     | "support"
-    | "maintenance";
+    | "maintenance"
+    | "consulting"; // Added consulting type from docs
   status:
     | "draft"
     | "pending_signature"
@@ -893,13 +954,21 @@ export interface Contract {
     | "monthly"
     | "quarterly"
     | "milestone_based"
+    | "time_based" // Added from docs
+    | "completion_based" // Added from docs
     | "upfront"
     | "completion";
   milestones: ContractMilestone[];
   termsAndConditions: string;
   contractStartDate: Date;
   contractEndDate: Date;
-  signatures: ContractSignature[];
+  signedAt?: Date;
+  activatedAt?: Date;
+  completedAt?: Date;
+  publisherSignature?: ContractSignature;
+  creatorSignature?: ContractSignature;
+  signatures?: ContractSignature[]; // Legacy field
+  isFullySigned: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -911,7 +980,7 @@ export interface ContractFilters {
   contractType?: Contract["contractType"];
   collaborationId?: string;
   publisherId?: string;
-  developerId?: string;
+  creatorId?: string;
   search?: string;
   sortBy?:
     | "createdAt"
@@ -977,18 +1046,30 @@ export interface SignContractRequest {
 }
 
 export interface UpdateMilestoneRequest {
+  title?: string;
+  description?: string;
+  budget?: number;
+  dueDate?: string; // ISO 8601 format
+  deliverables?: string[];
+  paymentPercentage?: number; // 0-100
   isCompleted?: boolean;
-  progressPercentage?: number;
-  completedAt?: string;
+  completedAt?: string; // Auto-set when isCompleted is true
 }
 
 export interface MilestoneProgressResponse {
-  milestones: ContractMilestone[];
-  totalProgress: number;
+  contractId: string;
   completedMilestones: number;
-  totalMilestones: number;
-  totalPaid: number;
+  progressPercentage: number; // Changed from totalProgress
+  upcomingMilestones: ContractMilestone[];
+  overdueMilestones: ContractMilestone[];
   totalBudget: number;
+  paidAmount: number; // Changed from totalPaid
+  pendingAmount: number; // Added from docs
+  // Legacy fields for backward compatibility
+  milestones?: ContractMilestone[];
+  totalProgress?: number;
+  totalMilestones?: number;
+  totalPaid?: number;
 }
 
 // TON Connect Types
@@ -1027,7 +1108,7 @@ export interface TonConnectLoginCredentials {
 // Web3 Wallet Authentication Types
 export interface Web3WalletCredentials {
   walletAddress: string;
-  walletType: "ton" | "sui" | "bnb" | "solana" | "ethereum";
+  walletType: "ton" | "sui" | "ethereum" | "solana" | "ethereum";
   signature: string;
   message?: string;
 }

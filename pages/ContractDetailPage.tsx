@@ -2,10 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { contractService, Contract } from "../services/contractService";
 import { useAuth } from "../hooks/useAuth";
+import ResponsiveNavbar from "../components/ResponsiveNavbar";
 import { ContractSigningModal } from "../components/dashboard/ContractSigningModal";
 import { MilestoneManagementModal } from "../components/dashboard/MilestoneManagementModal";
 import {
-  ArrowLeft,
   Calendar,
   DollarSign,
   Users,
@@ -22,12 +22,17 @@ import {
 const ContractDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   useEffect(() => {
     if (id && !authLoading) {
@@ -90,6 +95,9 @@ const ContractDetailPage: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
+    if (amount == null || isNaN(amount)) {
+      return "$0.00";
+    }
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -97,21 +105,45 @@ const ContractDetailPage: React.FC = () => {
   };
 
   const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    if (!date) {
+      return "N/A";
+    }
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Date";
+      }
+      return dateObj.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
+    }
   };
 
   const formatDateTime = (date: Date | string) => {
-    return new Date(date).toLocaleString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!date) {
+      return "N/A";
+    }
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Date";
+      }
+      return dateObj.toLocaleString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (error) {
+      console.error("Error formatting date/time:", error);
+      return "Invalid Date";
+    }
   };
 
   const handleContractSigned = (signedContract: Contract) => {
@@ -123,19 +155,41 @@ const ContractDetailPage: React.FC = () => {
   };
 
   const canSignContract = () => {
-    return (
-      contract?.status === "pending_signature" &&
-      user?.role === "creator" &&
-      contract.developerId === user.id
-    );
+    if (!contract || !user) return false;
+
+    // Check if contract is in pending signature status
+    if (contract.status !== "pending_signature") return false;
+
+    // Check if user is publisher or creator
+    const isPublisher =
+      user.role === "publisher" && contract.publisherId === user.id;
+    const isCreator =
+      user.role === "creator" &&
+      (contract.creatorId === user.id || contract.creatorId === user.id);
+
+    if (!isPublisher && !isCreator) return false;
+
+    // Check if user has already signed
+    if (isPublisher && contract.publisherSignature) return false;
+    if (isCreator && contract.creatorSignature) return false;
+
+    return true;
   };
 
   const canManageMilestones = () => {
-    return (
-      contract?.status === "active" &&
-      user?.role === "creator" &&
-      contract.developerId === user.id
-    );
+    if (!contract || !user) return false;
+
+    // Only active contracts can have milestones updated
+    if (contract.status !== "active") return false;
+
+    // Both publisher and creator can manage milestones
+    const isPublisher =
+      user.role === "publisher" && contract.publisherId === user.id;
+    const isCreator =
+      user.role === "creator" &&
+      (contract.creatorId === user.id || contract.creatorId === user.id);
+
+    return isPublisher || isCreator;
   };
 
   if (authLoading || loading) {
@@ -205,17 +259,21 @@ const ContractDetailPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      {/* Responsive Navigation */}
+      <ResponsiveNavbar
+        title="Contract Details"
+        titleColor="text-indigo-400"
+        user={user}
+        onLogout={handleLogout}
+        backButton={{
+          text: "Back to Contracts",
+          onClick: () => navigate(-1),
+        }}
+      />
+
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center text-gray-400 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to Contracts
-          </button>
-
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">
@@ -244,6 +302,17 @@ const ContractDetailPage: React.FC = () => {
                 </div>
                 <div className="text-sm text-gray-400">Total Budget</div>
               </div>
+
+              {/* Sign Contract Button in Header */}
+              {canSignContract() && (
+                <button
+                  onClick={() => setShowSignModal(true)}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-green-600/50 animate-pulse"
+                >
+                  <FileText className="w-5 h-5" />
+                  Sign Contract
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -253,10 +322,10 @@ const ContractDetailPage: React.FC = () => {
           {canSignContract() && (
             <button
               onClick={() => setShowSignModal(true)}
-              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-green-600/50"
             >
               <FileText className="w-5 h-5" />
-              Sign Contract
+              Sign Contract Now
             </button>
           )}
 
@@ -380,7 +449,7 @@ const ContractDetailPage: React.FC = () => {
                       </h3>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-green-400">
-                          {formatCurrency(milestone.budget)}
+                          {formatCurrency(milestone.budget ?? 0)}
                         </span>
                         {milestone.isCompleted ? (
                           <CheckCircle className="w-5 h-5 text-green-400" />
@@ -397,10 +466,13 @@ const ContractDetailPage: React.FC = () => {
                     <div className="flex justify-between items-center text-sm">
                       <div className="flex items-center gap-2 text-gray-400">
                         <Calendar className="w-4 h-4" />
-                        Due: {formatDate(milestone.dueDate)}
+                        Due:{" "}
+                        {milestone.dueDate
+                          ? formatDate(milestone.dueDate)
+                          : "N/A"}
                       </div>
                       <div className="text-gray-400">
-                        {milestone.paymentPercentage}% of total budget
+                        {milestone.paymentPercentage ?? 0}% of total budget
                       </div>
                     </div>
 
@@ -468,34 +540,120 @@ const ContractDetailPage: React.FC = () => {
                     Creator ID
                   </label>
                   <p className="text-white font-mono text-sm">
-                    {contract.developerId}
+                    {contract.creatorId}
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Signatures */}
-            {contract.signatures?.length > 0 && (
-              <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Signatures
-                </h3>
+            <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Signatures{" "}
+                {contract.isFullySigned && (
+                  <span className="text-green-400 text-sm">(Fully Signed)</span>
+                )}
+              </h3>
 
-                <div className="space-y-3">
-                  {contract.signatures?.map((signature, index) => (
-                    <div key={index} className="p-3 bg-gray-700/50 rounded-lg">
-                      <div className="text-sm text-gray-300 mb-1">
-                        Signed: {formatDateTime(signature.signedAt)}
+              {/* Sign Contract Button in Signatures Section */}
+              {canSignContract() && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => setShowSignModal(true)}
+                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-600/50"
+                  >
+                    <FileText className="w-5 h-5" />
+                    Sign Contract
+                  </button>
+                  <p className="text-xs text-gray-400 mt-2 text-center">
+                    {contract.status === "pending_signature" &&
+                      (user?.role === "publisher" &&
+                      contract.publisherId === user.id
+                        ? "Waiting for your signature"
+                        : user?.role === "creator" &&
+                          (contract.creatorId === user.id ||
+                            contract.creatorId === user.id)
+                        ? "Waiting for your signature"
+                        : "Please sign to proceed")}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {contract.publisherSignature && (
+                  <div className="p-3 bg-gray-700/50 rounded-lg">
+                    <div className="text-sm font-medium text-white mb-1">
+                      Publisher Signature
+                    </div>
+                    <div className="text-sm text-gray-300 mb-1">
+                      Signed:{" "}
+                      {formatDateTime(contract.publisherSignature.signedAt)}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      IP: {contract.publisherSignature.ipAddress}
+                    </div>
+                  </div>
+                )}
+
+                {contract.creatorSignature && (
+                  <div className="p-3 bg-gray-700/50 rounded-lg">
+                    <div className="text-sm font-medium text-white mb-1">
+                      Creator Signature
+                    </div>
+                    <div className="text-sm text-gray-300 mb-1">
+                      Signed:{" "}
+                      {formatDateTime(contract.creatorSignature.signedAt)}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      IP: {contract.creatorSignature.ipAddress}
+                    </div>
+                  </div>
+                )}
+
+                {/* Show pending signature status */}
+                {!contract.isFullySigned &&
+                  contract.status === "pending_signature" && (
+                    <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                      <div className="text-sm font-medium text-yellow-400 mb-1">
+                        ⏳ Waiting for Signatures
                       </div>
-                      <div className="text-xs text-gray-400">
-                        IP: {signature.ipAddress}
+                      <div className="text-xs text-gray-300">
+                        {!contract.publisherSignature &&
+                          "Publisher signature pending"}
+                        {!contract.publisherSignature &&
+                          !contract.creatorSignature &&
+                          " • "}
+                        {!contract.creatorSignature &&
+                          "Creator signature pending"}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                {/* Legacy signatures array */}
+                {contract.signatures?.map((signature, index) => (
+                  <div key={index} className="p-3 bg-gray-700/50 rounded-lg">
+                    <div className="text-sm text-gray-300 mb-1">
+                      Signed: {formatDateTime(signature.signedAt)}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      IP: {signature.ipAddress}
+                    </div>
+                  </div>
+                ))}
+
+                {contract.activatedAt && (
+                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <div className="text-sm font-medium text-green-400 mb-1">
+                      Contract Activated
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      {formatDateTime(contract.activatedAt)}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Quick Actions */}
             <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-6">
@@ -504,6 +662,16 @@ const ContractDetailPage: React.FC = () => {
               </h3>
 
               <div className="space-y-3">
+                {canSignContract() && (
+                  <button
+                    onClick={() => setShowSignModal(true)}
+                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-green-600/50"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Sign Contract
+                  </button>
+                )}
+
                 <button
                   onClick={() => window.print()}
                   className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"

@@ -47,10 +47,20 @@ A comprehensive game development marketplace platform where creators can showcas
    npm install
    ```
 
-2. Set up environment variables in `.env.local`:
+2. Set up environment variables in `.env` file:
 
    ```
    GEMINI_API_KEY=your_gemini_api_key_here
+   
+   # PayPal Configuration (for payment integration)
+   # Get your Sandbox Client ID from: https://developer.paypal.com/dashboard/applications/sandbox
+   VITE_PAYPAL_CLIENT_ID_SANDBOX=your_sandbox_client_id_here
+   
+   # For production, get Live Client ID from: https://developer.paypal.com/dashboard/applications/live
+   VITE_PAYPAL_CLIENT_ID_LIVE=your_live_client_id_here
+   
+   # PayPal Mode: "sandbox" for testing, "production" for live payments
+   VITE_PAYPAL_MODE=sandbox
    ```
 
 3. Run the development server:
@@ -60,6 +70,50 @@ A comprehensive game development marketplace platform where creators can showcas
    ```
 
 4. Open [http://localhost:5173](http://localhost:5173) in your browser
+
+## PayPal Sandbox Integration
+
+The application includes PayPal payment integration with Sandbox mode for testing.
+
+### Setup PayPal Sandbox
+
+1. **Create a PayPal Developer Account**
+   - Go to [PayPal Developer Dashboard](https://developer.paypal.com/)
+   - Sign in or create an account
+
+2. **Create a Sandbox App**
+   - Navigate to [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox)
+   - Click "Create App"
+   - Select "Merchant" or "Personal" app type
+   - Copy your **Sandbox Client ID**
+
+3. **Configure Environment Variables**
+   - Add `VITE_PAYPAL_CLIENT_ID_SANDBOX` to your `.env` file with your Sandbox Client ID
+   - Set `VITE_PAYPAL_MODE=sandbox` for testing
+
+4. **Test Payments**
+   - Use test accounts from [PayPal Sandbox Accounts](https://developer.paypal.com/dashboard/accounts)
+   - No real money will be charged in sandbox mode
+   - A yellow banner will appear on the payment page indicating sandbox mode is active
+
+### Production Setup
+
+When ready for production:
+1. Create a Live App in [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/applications/live)
+2. Copy your Live Client ID
+3. Set `VITE_PAYPAL_CLIENT_ID_LIVE` in `.env`
+4. Change `VITE_PAYPAL_MODE=production`
+
+### Backend Integration
+
+**⚠️ Lưu ý:** PayPal Secret (Client Secret) **KHÔNG được dùng ở Frontend**. Nó chỉ được dùng ở **Backend Server** để verify payments.
+
+Nếu backend cần verify PayPal payments, xem hướng dẫn chi tiết trong file [PAYPAL_BACKEND_INTEGRATION.md](./PAYPAL_BACKEND_INTEGRATION.md).
+
+**Tóm tắt:**
+- Frontend chỉ cần `Client ID` (đã có)
+- Backend cần `Client Secret` để verify payments với PayPal API
+- Set PayPal Secret ở backend `.env` file, không phải frontend
 
 ## API Integration
 

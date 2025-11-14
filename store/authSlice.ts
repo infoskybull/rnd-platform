@@ -56,6 +56,71 @@ const extractUserId = (userProfile: any, context: string = ""): string => {
   return userId.toString();
 };
 
+// Helper function to transform user data with wallet addresses
+const normalizePlanCode = (planValue?: string | null): string | null => {
+  if (!planValue) {
+    return null;
+  }
+  return typeof planValue === "string" ? planValue.toLowerCase() : planValue;
+};
+
+const transformUserData = (userData: any, userId: string): User => {
+  const rawPlan = userData?.currentPlan || null;
+  const extractedPlan =
+    rawPlan && typeof rawPlan === "object"
+      ? {
+          ...rawPlan,
+          id:
+            rawPlan.id ||
+            (typeof rawPlan._id === "string"
+              ? rawPlan._id
+              : rawPlan._id?.toString?.()) ||
+            undefined,
+        }
+      : null;
+
+  const normalizedPlanType =
+    normalizePlanCode(
+      extractedPlan?.planType ||
+        userData?.planType ||
+        userData?.plan ||
+        userData?.subscriptionPlan?.planType
+    ) || null;
+
+  const firstName = userData.firstName || "User";
+  const lastName = userData.lastName || "";
+  const fullName =
+    firstName && lastName ? `${firstName} ${lastName}` : firstName;
+
+  return {
+    id: userId.toString(),
+    email: userData.email,
+    firstName: firstName,
+    lastName: lastName,
+    name: fullName,
+    role: userData.role || "creator",
+    isKYCVerified:
+      userData.isKYCVerified !== undefined ? userData.isKYCVerified : true,
+    plan: normalizedPlanType,
+    currentPlan: extractedPlan
+      ? {
+          ...extractedPlan,
+          planType: normalizedPlanType || extractedPlan.planType,
+        }
+      : null,
+    createdAt: userData.createdAt
+      ? new Date(userData.createdAt).toISOString()
+      : new Date().toISOString(),
+    adminChatId: userData.adminChatId,
+    // Wallet addresses
+    tonWalletAddress: userData.tonWalletAddress,
+    ethereumWalletAddress: userData.ethereumWalletAddress,
+    suiWalletAddress: userData.suiWalletAddress,
+    solanaWalletAddress: userData.solanaWalletAddress,
+    authProviders: userData.authProviders,
+  };
+};
+
 const transformAuthResponse = (response: AuthResponse): User => {
   console.log("Auth response received:", response);
 
@@ -94,26 +159,7 @@ const transformAuthResponse = (response: AuthResponse): User => {
     throw new Error("Invalid user data: missing user ID");
   }
 
-  // Handle missing firstName/lastName with fallbacks
-  const firstName = userData.firstName || "User";
-  const lastName = userData.lastName || "";
-  const fullName =
-    firstName && lastName ? `${firstName} ${lastName}` : firstName;
-
-  const user: User = {
-    id: userId.toString(),
-    email: userData.email,
-    firstName: firstName,
-    lastName: lastName,
-    name: fullName,
-    role: userData.role || "creator", // Default role if missing
-    isKYCVerified:
-      userData.isKYCVerified !== undefined ? userData.isKYCVerified : true,
-    createdAt: userData.createdAt
-      ? new Date(userData.createdAt).toISOString()
-      : new Date().toISOString(),
-  };
-
+  const user = transformUserData(userData, userId);
   console.log("Transformed user:", user);
   return user;
 };
@@ -163,8 +209,12 @@ export const initializeAuth = createAsyncThunk(
         try {
           const user = JSON.parse(cachedUserProfile);
           console.log("Using cached user profile:", user);
+          // For admin, skip calling /users/me entirely
+          if (user.role === "admin") {
+            return { user, accessToken, refreshToken };
+          }
 
-          // Verify with server in background
+          // Verify with server in background for non-admin
           try {
             const userProfile = await apiService.getCurrentUser();
             if (userProfile) {
@@ -174,26 +224,21 @@ export const initializeAuth = createAsyncThunk(
               let userData = userProfile;
               if ((userProfile as any).data?.user) {
                 userData = (userProfile as any).data.user;
-              } else if ((userProfile as any).data && !userProfile.email) {
+              } else if (
+                (userProfile as any).data &&
+                !("email" in userProfile.data)
+              ) {
+                userData = (userProfile as any).data;
+              } else if (
+                (userProfile as any).success &&
+                (userProfile as any).data
+              ) {
+                // Handle API response format: { success: true, data: { ... } }
                 userData = (userProfile as any).data;
               }
 
-              // Create updated user object
-              const firstName = userData.firstName || "User";
-              const lastName = userData.lastName || "";
-              const fullName =
-                firstName && lastName ? `${firstName} ${lastName}` : firstName;
-
-              const updatedUser: User = {
-                id: userId.toString(),
-                email: userData.email,
-                firstName: firstName,
-                lastName: lastName,
-                name: fullName,
-                role: userData.role,
-                isKYCVerified: true,
-                createdAt: new Date(userData.createdAt).toISOString(),
-              };
+              // Create updated user object using helper function
+              const updatedUser = transformUserData(userData, userId);
 
               // Update localStorage with fresh data
               localStorage.setItem("userProfile", JSON.stringify(updatedUser));
@@ -215,6 +260,17 @@ export const initializeAuth = createAsyncThunk(
       // No cached data or tokens, check if we have tokens to verify
       if (accessToken && refreshToken) {
         try {
+          // If we have cached user and it's admin, skip /users/me
+          const cached = localStorage.getItem("userProfile");
+          if (cached) {
+            try {
+              const cachedUser = JSON.parse(cached) as User;
+              if (cachedUser.role === "admin") {
+                return { user: cachedUser, accessToken, refreshToken };
+              }
+            } catch {}
+          }
+
           const userProfile = await apiService.getCurrentUser();
           if (!userProfile) {
             throw new Error("No user profile received");
@@ -226,25 +282,21 @@ export const initializeAuth = createAsyncThunk(
           let userData = userProfile;
           if ((userProfile as any).data?.user) {
             userData = (userProfile as any).data.user;
-          } else if ((userProfile as any).data && !userProfile.email) {
+          } else if (
+            (userProfile as any).data &&
+            !("email" in userProfile.data)
+          ) {
+            userData = (userProfile as any).data;
+          } else if (
+            (userProfile as any).success &&
+            (userProfile as any).data
+          ) {
+            // Handle API response format: { success: true, data: { ... } }
             userData = (userProfile as any).data;
           }
 
-          const firstName = userData.firstName || "User";
-          const lastName = userData.lastName || "";
-          const fullName =
-            firstName && lastName ? `${firstName} ${lastName}` : firstName;
-
-          const user: User = {
-            id: userId.toString(),
-            email: userData.email,
-            firstName: firstName,
-            lastName: lastName,
-            name: fullName,
-            role: userData.role,
-            isKYCVerified: true,
-            createdAt: new Date(userData.createdAt).toISOString(),
-          };
+          // Create user object using helper function
+          const user = transformUserData(userData, userId);
 
           // Save user profile to localStorage
           localStorage.setItem("userProfile", JSON.stringify(user));
@@ -316,11 +368,60 @@ export const loginUser = createAsyncThunk(
         rememberMe: credentials.rememberMe,
       });
 
-      return {
-        user,
-        accessToken: response.data.accessToken!,
-        refreshToken: response.data.refreshToken!,
-      };
+      // After successful login, fetch full user profile from server
+      try {
+        console.log("[authSlice] Fetching current user profile after login...");
+        const currentUser = await apiService.getCurrentUser();
+        console.log("[authSlice] Current user profile fetched:", currentUser);
+
+        // Update user with fresh data from server
+        // Handle nested user data structure
+        let userDataFromAPI = currentUser;
+        if ((currentUser as any).data?.user) {
+          userDataFromAPI = (currentUser as any).data.user;
+        } else if (
+          (currentUser as any).data &&
+          !("email" in currentUser.data)
+        ) {
+          userDataFromAPI = (currentUser as any).data;
+        } else if ((currentUser as any).success && (currentUser as any).data) {
+          // Handle API response format: { success: true, data: { ... } }
+          userDataFromAPI = (currentUser as any).data;
+        }
+
+        const userIdFromAPI =
+          (userDataFromAPI as any)._id ||
+          (userDataFromAPI as any).id ||
+          user.id;
+        const updatedUser = transformUserData(userDataFromAPI, userIdFromAPI);
+
+        // Preserve existing values if API doesn't return them
+        if (!updatedUser.isKYCVerified && user.isKYCVerified) {
+          updatedUser.isKYCVerified = user.isKYCVerified;
+        }
+
+        // Save updated user profile to localStorage
+        localStorage.setItem("userProfile", JSON.stringify(updatedUser));
+        console.log("[authSlice] User profile updated after getCurrentUser");
+
+        return {
+          user: updatedUser,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      } catch (getUserError) {
+        console.warn(
+          "[authSlice] Failed to fetch current user after login, using user from login response:",
+          getUserError
+        );
+        // If getCurrentUser fails, return user from login response
+        // This ensures login still succeeds even if getCurrentUser fails
+        return {
+          user,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Login failed";
@@ -376,11 +477,64 @@ export const loginWith2FA = createAsyncThunk(
         rememberMe: credentials.rememberMe,
       });
 
-      return {
-        user,
-        accessToken: response.data.accessToken!,
-        refreshToken: response.data.refreshToken!,
-      };
+      // After successful login, fetch full user profile from server
+      try {
+        console.log(
+          "[authSlice] Fetching current user profile after 2FA login..."
+        );
+        const currentUser = await apiService.getCurrentUser();
+        console.log("[authSlice] Current user profile fetched:", currentUser);
+
+        // Update user with fresh data from server
+        // Handle nested user data structure
+        let userDataFromAPI = currentUser;
+        if ((currentUser as any).data?.user) {
+          userDataFromAPI = (currentUser as any).data.user;
+        } else if (
+          (currentUser as any).data &&
+          !("email" in currentUser.data)
+        ) {
+          userDataFromAPI = (currentUser as any).data;
+        } else if ((currentUser as any).success && (currentUser as any).data) {
+          // Handle API response format: { success: true, data: { ... } }
+          userDataFromAPI = (currentUser as any).data;
+        }
+
+        const userIdFromAPI =
+          (userDataFromAPI as any)._id ||
+          (userDataFromAPI as any).id ||
+          user.id;
+        const updatedUser = transformUserData(userDataFromAPI, userIdFromAPI);
+
+        // Preserve existing values if API doesn't return them
+        if (!updatedUser.isKYCVerified && user.isKYCVerified) {
+          updatedUser.isKYCVerified = user.isKYCVerified;
+        }
+
+        // Save updated user profile to localStorage
+        localStorage.setItem("userProfile", JSON.stringify(updatedUser));
+        console.log(
+          "[authSlice] User profile updated after getCurrentUser (2FA)"
+        );
+
+        return {
+          user: updatedUser,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      } catch (getUserError) {
+        console.warn(
+          "[authSlice] Failed to fetch current user after 2FA login, using user from login response:",
+          getUserError
+        );
+        // If getCurrentUser fails, return user from login response
+        // This ensures login still succeeds even if getCurrentUser fails
+        return {
+          user,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "2FA login failed";
@@ -400,27 +554,20 @@ export const web3WalletLogin = createAsyncThunk(
         const userData = response.data.user;
 
         // Create user object with proper validation
-        const user: User = {
-          id:
-            userData.id ||
-            userData._id ||
-            `wallet_${credentials.walletAddress}`,
-          email:
-            userData.email || `${credentials.walletAddress.slice(0, 8)}@wallet`,
-          firstName: userData.firstName || "Wallet",
-          lastName: userData.lastName || "User",
-          name:
-            userData.name ||
-            `${userData.firstName || "Wallet"} ${userData.lastName || "User"}`,
-          role: userData.role || "creator",
-          isKYCVerified:
-            userData.isKYCVerified !== undefined
-              ? userData.isKYCVerified
-              : false,
-          createdAt: userData.createdAt
-            ? new Date(userData.createdAt).toISOString()
-            : new Date().toISOString(),
-        };
+        const userId =
+          userData.id || userData._id || `wallet_${credentials.walletAddress}`;
+        const user = transformUserData(userData, userId);
+
+        // Set wallet address based on wallet type
+        if (credentials.walletType === "ton") {
+          user.tonWalletAddress = credentials.walletAddress;
+        } else if (credentials.walletType === "ethereum") {
+          user.ethereumWalletAddress = credentials.walletAddress;
+        } else if (credentials.walletType === "sui") {
+          user.suiWalletAddress = credentials.walletAddress;
+        } else if (credentials.walletType === "solana") {
+          user.solanaWalletAddress = credentials.walletAddress;
+        }
 
         // Save user profile to localStorage
         localStorage.setItem("userProfile", JSON.stringify(user));
@@ -447,11 +594,70 @@ export const web3WalletLogin = createAsyncThunk(
           hasRefreshToken: !!response.data.refreshToken,
         });
 
-        return {
-          user,
-          accessToken: response.data.accessToken,
-          refreshToken: response.data.refreshToken,
-        };
+        // After successful login, fetch full user profile from server
+        try {
+          console.log(
+            "[authSlice] Fetching current user profile after Web3 wallet login..."
+          );
+          const currentUser = await apiService.getCurrentUser();
+          console.log("[authSlice] Current user profile fetched:", currentUser);
+
+          // Update user with fresh data from server
+          // Handle nested user data structure
+          let userDataFromAPI = currentUser;
+          if ((currentUser as any).data?.user) {
+            userDataFromAPI = (currentUser as any).data.user;
+          } else if (
+            (currentUser as any).data &&
+            !("email" in currentUser.data)
+          ) {
+            userDataFromAPI = (currentUser as any).data;
+          } else if (
+            (currentUser as any).success &&
+            (currentUser as any).data
+          ) {
+            // Handle API response format: { success: true, data: { ... } }
+            userDataFromAPI = (currentUser as any).data;
+          }
+
+          const userIdFromAPI =
+            (userDataFromAPI as any)._id ||
+            (userDataFromAPI as any).id ||
+            user.id;
+          const updatedUser = transformUserData(userDataFromAPI, userIdFromAPI);
+
+          // Preserve existing values if API doesn't return them
+          if (
+            updatedUser.isKYCVerified === undefined &&
+            user.isKYCVerified !== undefined
+          ) {
+            updatedUser.isKYCVerified = user.isKYCVerified;
+          }
+
+          // Save updated user profile to localStorage
+          localStorage.setItem("userProfile", JSON.stringify(updatedUser));
+          console.log(
+            "[authSlice] User profile updated after getCurrentUser (Web3 wallet)"
+          );
+
+          return {
+            user: updatedUser,
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken,
+          };
+        } catch (getUserError) {
+          console.warn(
+            "[authSlice] Failed to fetch current user after Web3 wallet login, using user from login response:",
+            getUserError
+          );
+          // If getCurrentUser fails, return user from login response
+          // This ensures login still succeeds even if getCurrentUser fails
+          return {
+            user,
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken,
+          };
+        }
       } else {
         throw new Error(
           response.message || "Web3 wallet authentication failed"
@@ -496,11 +702,64 @@ export const signupUser = createAsyncThunk(
         role: user.role,
       });
 
-      return {
-        user,
-        accessToken: response.data.accessToken!,
-        refreshToken: response.data.refreshToken!,
-      };
+      // After successful signup, fetch full user profile from server
+      try {
+        console.log(
+          "[authSlice] Fetching current user profile after signup..."
+        );
+        const currentUser = await apiService.getCurrentUser();
+        console.log("[authSlice] Current user profile fetched:", currentUser);
+
+        // Update user with fresh data from server
+        // Handle nested user data structure
+        let userDataFromAPI = currentUser;
+        if ((currentUser as any).data?.user) {
+          userDataFromAPI = (currentUser as any).data.user;
+        } else if (
+          (currentUser as any).data &&
+          !("email" in currentUser.data)
+        ) {
+          userDataFromAPI = (currentUser as any).data;
+        }
+
+        const userIdFromAPI =
+          (userDataFromAPI as any)._id ||
+          (userDataFromAPI as any).id ||
+          user.id;
+        const updatedUser = transformUserData(userDataFromAPI, userIdFromAPI);
+
+        // Preserve existing values if API doesn't return them
+        if (
+          updatedUser.isKYCVerified === undefined &&
+          user.isKYCVerified !== undefined
+        ) {
+          updatedUser.isKYCVerified = user.isKYCVerified;
+        }
+
+        // Save updated user profile to localStorage
+        localStorage.setItem("userProfile", JSON.stringify(updatedUser));
+        console.log(
+          "[authSlice] User profile updated after getCurrentUser (signup)"
+        );
+
+        return {
+          user: updatedUser,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      } catch (getUserError) {
+        console.warn(
+          "[authSlice] Failed to fetch current user after signup, using user from signup response:",
+          getUserError
+        );
+        // If getCurrentUser fails, return user from signup response
+        // This ensures signup still succeeds even if getCurrentUser fails
+        return {
+          user,
+          accessToken: response.data.accessToken!,
+          refreshToken: response.data.refreshToken!,
+        };
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Registration failed";
@@ -568,6 +827,12 @@ export const refreshUser = createAsyncThunk(
         return rejectWithValue("No access token available");
       }
 
+      // If current user is admin, do not call /users/me
+      const currentUser = state.auth.user;
+      if (currentUser?.role === "admin") {
+        return currentUser;
+      }
+
       const userProfile = await apiService.getCurrentUser();
 
       if (!userProfile) {
@@ -575,38 +840,22 @@ export const refreshUser = createAsyncThunk(
         throw new Error("No user profile received");
       }
 
-      // Extract userId using helper function
-      const userId = extractUserId(userProfile, "Refresh: ");
-
       // Handle nested user data structure
       let userData = userProfile;
       if ((userProfile as any).data?.user) {
         userData = (userProfile as any).data.user;
-      } else if ((userProfile as any).data && !userProfile.email) {
+      } else if ((userProfile as any).data && !("email" in userProfile.data)) {
+        userData = (userProfile as any).data;
+      } else if ((userProfile as any).success && (userProfile as any).data) {
+        // Handle API response format: { success: true, data: { ... } }
         userData = (userProfile as any).data;
       }
 
-      // Handle missing firstName/lastName with fallbacks
-      const firstName = userData.firstName || "User";
-      const lastName = userData.lastName || "";
-      const fullName =
-        firstName && lastName ? `${firstName} ${lastName}` : firstName;
+      // Extract userId using helper function
+      const userId = extractUserId(userProfile, "Refresh: ");
 
-      const user: User = {
-        id: userId.toString(),
-        email: userData.email,
-        firstName: firstName,
-        lastName: lastName,
-        name: fullName,
-        role: userData.role || "creator",
-        isKYCVerified:
-          (userData as any).isKYCVerified !== undefined
-            ? (userData as any).isKYCVerified
-            : true,
-        createdAt: userData.createdAt
-          ? new Date(userData.createdAt).toISOString()
-          : new Date().toISOString(),
-      };
+      // Use helper function to transform user data
+      const user = transformUserData(userData, userId);
 
       // Update localStorage with fresh data
       localStorage.setItem("userProfile", JSON.stringify(user));

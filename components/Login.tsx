@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  LoginCredentials,
-  TonConnectLoginCredentials,
-  Web3WalletCredentials,
-} from "../types";
+import { LoginCredentials, Web3WalletCredentials } from "../types";
 import RnDLogo from "./icons/RnDLogo";
 import Web3WalletModal from "./Web3WalletModal";
 import { gsap } from "gsap";
@@ -27,7 +23,6 @@ const Login: React.FC<LoginProps> = ({
   onLogin,
   onLoginWith2FA,
   onTonConnectLogin,
-  onSwitchToSignUp,
   isLoading = false,
   error,
   clearError,
@@ -46,7 +41,6 @@ const Login: React.FC<LoginProps> = ({
   // 2FA state - use ref to track if we've detected 2FA requirement + force render trigger
   const [requires2FA, setRequires2FA] = useState(false);
   const twoFARequirementRef = useRef(false);
-  const [forceRender, setForceRender] = useState(0); // Force re-render trigger
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
 
@@ -105,7 +99,7 @@ const Login: React.FC<LoginProps> = ({
       setTimeout(() => {
         if (twoFARequirementRef.current && !requires2FA) {
           setRequires2FA(true);
-          setForceRender((prev) => prev + 1);
+
           console.log("[Login] ✅ State restored");
         }
       }, 0);
@@ -250,7 +244,7 @@ const Login: React.FC<LoginProps> = ({
         // Reset 2FA state on success
         setRequires2FA(false);
         twoFARequirementRef.current = false;
-        setForceRender((prev) => prev + 1);
+
         setTwoFactorToken("");
         clear2FARequired?.();
       } catch (err: any) {
@@ -300,40 +294,14 @@ const Login: React.FC<LoginProps> = ({
       // If login succeeds, navigation will be handled by LoginPage
       // Don't reset form or clear credentials here
     } catch (err: any) {
-      // Log error để debug
-      console.log("[Login] Login error caught:", err);
-      console.log("[Login] Error type:", typeof err);
-      console.log("[Login] Error.requires2FA:", err?.requires2FA);
-      console.log("[Login] Full error object:", JSON.stringify(err, null, 2));
-
-      // Check if error indicates 2FA is required
-      // Check both direct property and nested property
       const is2FARequired =
         err?.requires2FA === true ||
         (typeof err === "object" && err?.requires2FA === true);
 
-      console.log("[Login] is2FARequired:", is2FARequired);
-
       if (is2FARequired) {
-        console.log("[Login] 🔐 2FA REQUIRED - Setting requires2FA to true");
-
-        // CRITICAL: Set ref FIRST (persists across re-renders)
         twoFARequirementRef.current = true;
-        console.log("[Login] ✅ Ref set to true:", twoFARequirementRef.current);
 
-        // Force a re-render to ensure UI updates immediately
-        setForceRender((prev) => {
-          console.log("[Login] Force render trigger:", prev, "→", prev + 1);
-          return prev + 1;
-        });
-
-        // Then set state - use functional update to avoid stale closures
         setRequires2FA((prev) => {
-          console.log(
-            "[Login] setRequires2FA callback - prev:",
-            prev,
-            "→ new: true"
-          );
           if (!prev) {
             console.log("[Login] ⚠️ State was false, setting to true now");
           }
@@ -342,19 +310,8 @@ const Login: React.FC<LoginProps> = ({
 
         setTwoFactorError(null);
 
-        // Verify state is set correctly
-        console.log("[Login] ✅ State update queued");
-        console.log("[Login] ✅ Ref value:", twoFARequirementRef.current);
-        console.log("[Login] ✅ Force render triggered to ensure UI updates");
-
-        // Note: Don't call clearError() here as it may trigger re-render
-        // Error will be handled by the component's error prop logic
-        // Parent error state is already null in authSlice when requires2FA is detected
-
-        // Don't re-throw error since we're handling it
         return;
       }
-      // Other errors are handled by the parent component và sẽ hiển thị thông qua error prop
     }
   };
 
@@ -489,7 +446,7 @@ const Login: React.FC<LoginProps> = ({
                       onClick={() => {
                         setRequires2FA(false);
                         twoFARequirementRef.current = false;
-                        setForceRender((prev) => prev + 1);
+
                         setTwoFactorToken("");
                         setTwoFactorError(null);
                         clearError?.();

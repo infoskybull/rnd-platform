@@ -1,9 +1,7 @@
 import { apiService } from "./api";
 
 const API_BASE_URL =
-  (window as any).__API_BASE_URL__ ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "http://localhost:3000/api";
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3000/api";
 
 // Admin API Types
 export interface AdminUser {
@@ -13,7 +11,11 @@ export interface AdminUser {
   lastName: string;
   role: "creator" | "publisher" | "admin";
   isActive: boolean;
-  isKYCVerified: boolean;
+  // Optional fields depending on backend response
+  isKYCVerified?: boolean;
+  is2FAEnabled?: boolean;
+  authProviders?: string[];
+  lastLoginAt?: string;
   avatar?: string;
   createdAt: string;
   updatedAt: string;
@@ -179,6 +181,112 @@ export interface AdminDashboardData {
   lastUpdated: string;
 }
 
+// ===== Reports Types =====
+export type ReportType = "user" | "message" | "project";
+export type ReportStatus = "open" | "in_review" | "resolved" | "dismissed";
+export type ReportPriority = "low" | "medium" | "high";
+
+export interface AdminReport {
+  _id: string;
+  type: ReportType;
+  status: ReportStatus;
+  reportedByUserId: string;
+  reportedByRole: "creator" | "publisher";
+  targetUserId?: string | null;
+  collaborationId?: string | null;
+  messageId?: string | null;
+  projectId?: string | null;
+  reason: string;
+  attachments: string[];
+  adminNotes?: string | null;
+  priority?: ReportPriority | null;
+  assignedAdminId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReportsFilters {
+  status?: ReportStatus;
+  type?: ReportType;
+  reportedByRole?: "creator" | "publisher";
+  reportedByUserId?: string;
+  collaborationId?: string;
+  projectId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminReportsResponse {
+  success: boolean;
+  data: AdminReport[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+// ========== ADMIN SUPPORT CHAT TYPES ==========
+export interface AdminChat {
+  id: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatar: string | null;
+    role: string;
+  };
+  admin: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+  status: "pending" | "active" | "resolved" | "closed";
+  lastMessage: {
+    content: string;
+    messageType: string;
+    senderRole: string;
+    senderId: string;
+    createdAt: string;
+  } | null;
+  lastMessageAt: string | null;
+  unreadCountByAdmin: number;
+  unreadCountByUser: number;
+  resolvedAt: string | null;
+  resolvedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminChatsFilters {
+  status?: "pending" | "active" | "resolved" | "closed";
+  search?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: "lastMessageAt" | "createdAt";
+  sortOrder?: "asc" | "desc";
+}
+
+export interface AdminChatsResponse {
+  success: boolean;
+  data: {
+    chats: AdminChat[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 class AdminService {
   private buildQueryParams(filters: Record<string, any> = {}): string {
     const params = new URLSearchParams();
@@ -196,56 +304,8 @@ class AdminService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
-    const accessToken = apiService.getAccessToken();
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(options.headers as Record<string, string>),
-    };
-
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
-    }
-
-    const config: RequestInit = {
-      ...options,
-      headers,
-    };
-
-    try {
-      const response = await fetch(url, config);
-
-      if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch (jsonError) {
-          // Ignore JSON parse errors
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      // Handle empty responses (204 No Content)
-      if (response.status === 204) {
-        return {} as T;
-      }
-
-      const contentType = response.headers.get("Content-Type");
-      if (contentType && contentType.includes("application/json")) {
-        return await response.json();
-      }
-
-      return {} as T;
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error("Network error occurred");
-    }
+    // Use apiService.request instead of fetch to ensure refreshToken is handled automatically
+    return apiService.request<T>(endpoint, options);
   }
 
   // ========== USER MANAGEMENT ==========
@@ -419,6 +479,122 @@ class AdminService {
       endpoint,
       {
         method: "GET",
+      }
+    );
+  }
+
+  // ========== REPORTS (ADMIN) ==========
+
+  async getReports(
+    filters: AdminReportsFilters = {}
+  ): Promise<AdminReportsResponse> {
+    const queryParams = this.buildQueryParams(filters);
+    const endpoint = `/admin/reports${queryParams ? `?${queryParams}` : ""}`;
+    return this.makeRequest<AdminReportsResponse>(endpoint, { method: "GET" });
+  }
+
+  async getReportById(
+    reportId: string
+  ): Promise<{ success: boolean; data: AdminReport }> {
+    return this.makeRequest<{ success: boolean; data: AdminReport }>(
+      `/admin/reports/${reportId}`,
+      { method: "GET" }
+    );
+  }
+
+  async updateReport(
+    reportId: string,
+    data: Partial<
+      Pick<
+        AdminReport,
+        "status" | "adminNotes" | "assignedAdminId" | "priority"
+      >
+    >
+  ): Promise<{ success: boolean; message: string; data: AdminReport }> {
+    return this.makeRequest<{
+      success: boolean;
+      message: string;
+      data: AdminReport;
+    }>(`/admin/reports/${reportId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteReport(reportId: string): Promise<void> {
+    await this.makeRequest<void>(`/admin/reports/${reportId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ========== ADMIN SUPPORT CHAT ==========
+
+  /**
+   * Get list of all admin support chats (for Admin)
+   * GET /api/admin/support/chats
+   * Supports filtering, searching, pagination, and sorting
+   */
+  async getAllAdminSupportChats(
+    filters: AdminChatsFilters = {}
+  ): Promise<AdminChatsResponse> {
+    const queryParams = this.buildQueryParams(filters);
+    const endpoint = `/admin/support/chats${
+      queryParams ? `?${queryParams}` : ""
+    }`;
+    return this.makeRequest<AdminChatsResponse>(endpoint, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Get list of admin support chats (for Admin) - Legacy method
+   * @deprecated Use getAllAdminSupportChats instead
+   */
+  async getAdminSupportChats(
+    publisherId?: string
+  ): Promise<{ success: boolean; data: any[] }> {
+    const queryParams = publisherId ? `?publisherId=${publisherId}` : "";
+    return this.makeRequest<{ success: boolean; data: any[] }>(
+      `/admin/support/chats${queryParams}`,
+      {
+        method: "GET",
+      }
+    );
+  }
+
+  /**
+   * Get messages for a specific admin support chat
+   * GET /api/admin/support/chats/:adminChatId/messages
+   */
+  async getAdminSupportMessages(
+    adminChatId: string
+  ): Promise<{ success: boolean; data: any[] }> {
+    return this.makeRequest<{ success: boolean; data: any[] }>(
+      `/admin/support/chats/${adminChatId}/messages`,
+      {
+        method: "GET",
+      }
+    );
+  }
+
+  /**
+   * Send message via REST API
+   * POST /api/admin/support/chats/:adminChatId/messages
+   */
+  async sendAdminSupportMessage(
+    adminChatId: string,
+    payload: {
+      content: string;
+      type?: "text" | "file" | "system";
+      attachments?: string[];
+      replyTo?: string;
+    }
+  ): Promise<{ success: boolean; data: any }> {
+    return this.makeRequest<{ success: boolean; data: any }>(
+      `/admin/support/chats/${adminChatId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
       }
     );
   }

@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useEffect } from "react";
 import "@rainbow-me/rainbowkit/styles.css";
 import {
-  getDefaultConfig,
   RainbowKitProvider,
   darkTheme,
+  connectorsForWallets,
 } from "@rainbow-me/rainbowkit";
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, createConfig, http } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { mainnet, sepolia } from "wagmi/chains";
+import {
+  injectedWallet,
+  metaMaskWallet,
+  walletConnectWallet,
+} from "@rainbow-me/rainbowkit/wallets";
 
 interface EthereumWalletContextType {
   isConnected: boolean;
@@ -34,11 +39,30 @@ interface EthereumWalletProviderProps {
   children: React.ReactNode;
 }
 
-// Configure wagmi with RainbowKit
-const config = getDefaultConfig({
-  appName: "R&D Game Marketplace",
-  projectId: "YOUR_PROJECT_ID", // Get from https://cloud.walletconnect.com
-  chains: [mainnet, sepolia],
+// Configure wagmi with RainbowKit (exclude Coinbase to avoid telemetry issues)
+const appName = "R&D Game Marketplace";
+const projectId = "9d788138e01cb9fa31ae9e82868f93ca"; // WalletConnect Cloud projectId
+
+const chains = [mainnet, sepolia] as const;
+
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: "Recommended",
+      wallets: [metaMaskWallet, walletConnectWallet, injectedWallet],
+    },
+  ],
+  { appName, projectId }
+);
+
+const config = createConfig({
+  chains,
+  connectors,
+  transports: {
+    [mainnet.id]: http(),
+    [sepolia.id]: http(),
+  },
+  ssr: true,
 });
 
 const queryClient = new QueryClient();
@@ -83,4 +107,3 @@ export const EthereumWalletProvider: React.FC<EthereumWalletProviderProps> = ({
     </WagmiProvider>
   );
 };
-

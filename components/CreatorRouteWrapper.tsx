@@ -7,6 +7,12 @@ import CreatorContractsPage from "../pages/CreatorContractsPage";
 import CreatorStatsPage from "../pages/CreatorStatsPage";
 import CreatorHistoryPage from "../pages/CreatorHistoryPage";
 import CreatorSettingsPage from "../pages/CreatorSettingsPage";
+import CreatorMessagesPage from "../pages/CreatorMessagesPage";
+import {
+  PlanAccessRequirement,
+  getPlanCode,
+  meetsPlanRequirements,
+} from "../utils/planAccess";
 
 interface CreatorRouteWrapperProps {
   page:
@@ -15,11 +21,25 @@ interface CreatorRouteWrapperProps {
     | "contracts"
     | "stats"
     | "history"
-    | "settings";
+    | "settings"
+    | "messages";
 }
 
 const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  const pageRequirements: Record<
+    CreatorRouteWrapperProps["page"],
+    PlanAccessRequirement | undefined
+  > = {
+    "your-projects": undefined,
+    collaborations: undefined,
+    contracts: undefined,
+    stats: { minPlan: "pro", features: ["hasAnalyticsAccess"] },
+    history: undefined,
+    settings: undefined,
+    messages: undefined,
+  };
 
   // Show loading while auth is being checked
   if (isLoading) {
@@ -49,6 +69,17 @@ const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
     return <Navigate to="/403" replace />;
   }
 
+  const requirement = pageRequirements[page];
+  if (!meetsPlanRequirements(user, requirement)) {
+    const requiredPlan = requirement?.minPlan ?? "pro";
+    const redirectTarget = `/plan?required=${encodeURIComponent(
+      page
+    )}&current=${encodeURIComponent(
+      getPlanCode(user)
+    )}&upgrade=${encodeURIComponent(requiredPlan)}`;
+    return <Navigate to={redirectTarget} replace />;
+  }
+
   const handleLogout = () => {
     logout();
   };
@@ -67,6 +98,8 @@ const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
       return <CreatorHistoryPage user={user} onLogout={handleLogout} />;
     case "settings":
       return <CreatorSettingsPage user={user} onLogout={handleLogout} />;
+    case "messages":
+      return <CreatorMessagesPage user={user} onLogout={handleLogout} />;
     default:
       return <Navigate to="/404" replace />;
   }

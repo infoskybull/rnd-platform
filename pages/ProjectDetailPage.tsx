@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { GameProject, ProjectType, ProjectStatus } from "../types";
 import { apiService } from "../services/api";
@@ -79,88 +79,92 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  const handleLike = async () => {
-    if (!project || !isAuthenticated) return;
+  // Check if current user has liked this project
+  const isLiked = useMemo(() => {
+    if (!project || !user?.id) return false;
+    return project.likedBy?.includes(user.id) || false;
+  }, [project?.likedBy, user?.id]);
+
+  const handleLike = useCallback(async () => {
+    if (!project || !isAuthenticated || !user?.id) return;
+
+    // Store current state for potential rollback
+    const previousLikeCount = project.likeCount;
+    const previousLikedBy = project.likedBy || [];
+    const wasLiked = previousLikedBy.includes(user.id);
 
     try {
       setActionLoading("like");
+
+      // Optimistically update like state immediately
+      setProject((prevProject) => {
+        if (!prevProject) return prevProject;
+        const newLikedBy = wasLiked
+          ? prevProject.likedBy?.filter((id) => id !== user.id) || []
+          : [...(prevProject.likedBy || []), user.id];
+
+        return {
+          ...prevProject,
+          likeCount: wasLiked
+            ? Math.max(0, prevProject.likeCount - 1)
+            : prevProject.likeCount + 1,
+          likedBy: newLikedBy,
+        };
+      });
+
       await apiService.likeGameProject(project._id);
-      // Refresh project data to get updated like count
-      loadProject();
+
+      // The optimistic update is already done above
+      // If API returns updated data, we could reload here, but optimistic update is better for UX
     } catch (err) {
+      // Revert optimistic update on error
+      setProject((prevProject) => {
+        if (!prevProject) return prevProject;
+        return {
+          ...prevProject,
+          likeCount: previousLikeCount,
+          likedBy: previousLikedBy,
+        };
+      });
       setError(err instanceof Error ? err.message : "Failed to like project");
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [project, isAuthenticated, user?.id]);
 
-  const handlePurchase = async () => {
+  const handlePurchase = () => {
     if (!project || !isAuthenticated) return;
-
-    if (
-      window.confirm(
-        `Are you sure you want to purchase this project for $${getPrice()}?`
-      )
-    ) {
-      try {
-        setActionLoading("purchase");
-        await apiService.purchaseGameProject(project._id);
-        // Refresh project data
-        loadProject();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to purchase project"
-        );
-      } finally {
-        setActionLoading(null);
-      }
-    }
+    // Navigate to payment page with projectId
+    navigate(`/payment?projectId=${project._id}`);
   };
 
-  const handleStartCollaboration = async () => {
+  const handleStartCollaboration = () => {
     if (!project || !isAuthenticated) return;
-
-    if (
-      window.confirm(
-        "Are you sure you want to start collaboration on this project?"
-      )
-    ) {
-      try {
-        setActionLoading("collaborate");
-        await apiService.startCollaboration(project._id);
-        // Refresh project data
-        loadProject();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to start collaboration"
-        );
-      } finally {
-        setActionLoading(null);
-      }
-    }
+    // Navigate to payment page with projectId for collaboration budget payment
+    navigate(`/payment?projectId=${project._id}`);
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = useCallback((price: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
     }).format(price);
-  };
+  }, []);
 
-  const getPrice = () => {
+  const getPrice = useCallback((): number => {
     if (project?.ideaSaleData?.askingPrice) {
       return project.ideaSaleData.askingPrice;
     }
     if (project?.productSaleData?.askingPrice) {
       return project.productSaleData.askingPrice;
     }
-    if (project?.devCollaborationData?.budget) {
-      return project.devCollaborationData.budget;
+    if (project?.creatorCollaborationData?.budget) {
+      return project.creatorCollaborationData.budget;
     }
     return 0;
-  };
+  }, [project]);
 
-  const getProjectTypeLabel = (type: ProjectType) => {
+  const getProjectTypeLabel = useCallback((type: ProjectType): string => {
     switch (type) {
       case "idea_sale":
         return "Idea Sale";
@@ -171,9 +175,9 @@ const ProjectDetailPage: React.FC = () => {
       default:
         return type;
     }
-  };
+  }, []);
 
-  const getStatusColor = (status: ProjectStatus) => {
+  const getStatusColor = useCallback((status: ProjectStatus): string => {
     switch (status) {
       case "draft":
         return "bg-gray-100 text-gray-800";
@@ -190,9 +194,9 @@ const ProjectDetailPage: React.FC = () => {
       default:
         return "bg-yellow-100 text-yellow-800";
     }
-  };
+  }, []);
 
-  const getStatusIcon = (status: ProjectStatus) => {
+  const getStatusIcon = useCallback((status: ProjectStatus) => {
     switch (status) {
       case "draft":
         return <DocumentTextIcon className="w-5 h-5 text-blue-400" />;
@@ -209,7 +213,24 @@ const ProjectDetailPage: React.FC = () => {
       default:
         return <InfoIcon className="w-5 h-5 text-gray-400" />;
     }
-  };
+  }, []);
+
+  // Memoize project props to prevent unnecessary rerenders
+  const projectPreviewProps = useMemo(
+    () => ({
+      fileUrls: project?.fileUrls || [],
+      projectTitle: project?.title || "",
+    }),
+    [project?.fileUrls, project?.title]
+  );
+
+  const projectGalleryProps = useMemo(
+    () => ({
+      attachments: project?.attachments || [],
+      thumbnail: project?.thumbnail || "",
+    }),
+    [project?.attachments, project?.thumbnail]
+  );
 
   if (authLoading || loading) {
     return (
@@ -341,11 +362,11 @@ const ProjectDetailPage: React.FC = () => {
                   </span>
                   {(project.ideaSaleData?.gameGenre ||
                     project.productSaleData?.gameGenre ||
-                    project.devCollaborationData?.gameGenre) && (
+                    project.creatorCollaborationData?.gameGenre) && (
                     <span className="px-3 py-1 bg-purple-600/20 text-purple-300 rounded-full text-sm font-medium">
                       {project.ideaSaleData?.gameGenre ||
                         project.productSaleData?.gameGenre ||
-                        project.devCollaborationData?.gameGenre}
+                        project.creatorCollaborationData?.gameGenre}
                     </span>
                   )}
                 </div>
@@ -362,8 +383,8 @@ const ProjectDetailPage: React.FC = () => {
                   Project Preview
                 </h2>
                 <ProjectPreview
-                  fileUrls={project.fileUrls}
-                  projectTitle={project.title}
+                  fileUrls={projectPreviewProps.fileUrls}
+                  projectTitle={projectPreviewProps.projectTitle}
                 />
               </div>
             )}
@@ -494,14 +515,14 @@ const ProjectDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {project.devCollaborationData && (
+              {project.creatorCollaborationData && (
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-2">
                       Collaboration Proposal
                     </h3>
                     <p className="text-gray-300 leading-relaxed">
-                      {project.devCollaborationData.description}
+                      {project.creatorCollaborationData.description}
                     </p>
                   </div>
 
@@ -510,7 +531,7 @@ const ProjectDetailPage: React.FC = () => {
                       Detailed Proposal
                     </h3>
                     <p className="text-gray-300 leading-relaxed">
-                      {project.devCollaborationData.proposal}
+                      {project.creatorCollaborationData.proposal}
                     </p>
                   </div>
 
@@ -518,25 +539,25 @@ const ProjectDetailPage: React.FC = () => {
                     <div>
                       <span className="text-gray-400">Timeline:</span>
                       <span className="text-white ml-2">
-                        {project.devCollaborationData.timeline}
+                        {project.creatorCollaborationData.timeline}
                       </span>
                     </div>
                     <div>
                       <span className="text-gray-400">Budget:</span>
                       <span className="text-white ml-2">
-                        {formatPrice(project.devCollaborationData.budget)}
+                        {formatPrice(project.creatorCollaborationData.budget)}
                       </span>
                     </div>
                   </div>
 
-                  {project.devCollaborationData.skills &&
-                    project.devCollaborationData.skills.length > 0 && (
+                  {project.creatorCollaborationData.skills &&
+                    project.creatorCollaborationData.skills.length > 0 && (
                       <div>
                         <h3 className="text-lg font-semibold text-white mb-2">
                           Required Skills
                         </h3>
                         <div className="flex flex-wrap gap-2">
-                          {project.devCollaborationData.skills.map(
+                          {project.creatorCollaborationData.skills.map(
                             (skill, index) => (
                               <span
                                 key={index}
@@ -550,14 +571,15 @@ const ProjectDetailPage: React.FC = () => {
                       </div>
                     )}
 
-                  {project.devCollaborationData.prototypeImages &&
-                    project.devCollaborationData.prototypeImages.length > 0 && (
+                  {project.creatorCollaborationData.prototypeImages &&
+                    project.creatorCollaborationData.prototypeImages.length >
+                      0 && (
                       <div>
                         <h3 className="text-lg font-semibold text-white mb-2">
                           Prototype Images
                         </h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          {project.devCollaborationData.prototypeImages.map(
+                          {project.creatorCollaborationData.prototypeImages.map(
                             (image, index) => (
                               <img
                                 key={index}
@@ -577,11 +599,11 @@ const ProjectDetailPage: React.FC = () => {
             {/* Tags */}
             {(project.ideaSaleData?.tags ||
               project.productSaleData?.tags ||
-              project.devCollaborationData?.tags) &&
+              project.creatorCollaborationData?.tags) &&
               (
                 project.ideaSaleData?.tags ||
                 project.productSaleData?.tags ||
-                project.devCollaborationData?.tags ||
+                project.creatorCollaborationData?.tags ||
                 []
               ).length > 0 && (
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-6">
@@ -593,7 +615,7 @@ const ProjectDetailPage: React.FC = () => {
                     {(
                       project.ideaSaleData?.tags ||
                       project.productSaleData?.tags ||
-                      project.devCollaborationData?.tags ||
+                      project.creatorCollaborationData?.tags ||
                       []
                     ).map((tag, index) => (
                       <span
@@ -618,63 +640,55 @@ const ProjectDetailPage: React.FC = () => {
                   <button
                     onClick={handleLike}
                     disabled={actionLoading === "like"}
-                    className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                    className={`w-full px-4 py-3 ${
+                      isLiked
+                        ? "bg-red-700 hover:bg-red-800"
+                        : "bg-red-600 hover:bg-red-700"
+                    } disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center`}
                   >
                     {actionLoading === "like" ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Liking...
+                        {isLiked ? "Unliking..." : "Liking..."}
                       </>
                     ) : (
                       <>
-                        <Heart className="w-5 h-5 mr-2" />
-                        Like Project
+                        <Heart
+                          className={`w-5 h-5 mr-2 ${
+                            isLiked ? "fill-white" : ""
+                          }`}
+                        />
+                        {isLiked ? "Unlike Project" : "Like Project"}
                       </>
                     )}
                   </button>
                 )}
 
-                {isAuthenticated && project.status === "published" && (
-                  <>
-                    {(project.projectType === "idea_sale" ||
-                      project.projectType === "product_sale") && (
-                      <button
-                        onClick={handlePurchase}
-                        disabled={actionLoading === "purchase"}
-                        className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center"
-                      >
-                        {actionLoading === "purchase" ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Purchasing...
-                          </>
-                        ) : (
-                          <>
-                            <CurrencyDollarIcon className="w-4 h-4 inline mr-1" />{" "}
-                            Purchase for {formatPrice(getPrice())}
-                          </>
-                        )}
-                      </button>
-                    )}
+                {isAuthenticated &&
+                  project.status === "published" &&
+                  user?.id !== project.owner?.id && (
+                    <>
+                      {(project.projectType === "idea_sale" ||
+                        project.projectType === "product_sale") && (
+                        <button
+                          onClick={handlePurchase}
+                          className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                        >
+                          <CurrencyDollarIcon className="w-4 h-4 inline mr-1" />{" "}
+                          Purchase for {formatPrice(getPrice())}
+                        </button>
+                      )}
 
-                    {project.projectType === "dev_collaboration" && (
-                      <button
-                        onClick={handleStartCollaboration}
-                        disabled={actionLoading === "collaborate"}
-                        className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center"
-                      >
-                        {actionLoading === "collaborate" ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Starting...
-                          </>
-                        ) : (
-                          <>🤝 Start Collaboration</>
-                        )}
-                      </button>
-                    )}
-                  </>
-                )}
+                      {project.projectType === "dev_collaboration" && (
+                        <button
+                          onClick={handleStartCollaboration}
+                          className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                        >
+                          🤝 Start Collaboration
+                        </button>
+                      )}
+                    </>
+                  )}
 
                 {!isAuthenticated && (
                   <div className="text-center">
@@ -716,13 +730,13 @@ const ProjectDetailPage: React.FC = () => {
                 </div>
                 {(project.ideaSaleData?.targetPlatform ||
                   project.productSaleData?.targetPlatform ||
-                  project.devCollaborationData?.targetPlatform) && (
+                  project.creatorCollaborationData?.targetPlatform) && (
                   <div className="flex justify-between">
                     <span className="text-gray-400">Platform:</span>
                     <span className="text-white">
                       {project.ideaSaleData?.targetPlatform ||
                         project.productSaleData?.targetPlatform ||
-                        project.devCollaborationData?.targetPlatform}
+                        project.creatorCollaborationData?.targetPlatform}
                     </span>
                   </div>
                 )}
@@ -781,7 +795,7 @@ const ProjectDetailPage: React.FC = () => {
                 )}
 
                 {/* View Profile Button */}
-                <div className="mt-3">
+                <div className="mt-3 mb-2">
                   <button
                     onClick={() => navigate(`/profile/${project.owner.id}`)}
                     className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors"
@@ -824,7 +838,7 @@ const ProjectDetailPage: React.FC = () => {
                 </div>
 
                 {/* View Creator Profile Button */}
-                <div className="mt-3">
+                <div className="mt-3 mb-2">
                   <button
                     onClick={() =>
                       navigate(`/profile/${project.originalDeveloper!.id}`)
@@ -846,17 +860,7 @@ const ProjectDetailPage: React.FC = () => {
                     </div>
                   )}
 
-                {/* View Profile Button */}
-                <div className="mt-3">
-                  <button
-                    onClick={() =>
-                      navigate(`/profile/${project.originalDeveloper.id}`)
-                    }
-                    className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors"
-                  >
-                    View Creator Profile
-                  </button>
-                </div>
+                {/* View Profile Button - removed duplicate */}
               </div>
             )}
 
@@ -882,8 +886,8 @@ const ProjectDetailPage: React.FC = () => {
 
             {/* Project Gallery */}
             <ProjectGallery
-              attachments={project.attachments || []}
-              thumbnail={project.thumbnail}
+              attachments={projectGalleryProps.attachments}
+              thumbnail={projectGalleryProps.thumbnail}
             />
           </div>
         </div>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { analyticsService } from "../../services/analyticsService";
+import apiService from "../../services/api";
 import {
   AnalyticsFilters,
   PurchaseActivity,
 } from "../../services/analyticsService";
-import { DeveloperCollaborationProjects } from "../../types";
+import { DeveloperCollaborationProjects, Collaboration } from "../../types";
 import {
   WarningIcon,
   ShoppingCartIcon,
@@ -33,6 +34,8 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
     useState<PurchaseActivity | null>(null);
   const [developerCollaborationProjects, setDeveloperCollaborationProjects] =
     useState<DeveloperCollaborationProjects | null>(null);
+  const [ideaSaleProjects, setIdeaSaleProjects] = useState<any[]>([]);
+  const [productSaleProjects, setProductSaleProjects] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -49,179 +52,227 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
       };
 
       if (isPublisher) {
-        // Fetch purchase activity for publishers
-        const activityData = await analyticsService
-          .getPurchaseActivity(filters)
-          .catch(() => null);
+        // Fetch purchase history for publishers using real API
+        try {
+          // Calculate date range based on selected period
+          const now = new Date();
+          const monthsAgo =
+            selectedPeriod === "6months" ? 6 : selectedPeriod === "12months" ? 12 : 24;
+          const dateFrom = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
 
-        if (activityData) {
-          setPurchaseActivity(activityData);
-          setTotalPages(activityData.totalPages);
-        } else {
-          // Set demo data for publishers
-          setPurchaseActivity({
-            activities: [
-              {
-                id: "1",
-                projectTitle: "Mobile Game Development",
-                amount: 5000,
-                purchaseDate: "2024-01-15",
-                projectType: "GAME",
-                status: "completed",
-                seller: {
-                  firstName: "John",
-                  lastName: "Doe",
-                  email: "john@example.com",
-                },
-              },
-              {
-                id: "2",
-                projectTitle: "Web Application",
-                amount: 3000,
-                purchaseDate: "2024-01-10",
-                projectType: "WEB_APP",
-                status: "completed",
-                seller: {
-                  firstName: "Jane",
-                  lastName: "Smith",
-                  email: "jane@example.com",
-                },
-              },
-            ],
-            total: 2,
-            totalPages: 1,
-            currentPage: 1,
+          // Use real API to get purchase history
+          const purchaseHistoryResponse = await apiService.getPurchaseHistory({
+            page: currentPage,
+            limit: 10,
+            sortBy: "soldAt",
+            sortOrder: "desc",
+            // Filter by date if needed
+            // dateFrom: dateFrom.toISOString(),
+            // dateTo: now.toISOString(),
           });
-          setTotalPages(1);
+
+          // Map purchase history to PurchaseActivity format
+          const mappedActivities: PurchaseActivity = {
+            total: purchaseHistoryResponse.total || 0,
+            page: purchaseHistoryResponse.page || currentPage,
+            limit: purchaseHistoryResponse.limit || 10,
+            totalPages: purchaseHistoryResponse.totalPages || 1,
+            lastUpdated: new Date().toISOString(),
+            activities: (purchaseHistoryResponse.projects || []).map((project: any) => {
+              // Get price from project data
+              const purchasePrice =
+                project.ideaSaleData?.askingPrice ||
+                project.productSaleData?.askingPrice ||
+                project.creatorCollaborationData?.budget ||
+                0;
+
+              // Get seller/developer info
+              const seller = project.originalDeveloper || project.owner || project.developer || {};
+              
+              // Get project type
+              const projectType = project.projectType?.toUpperCase() || "UNKNOWN";
+
+              return {
+                id: project._id || project.id || "",
+                projectTitle: project.title || "Unknown Project",
+                projectType: projectType,
+                amount: purchasePrice,
+                purchaseDate: project.soldAt || project.createdAt || new Date().toISOString(),
+                status: project.status === "sold" ? "completed" : (project.status || "completed"),
+                seller: {
+                  _id: seller._id || seller.id || "",
+                  firstName: seller.firstName || "",
+                  lastName: seller.lastName || "",
+                  email: seller.email || "",
+                  avatar: seller.avatar,
+                },
+                buyer: {
+                  _id: "", // Will be filled by backend if available
+                  firstName: "",
+                  lastName: "",
+                  email: "",
+                  avatar: undefined,
+                },
+                thumbnail: project.thumbnail,
+              };
+            }),
+          };
+
+          setPurchaseActivity(mappedActivities);
+          setTotalPages(mappedActivities.totalPages);
+        } catch (apiError) {
+          console.error("Failed to fetch purchase history from API:", apiError);
+          // Try fallback analytics API
+          try {
+            const activityData = await analyticsService
+              .getPurchaseActivity(filters)
+              .catch(() => null);
+
+            if (activityData) {
+              setPurchaseActivity(activityData);
+              setTotalPages(activityData.totalPages || 1);
+            } else {
+              // Set empty data if both APIs fail
+              setPurchaseActivity({
+                activities: [],
+                total: 0,
+                page: 1,
+                limit: 10,
+                totalPages: 1,
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          } catch (fallbackError) {
+            console.error("Fallback API also failed:", fallbackError);
+            setPurchaseActivity({
+              activities: [],
+              total: 0,
+              page: 1,
+              limit: 10,
+              totalPages: 1,
+              lastUpdated: new Date().toISOString(),
+            });
+          }
         }
       } else {
-        // Fetch collaboration projects for developers
-        const collaborationData = await analyticsService
-          .getDeveloperCollaborationProjects(filters)
-          .catch(() => null);
+        // Fetch collaboration projects, idea sale, and product sale projects for creators
+        try {
+          // Calculate date range based on selected period
+          const now = new Date();
+          const monthsAgo =
+            selectedPeriod === "6months" ? 6 : selectedPeriod === "12months" ? 12 : 24;
+          const dateFrom = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
 
-        if (collaborationData) {
-          setDeveloperCollaborationProjects(collaborationData);
-        } else {
-          // Set demo data for developers
-          setDeveloperCollaborationProjects({
-            projects: [
-              {
-                id: "1",
-                projectTitle: "E-commerce Platform",
-                status: "active",
-                createdAt: "2024-01-15",
-                budget: 5000,
-                projectType: "WEB_APP",
-                projectStatus: "in_progress",
-                publisherName: "Alice Johnson",
-                publisher: {
-                  firstName: "Alice",
-                  lastName: "Johnson",
-                  email: "alice@example.com",
-                },
-              },
-              {
-                id: "2",
-                projectTitle: "Mobile App Development",
-                status: "completed",
-                createdAt: "2024-01-10",
-                budget: 3000,
-                projectType: "MOBILE_APP",
-                projectStatus: "completed",
-                publisherName: "Bob Wilson",
-                publisher: {
-                  firstName: "Bob",
-                  lastName: "Wilson",
-                  email: "bob@example.com",
-                },
-              },
-            ],
-            totalProjects: 2,
-            activeProjects: 1,
-            completedProjects: 1,
-          });
+          // Fetch all three types of projects in parallel
+          const [collaborationResponse, myProjectsResponse] = await Promise.all([
+            apiService.getDeveloperCollaborations({
+              page: currentPage,
+              limit: 10,
+              sortBy: "createdAt",
+              sortOrder: "desc",
+            }).catch(() => ({ collaborations: [], total: 0, totalPages: 1 })),
+            apiService.getMyProjects({
+              page: currentPage,
+              limit: 100, // Get more to filter by type
+              sortBy: "createdAt",
+              sortOrder: "desc",
+            }).catch(() => ({ projects: [], total: 0, totalPages: 1 })),
+          ]);
+
+          // Map Collaboration[] to DeveloperCollaborationProjects format
+          const mappedCollaborations: DeveloperCollaborationProjects = {
+            totalProjects: collaborationResponse.total || 0,
+            projects: (collaborationResponse.collaborations || []).map(
+              (collab: Collaboration) => ({
+                collaborationId: collab._id || collab.id || "",
+                projectId: collab.projectId || "",
+                projectTitle: collab.project?.title || "Unknown Project",
+                projectType:
+                  collab.project?.projectType?.toUpperCase() ||
+                  "DEV_COLLABORATION",
+                projectStatus: collab.project?.status || "unknown",
+                publisherName: collab.publisher
+                  ? `${collab.publisher.firstName || ""} ${collab.publisher.lastName || ""}`.trim() || collab.publisher.email || "Unknown Publisher"
+                  : "Unknown Publisher",
+                publisherEmail: collab.publisher?.email || "",
+                budget: collab.budget || 0,
+                status: collab.status || "pending",
+                startDate: collab.startDate || collab.createdAt || "",
+                endDate: collab.endDate || "",
+                createdAt: collab.createdAt || "",
+              })
+            ),
+          };
+
+          // Filter idea sale and product sale projects
+          const allProjects = myProjectsResponse.projects || [];
+          const ideaSales = allProjects.filter(
+            (p: any) => p.projectType === "idea_sale" && p.status === "sold"
+          );
+          const productSales = allProjects.filter(
+            (p: any) => p.projectType === "product_sale" && p.status === "sold"
+          );
+
+          setDeveloperCollaborationProjects(mappedCollaborations);
+          setIdeaSaleProjects(ideaSales);
+          setProductSaleProjects(productSales);
+          
+          // Note: totalPages will be calculated in the render function based on combined projects
+          setTotalPages(1);
+        } catch (apiError) {
+          console.error("Failed to fetch projects from API:", apiError);
+          // Try fallback analytics API
+          try {
+            const collaborationData = await analyticsService
+              .getDeveloperCollaborationProjects(filters)
+              .catch(() => null);
+
+            if (collaborationData) {
+              setDeveloperCollaborationProjects(collaborationData);
+            } else {
+              // Set empty data if both APIs fail
+              setDeveloperCollaborationProjects({
+                totalProjects: 0,
+                projects: [],
+              });
+            }
+            setIdeaSaleProjects([]);
+            setProductSaleProjects([]);
+          } catch (fallbackError) {
+            console.error("Fallback API also failed:", fallbackError);
+            setDeveloperCollaborationProjects({
+              totalProjects: 0,
+              projects: [],
+            });
+            setIdeaSaleProjects([]);
+            setProductSaleProjects([]);
+          }
         }
       }
     } catch (err) {
       // Set a user-friendly error message
-      setError("History API is not available yet. Using demo data for now.");
-      console.warn("History API not available, using fallback data:", err);
+      setError("Failed to load history data. Please try again later.");
+      console.warn("History API error:", err);
 
-      // Set demo data for development
+      // Set empty data if error occurs
       if (isPublisher) {
         setPurchaseActivity({
-          activities: [
-            {
-              id: "1",
-              projectTitle: "Mobile Game Development",
-              amount: 5000,
-              purchaseDate: "2024-01-15",
-              projectType: "GAME",
-              status: "completed",
-              seller: {
-                firstName: "John",
-                lastName: "Doe",
-                email: "john@example.com",
-              },
-            },
-            {
-              id: "2",
-              projectTitle: "Web Application",
-              amount: 3000,
-              purchaseDate: "2024-01-10",
-              projectType: "WEB_APP",
-              status: "completed",
-              seller: {
-                firstName: "Jane",
-                lastName: "Smith",
-                email: "jane@example.com",
-              },
-            },
-          ],
-          total: 2,
+          activities: [],
+          total: 0,
+          page: 1,
+          limit: 10,
           totalPages: 1,
-          currentPage: 1,
+          lastUpdated: new Date().toISOString(),
         });
         setTotalPages(1);
       } else {
+        // Set empty data if error occurs
         setDeveloperCollaborationProjects({
-          projects: [
-            {
-              id: "1",
-              projectTitle: "E-commerce Platform",
-              status: "active",
-              createdAt: "2024-01-15",
-              budget: 5000,
-              projectType: "WEB_APP",
-              projectStatus: "in_progress",
-              publisherName: "Alice Johnson",
-              publisher: {
-                firstName: "Alice",
-                lastName: "Johnson",
-                email: "alice@example.com",
-              },
-            },
-            {
-              id: "2",
-              projectTitle: "Mobile App Development",
-              status: "completed",
-              createdAt: "2024-01-10",
-              budget: 3000,
-              projectType: "MOBILE_APP",
-              projectStatus: "completed",
-              publisherName: "Bob Wilson",
-              publisher: {
-                firstName: "Bob",
-                lastName: "Wilson",
-                email: "bob@example.com",
-              },
-            },
-          ],
-          totalProjects: 2,
-          activeProjects: 1,
-          completedProjects: 1,
+          totalProjects: 0,
+          projects: [],
         });
+        setIdeaSaleProjects([]);
+        setProductSaleProjects([]);
       }
     } finally {
       setLoading(false);
@@ -362,7 +413,9 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-indigo-400">
-                      {developerCollaborationProjects?.totalProjects || 0}
+                      {(developerCollaborationProjects?.totalProjects || 0) + 
+                       (ideaSaleProjects?.length || 0) + 
+                       (productSaleProjects?.length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
                       Total Projects
@@ -372,9 +425,11 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-green-400">
-                      {developerCollaborationProjects?.projects?.filter(
+                      {(developerCollaborationProjects?.projects?.filter(
                         (p) => p.status === "active"
-                      ).length || 0}
+                      ).length || 0) + 
+                       (ideaSaleProjects?.filter((p: any) => p.status === "active").length || 0) +
+                       (productSaleProjects?.filter((p: any) => p.status === "active").length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
                       Active
@@ -384,12 +439,14 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                 <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-3 sm:p-4">
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-blue-400">
-                      {developerCollaborationProjects?.projects?.filter(
+                      {(developerCollaborationProjects?.projects?.filter(
                         (p) => p.status === "completed"
-                      ).length || 0}
+                      ).length || 0) + 
+                       (ideaSaleProjects?.filter((p: any) => p.status === "sold" || p.status === "completed").length || 0) +
+                       (productSaleProjects?.filter((p: any) => p.status === "sold" || p.status === "completed").length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
-                      Completed
+                      Completed/Sold
                     </div>
                   </div>
                 </div>
@@ -400,7 +457,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
           {/* Activity History Section */}
           <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-4 sm:p-6 max-w-full overflow-hidden">
             <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
-              {isPublisher ? "Purchase History" : "Collaboration Projects"}
+              {isPublisher ? "Purchase History" : "All Projects"}
             </h3>
 
             {isPublisher ? (
@@ -426,8 +483,10 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                             {activity.projectType} • {activity.status}
                           </div>
                           <div className="text-gray-500 text-xs">
-                            Seller: {activity.seller.firstName}{" "}
-                            {activity.seller.lastName}
+                            Seller: {activity.seller?.firstName || ""}{" "}
+                            {activity.seller?.lastName || ""}
+                            {(!activity.seller?.firstName && !activity.seller?.lastName) && 
+                              (activity.seller?.email || "Unknown")}
                           </div>
                         </div>
                       </div>
@@ -480,65 +539,206 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                   </p>
                 </div>
               )
-            ) : // Creator Collaboration Projects
-            developerCollaborationProjects?.projects?.length > 0 ? (
-              <div className="space-y-3 sm:space-y-4">
-                {developerCollaborationProjects.projects.map(
-                  (project, index) => (
-                    <div
-                      key={index}
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 sm:p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700/70 transition-colors gap-3 max-w-full overflow-hidden"
-                    >
-                      <div className="flex items-center space-x-3 sm:space-x-4">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <div className="text-green-400 text-lg sm:text-xl">
-                            🤝
+            ) : // Creator All Projects (Collaboration + Idea Sale + Product Sale)
+            (() => {
+              // Combine all projects into a unified format
+              const allProjects: Array<{
+                id: string;
+                projectTitle: string;
+                projectType: string;
+                projectStatus: string;
+                amount: number;
+                date: string;
+                status: string;
+                type: 'collaboration' | 'idea_sale' | 'product_sale';
+                buyerName?: string;
+                buyerEmail?: string;
+              }> = [];
+
+              // Add collaboration projects
+              developerCollaborationProjects?.projects?.forEach((project) => {
+                allProjects.push({
+                  id: project.collaborationId || project.projectId || '',
+                  projectTitle: project.projectTitle,
+                  projectType: project.projectType,
+                  projectStatus: project.projectStatus,
+                  amount: project.budget || 0,
+                  date: project.createdAt,
+                  status: project.status,
+                  type: 'collaboration',
+                  buyerName: project.publisherName,
+                  buyerEmail: project.publisherEmail,
+                });
+              });
+
+              // Add idea sale projects
+              ideaSaleProjects.forEach((project: any) => {
+                const buyer = project.buyer || project.purchaser || {};
+                allProjects.push({
+                  id: project._id || project.id || '',
+                  projectTitle: project.title || 'Unknown Project',
+                  projectType: 'IDEA_SALE',
+                  projectStatus: project.status || 'sold',
+                  amount: project.ideaSaleData?.askingPrice || project.soldPrice || 0,
+                  date: project.soldAt || project.createdAt || '',
+                  status: project.status === 'sold' ? 'completed' : project.status,
+                  type: 'idea_sale',
+                  buyerName: buyer.firstName && buyer.lastName 
+                    ? `${buyer.firstName} ${buyer.lastName}`.trim()
+                    : buyer.email || 'Unknown Buyer',
+                  buyerEmail: buyer.email,
+                });
+              });
+
+              // Add product sale projects
+              productSaleProjects.forEach((project: any) => {
+                const buyer = project.buyer || project.purchaser || {};
+                allProjects.push({
+                  id: project._id || project.id || '',
+                  projectTitle: project.title || 'Unknown Project',
+                  projectType: 'PRODUCT_SALE',
+                  projectStatus: project.status || 'sold',
+                  amount: project.productSaleData?.askingPrice || project.soldPrice || 0,
+                  date: project.soldAt || project.createdAt || '',
+                  status: project.status === 'sold' ? 'completed' : project.status,
+                  type: 'product_sale',
+                  buyerName: buyer.firstName && buyer.lastName 
+                    ? `${buyer.firstName} ${buyer.lastName}`.trim()
+                    : buyer.email || 'Unknown Buyer',
+                  buyerEmail: buyer.email,
+                });
+              });
+
+              // Sort by date (newest first)
+              allProjects.sort((a, b) => 
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+              );
+
+              // Paginate
+              const itemsPerPage = 10;
+              const startIndex = (currentPage - 1) * itemsPerPage;
+              const paginatedProjects = allProjects.slice(startIndex, startIndex + itemsPerPage);
+              const totalPagesForAll = Math.max(1, Math.ceil(allProjects.length / itemsPerPage));
+
+              return paginatedProjects.length > 0 ? (
+                <div className="space-y-3 sm:space-y-4">
+                  {paginatedProjects.map((project, index) => {
+                    // Get icon and color based on project type
+                    const getProjectIcon = () => {
+                      switch (project.type) {
+                        case 'collaboration':
+                          return '🤝';
+                        case 'idea_sale':
+                          return '💡';
+                        case 'product_sale':
+                          return '📦';
+                        default:
+                          return '📁';
+                      }
+                    };
+
+                    const getProjectBgColor = () => {
+                      switch (project.type) {
+                        case 'collaboration':
+                          return 'bg-green-500/20';
+                        case 'idea_sale':
+                          return 'bg-yellow-500/20';
+                        case 'product_sale':
+                          return 'bg-blue-500/20';
+                        default:
+                          return 'bg-gray-500/20';
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={project.id || index}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 sm:p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700/70 transition-colors gap-3 max-w-full overflow-hidden"
+                      >
+                        <div className="flex items-center space-x-3 sm:space-x-4">
+                          <div className={`w-10 h-10 sm:w-12 sm:h-12 ${getProjectBgColor()} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                            <div className="text-lg sm:text-xl">
+                              {getProjectIcon()}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white font-medium text-sm sm:text-base truncate">
+                              {project.projectTitle}
+                            </div>
+                            <div className="text-gray-400 text-xs sm:text-sm">
+                              {project.projectType} • {project.projectStatus}
+                            </div>
+                            {project.type === 'collaboration' ? (
+                              <div className="text-gray-500 text-xs">
+                                Publisher: {project.buyerName}
+                              </div>
+                            ) : (
+                              <div className="text-gray-500 text-xs">
+                                Buyer: {project.buyerName}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-white font-medium text-sm sm:text-base truncate">
-                            {project.projectTitle}
+                        <div className="text-left sm:text-right">
+                          <div className="text-green-400 font-medium text-base sm:text-lg">
+                            {formatCurrency(project.amount)}
                           </div>
                           <div className="text-gray-400 text-xs sm:text-sm">
-                            {project.projectType} • {project.projectStatus}
+                            {formatDate(project.date)}
                           </div>
-                          <div className="text-gray-500 text-xs">
-                            Publisher: {project.publisherName}
+                          <div
+                            className={`text-xs px-2 py-1 rounded-full mt-1 inline-block ${
+                              project.status === "active"
+                                ? "bg-green-500/20 text-green-400"
+                                : project.status === "completed" || project.status === "sold"
+                                ? "bg-blue-500/20 text-blue-400"
+                                : "bg-gray-500/20 text-gray-400"
+                            }`}
+                          >
+                            {project.status === 'sold' ? 'sold' : project.status}
                           </div>
                         </div>
                       </div>
-                      <div className="text-left sm:text-right">
-                        <div className="text-green-400 font-medium text-base sm:text-lg">
-                          {formatCurrency(project.budget)}
-                        </div>
-                        <div className="text-gray-400 text-xs sm:text-sm">
-                          {formatDate(project.createdAt)}
-                        </div>
-                        <div
-                          className={`text-xs px-2 py-1 rounded-full mt-1 ${
-                            project.status === "active"
-                              ? "bg-green-500/20 text-green-400"
-                              : project.status === "completed"
-                              ? "bg-blue-500/20 text-blue-400"
-                              : "bg-gray-500/20 text-gray-400"
-                          }`}
-                        >
-                          {project.status}
-                        </div>
-                      </div>
+                    );
+                  })}
+
+                  {/* Pagination */}
+                  {totalPagesForAll > 1 && (
+                    <div className="flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-2 mt-4 sm:mt-6">
+                      <button
+                        onClick={() =>
+                          setCurrentPage(Math.max(1, currentPage - 1))
+                        }
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-gray-400 text-sm">
+                        Page {currentPage} of {totalPagesForAll}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setCurrentPage(Math.min(totalPagesForAll, currentPage + 1))
+                        }
+                        disabled={currentPage === totalPagesForAll}
+                        className="px-3 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                      >
+                        Next
+                      </button>
                     </div>
-                  )
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="text-6xl mb-4">🤝</div>
-                <p className="text-gray-400">No collaboration projects</p>
-                <p className="text-gray-500 text-sm">
-                  Your collaboration projects will appear here
-                </p>
-              </div>
-            )}
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">📁</div>
+                  <p className="text-gray-400">No projects found</p>
+                  <p className="text-gray-500 text-sm">
+                    Your projects will appear here
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Milestones Section */}

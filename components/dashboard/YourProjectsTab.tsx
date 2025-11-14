@@ -340,7 +340,7 @@ const YourProjectsTab: React.FC<YourProjectsTabProps> = ({
                   cardRefs.current[index] = el;
                 }}
                 className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md hover:shadow-xl cursor-pointer overflow-hidden transform-gpu transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                onClick={() => setSelectedProject(project)}
+                onClick={() => handleViewProject(project._id)}
                 onMouseEnter={() => handleCardHover(index, true)}
                 onMouseLeave={() => handleCardHover(index, false)}
               >
@@ -421,21 +421,22 @@ const YourProjectsTab: React.FC<YourProjectsTabProps> = ({
                     </div>
                   )}
 
-                  {project.devCollaborationData && (
+                  {project.creatorCollaborationData && (
                     <div className="text-sm sm:text-base lg:text-lg font-bold text-purple-400 mb-1">
-                      Budget: {formatPrice(project.devCollaborationData.budget)}
+                      Budget:{" "}
+                      {formatPrice(project.creatorCollaborationData.budget)}
                     </div>
                   )}
 
                   {(project.ideaSaleData?.gameGenre ||
                     project.productSaleData?.gameGenre ||
-                    project.devCollaborationData?.gameGenre) && (
+                    project.creatorCollaborationData?.gameGenre) && (
                     <div className="mt-1 sm:mt-2">
                       <span className="text-xs text-gray-500">Genre: </span>
                       <span className="text-xs text-gray-300">
                         {project.ideaSaleData?.gameGenre ||
                           project.productSaleData?.gameGenre ||
-                          project.devCollaborationData?.gameGenre}
+                          project.creatorCollaborationData?.gameGenre}
                       </span>
                     </div>
                   )}
@@ -443,6 +444,7 @@ const YourProjectsTab: React.FC<YourProjectsTabProps> = ({
                   <div className="mt-2 sm:mt-3 text-xs text-gray-500">
                     Created: {new Date(project.createdAt).toLocaleDateString()}
                   </div>
+                  {/* Actions removed: clicking the entire card navigates to detail */}
                 </div>
               </div>
             ))}

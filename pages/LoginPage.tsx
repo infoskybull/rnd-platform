@@ -1,12 +1,8 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Login from "../components/Login";
 import RnDLogo from "../components/icons/RnDLogo";
-import {
-  LoginCredentials,
-  TonConnectLoginCredentials,
-  Web3WalletCredentials,
-} from "../types";
+import { LoginCredentials, Web3WalletCredentials } from "../types";
 import { useAuth } from "../hooks/useAuth";
 
 const LoginPage: React.FC = () => {
@@ -18,7 +14,6 @@ const LoginPage: React.FC = () => {
     login,
     loginWith2FA,
     web3WalletLogin,
-    signup,
     clearError,
     clearRequires2FA,
     isAuthenticated,
@@ -34,10 +29,6 @@ const LoginPage: React.FC = () => {
         // Navigation will be handled by useEffect when isAuthenticated and user are both available
         // No need to check user role here as it will be handled by useEffect
       } catch (err: any) {
-        // Log error để debug
-        console.log("[LoginPage] Login error caught:", err);
-        console.log("[LoginPage] Error.requires2FA:", err?.requires2FA);
-
         // Check if error indicates 2FA is required - rethrow to let Login component handle it
         if (
           err?.requires2FA ||
@@ -95,7 +86,7 @@ const LoginPage: React.FC = () => {
     if (user && user.role) {
       // Navigate based on user role
       if (user.role === "admin") {
-        navigate("/admin/management");
+        navigate("/admin/accounts");
       } else if (user.role === "publisher") {
         navigate("/dashboard/publisher/browse-games");
       } else if (user.role === "creator") {

@@ -21,7 +21,7 @@ interface ProjectData {
     targetPlatform?: string;
     tags?: string[];
   };
-  devCollaborationData?: {
+  creatorCollaborationData?: {
     description: string;
     proposal: string;
     budget: number;
@@ -33,6 +33,8 @@ interface ProjectData {
   };
   fileKeys?: string[]; // S3 keys from presigned-url response
   fileUrls?: string[]; // Upload URLs from presigned-url response
+  attachments?: string[];
+  thumbnail?: string;
 }
 
 interface ProjectCreationResult {
@@ -103,27 +105,27 @@ export const useProjectCreation = () => {
         break;
 
       case "dev_collaboration":
-        if (!projectData.devCollaborationData) {
+        if (!projectData.creatorCollaborationData) {
           throw new Error("Development collaboration data is required");
         }
         if (
-          !projectData.devCollaborationData.description ||
-          projectData.devCollaborationData.description.trim().length === 0
+          !projectData.creatorCollaborationData.description ||
+          projectData.creatorCollaborationData.description.trim().length === 0
         ) {
           throw new Error("Collaboration description is required");
         }
         if (
-          !projectData.devCollaborationData.proposal ||
-          projectData.devCollaborationData.proposal.trim().length === 0
+          !projectData.creatorCollaborationData.proposal ||
+          projectData.creatorCollaborationData.proposal.trim().length === 0
         ) {
           throw new Error("Collaboration proposal is required");
         }
-        if (projectData.devCollaborationData.budget <= 0) {
+        if (projectData.creatorCollaborationData.budget <= 0) {
           throw new Error("Budget must be greater than 0");
         }
         if (
-          !projectData.devCollaborationData.timeline ||
-          projectData.devCollaborationData.timeline.trim().length === 0
+          !projectData.creatorCollaborationData.timeline ||
+          projectData.creatorCollaborationData.timeline.trim().length === 0
         ) {
           throw new Error("Timeline is required");
         }
@@ -161,8 +163,8 @@ export const useProjectCreation = () => {
         ...(projectData.productSaleData && {
           productSaleData: projectData.productSaleData,
         }),
-        ...(projectData.devCollaborationData && {
-          devCollaborationData: projectData.devCollaborationData,
+        ...(projectData.creatorCollaborationData && {
+          creatorCollaborationData: projectData.creatorCollaborationData,
         }),
         ...(projectData.fileKeys && { fileKeys: projectData.fileKeys }),
         ...(projectData.fileUrls && { fileUrls: projectData.fileUrls }),

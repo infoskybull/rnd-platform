@@ -146,6 +146,51 @@ const GlobalScrollbarStyles: React.FC = () => {
       .dark-scrollbar::-webkit-scrollbar-corner {
         background: rgba(17, 24, 39, 0.4);
       }
+      
+      /* Custom scrollbar class - specifically for custom-scrollbar elements */
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(107, 114, 128, 0.6) rgba(31, 41, 55, 0.3);
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+        background: transparent;
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(31, 41, 55, 0.3);
+        border-radius: 4px;
+        box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.1);
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(107, 114, 128, 0.6);
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+        border: 1px solid rgba(31, 41, 55, 0.3);
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.8);
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar-thumb:active {
+        background: rgba(209, 213, 219, 0.9);
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar-corner {
+        background: rgba(31, 41, 55, 0.3);
+      }
+      
+      /* Mobile responsive for custom-scrollbar */
+      @media (max-width: 768px) {
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+          height: 4px;
+        }
+      }
     `;
 
     document.head.appendChild(style);

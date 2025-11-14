@@ -37,7 +37,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getAdminDashboard(filters);
-        setDashboardData(data);
+        if (data.success && data.data) {
+          setDashboardData(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch dashboard data"
@@ -57,7 +59,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getSystemOverview(filters);
-        setSystemOverview(data);
+        if (data.success && data.data) {
+          setSystemOverview(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch system overview"
@@ -77,7 +81,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getProjectsStats(filters);
-        setProjectsStats(data);
+        if (data.success && data.data) {
+          setProjectsStats(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch projects stats"
@@ -97,7 +103,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getCollaborationsStats(filters);
-        setCollaborationsStats(data);
+        if (data.success && data.data) {
+          setCollaborationsStats(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -119,7 +127,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getUsersStats(filters);
-        setUsersStats(data);
+        if (data.success && data.data) {
+          setUsersStats(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch users stats"
@@ -139,7 +149,9 @@ export const useAdminAnalytics = (
 
       try {
         const data = await adminService.getRevenueStats(filters);
-        setRevenueStats(data);
+        if (data.success && data.data) {
+          setRevenueStats(data.data);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch revenue stats"

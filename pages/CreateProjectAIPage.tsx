@@ -5,6 +5,11 @@ import { useAuth } from "../hooks/useAuth";
 import { PromptPanel } from "../components/ai-generator/PromptPanel";
 import { PreviewPanel } from "../components/ai-generator/PreviewPanel";
 import { generateGameCodeStream } from "../services/geminiService";
+import {
+  PlanAccessRequirement,
+  getPlanCode,
+  meetsPlanRequirements,
+} from "../utils/planAccess";
 
 const INITIAL_HTML_PLACEHOLDER = `<!DOCTYPE html>
 <html lang="en">
@@ -37,6 +42,10 @@ const INITIAL_HTML_PLACEHOLDER = `<!DOCTYPE html>
 const CreateProjectAIPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const aiRequirement: PlanAccessRequirement = {
+    minPlan: "pro",
+    features: ["hasAdvancedFeatures"],
+  };
 
   const [prompt, setPrompt] = useState<string>("");
   const [generatedCode, setGeneratedCode] = useState<string>(
@@ -97,6 +106,47 @@ const CreateProjectAIPage: React.FC = () => {
       },
     });
   };
+
+  if (!meetsPlanRequirements(user || null, aiRequirement)) {
+    const requiredPlan = aiRequirement.minPlan ?? "pro";
+    const currentPlan = getPlanCode(user || null);
+    return (
+      <div className="min-h-screen bg-gray-dark text-gray-text flex items-center justify-center px-4">
+        <div className="max-w-xl w-full bg-gray-900 border border-gray-700 rounded-2xl p-8 space-y-6 text-center">
+          <h1 className="text-3xl font-semibold text-white">
+            Upgrade Required
+          </h1>
+          <p className="text-gray-400">
+            The AI Game Generator is available starting from the{" "}
+            <span className="font-semibold text-indigo-300 capitalize">
+              {requiredPlan}
+            </span>{" "}
+            plan. Your current plan{" "}
+            <span className="font-semibold text-white capitalize">
+              {currentPlan}
+            </span>{" "}
+            does not include this feature.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 sm:justify-center">
+            <button
+              onClick={() =>
+                navigate("/plan?required=ai-generator", { replace: true })
+              }
+              className="px-5 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+            >
+              View Plans
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="px-5 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-gray-dark text-gray-text font-sans flex flex-col overflow-hidden">

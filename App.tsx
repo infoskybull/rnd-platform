@@ -26,7 +26,10 @@ import GlobalScrollbarStyles from "./components/GlobalScrollbarStyles";
 import NotFoundPage from "./pages/NotFoundPage";
 import ForbiddenPage from "./pages/ForbiddenPage";
 import PlanPage from "./pages/PlanPage";
+import ManagePlanPage from "./pages/ManagePlanPage";
 import PaymentPage from "./pages/PaymentPage";
+import PaymentCompletePage from "./pages/PaymentCompletePage";
+import PaymentCancelPage from "./pages/PaymentCancelPage";
 
 // Route Wrappers
 import PublisherRouteWrapper from "./components/PublisherRouteWrapper";
@@ -104,6 +107,10 @@ function App() {
                       element={<PublisherRouteWrapper page="browse-games" />}
                     />
                     <Route
+                      path="/dashboard/publisher/messages"
+                      element={<PublisherRouteWrapper page="messages" />}
+                    />
+                    <Route
                       path="/dashboard/publisher/inventory"
                       element={<PublisherRouteWrapper page="inventory" />}
                     />
@@ -134,6 +141,10 @@ function App() {
                       element={<CreatorRouteWrapper page="your-projects" />}
                     />
                     <Route
+                      path="/dashboard/creator/messages"
+                      element={<CreatorRouteWrapper page="messages" />}
+                    />
+                    <Route
                       path="/dashboard/creator/collaborations"
                       element={<CreatorRouteWrapper page="collaborations" />}
                     />
@@ -156,8 +167,21 @@ function App() {
 
                     {/* Admin Dashboard Routes */}
                     <Route
+                      path="/admin/accounts"
+                      element={<AdminRouteWrapper page="accounts" />}
+                    />
+                    <Route
+                      path="/admin/messages"
+                      element={<AdminRouteWrapper page="messages" />}
+                    />
+                    <Route
+                      path="/admin/reports"
+                      element={<AdminRouteWrapper page="reports" />}
+                    />
+                    {/* Redirect old /admin/management to /admin/accounts */}
+                    <Route
                       path="/admin/management"
-                      element={<AdminRouteWrapper page="management" />}
+                      element={<Navigate to="/admin/accounts" replace />}
                     />
 
                     <Route
@@ -196,7 +220,16 @@ function App() {
 
                     {/* Plan and Payment Routes */}
                     <Route path="/plan" element={<PlanPage />} />
+                    <Route path="/manage-plan" element={<ManagePlanPage />} />
                     <Route path="/payment" element={<PaymentPage />} />
+                    <Route
+                      path="/payment/complete"
+                      element={<PaymentCompletePage />}
+                    />
+                    <Route
+                      path="/payment/cancel"
+                      element={<PaymentCancelPage />}
+                    />
 
                     {/* Catch all route - redirect to /404 */}
                     <Route path="*" element={<Navigate to="/404" replace />} />

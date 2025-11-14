@@ -41,12 +41,33 @@ export const ContractSigningModal: React.FC<ContractSigningModalProps> = ({
         contract._id,
         signData
       );
+      
+      // Show success message based on contract status
+      if (signedContract.isFullySigned) {
+        // Contract is now fully signed and active
+        alert("Contract signed successfully! Contract is now ACTIVE.");
+      } else {
+        // Waiting for other party to sign
+        alert("Contract signed successfully! Waiting for the other party to sign.");
+      }
+      
       onContractSigned(signedContract);
       onClose();
       setSignatureData("");
     } catch (err) {
       console.error("Failed to sign contract:", err);
-      setError(err instanceof Error ? err.message : "Failed to sign contract");
+      const errorMessage = err instanceof Error ? err.message : "Failed to sign contract";
+      
+      // Handle specific error cases
+      if (errorMessage.includes("pending signature")) {
+        setError("Contract is not in pending signature status. Please refresh the page.");
+      } else if (errorMessage.includes("Forbidden") || errorMessage.includes("403")) {
+        setError("You don't have permission to sign this contract.");
+      } else if (errorMessage.includes("Not Found") || errorMessage.includes("404")) {
+        setError("Contract not found. Please refresh the page.");
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -63,6 +84,9 @@ export const ContractSigningModal: React.FC<ContractSigningModalProps> = ({
   };
 
   const formatCurrency = (amount: number) => {
+    if (amount == null || isNaN(amount)) {
+      return "$0.00";
+    }
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -70,11 +94,23 @@ export const ContractSigningModal: React.FC<ContractSigningModalProps> = ({
   };
 
   const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    if (!date) {
+      return "N/A";
+    }
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Date";
+      }
+      return dateObj.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
+    }
   };
 
   if (!isOpen) return null;
