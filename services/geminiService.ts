@@ -1,19 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY =
-  (import.meta as any).env?.VITE_GEMINI_API_KEY ??
-  (import.meta as any).env?.GEMINI_API_KEY ??
-  (typeof process !== "undefined"
-    ? (process.env as Record<string, string | undefined>)?.GEMINI_API_KEY
-    : undefined);
+declare const __GEMINI_API_KEY__: string | undefined;
 
-if (!API_KEY) {
-  throw new Error(
-    "Gemini API key is missing. Set `VITE_GEMINI_API_KEY` in your environment."
+const resolveApiKey = (): string | undefined => {
+  const injectedKey =
+    typeof __GEMINI_API_KEY__ !== "undefined" ? __GEMINI_API_KEY__ : undefined;
+  return (
+    injectedKey ??
+    (import.meta as any).env?.VITE_GEMINI_API_KEY ??
+    (import.meta as any).env?.GEMINI_API_KEY ??
+    (typeof process !== "undefined"
+      ? (process.env as Record<string, string | undefined>)?.GEMINI_API_KEY ??
+        (process.env as Record<string, string | undefined>)?.VITE_GEMINI_API_KEY
+      : undefined)
   );
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+};
 
 const SYSTEM_INSTRUCTION = `You are an expert web game creator. Your task is to create simple, self-contained game prototypes based on a user's prompt.
 
@@ -33,6 +34,15 @@ export const generateGameCodeStream = async (
   onChunk: (chunk: string) => void
 ): Promise<void> => {
   try {
+    const apiKey = resolveApiKey();
+    if (!apiKey) {
+      throw new Error(
+        "Gemini API key is missing. Set `GEMINI_API_KEY` or `VITE_GEMINI_API_KEY` in your environment."
+      );
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
     const responseStream = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
       contents: prompt,
