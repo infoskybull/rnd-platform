@@ -1,6 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = (import.meta as any).env?.GEMINI_API_KEY;
+const API_KEY =
+  (import.meta as any).env?.VITE_GEMINI_API_KEY ??
+  (import.meta as any).env?.GEMINI_API_KEY ??
+  (typeof process !== "undefined"
+    ? (process.env as Record<string, string | undefined>)?.GEMINI_API_KEY
+    : undefined);
+
+if (!API_KEY) {
+  throw new Error(
+    "Gemini API key is missing. Set `VITE_GEMINI_API_KEY` in your environment."
+  );
+}
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
