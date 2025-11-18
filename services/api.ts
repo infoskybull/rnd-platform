@@ -6,6 +6,7 @@ export const getApiBaseOrigin = (): string => {
     const url = new URL(API_BASE_URL);
     // If path ends with /api, strip it for socket namespace root
     const origin = `${url.protocol}//${url.host}`;
+    console.log("API_BASE_URL", origin);
     return origin;
   } catch (_) {
     // Fallback: rudimentary strip of trailing /api
