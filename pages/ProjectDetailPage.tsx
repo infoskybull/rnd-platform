@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { GameProject, ProjectType, ProjectStatus } from "../types";
 import { apiService } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useFileUpload } from "../hooks/useFileUpload";
 import ResponsiveNavbar from "../components/ResponsiveNavbar";
 import RoleBadge from "../components/RoleBadge";
 import ProjectPreview from "../components/ProjectPreview";
@@ -39,6 +40,14 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<
+    { fileKey: string; uploadUrl: string }[]
+  >([]);
+  const [hasAutoUploaded, setHasAutoUploaded] = useState(false);
+
+  const { uploadFile, uploading, uploadProgress, cancelUpload } =
+    useFileUpload();
 
   const handleLogout = () => {
     logout();
@@ -231,6 +240,88 @@ const ProjectDetailPage: React.FC = () => {
     }),
     [project?.attachments, project?.thumbnail]
   );
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      setFiles(selectedFiles);
+    }
+  };
+
+  const handleUploadFiles = async () => {
+    if (files.length === 0) {
+      setError("Please select files to upload");
+      return;
+    }
+
+    if (hasAutoUploaded && uploadedFiles.length > 0) {
+      setError("Files already uploaded from preview");
+      return;
+    }
+
+    const uploadedFileData: { fileKey: string; uploadUrl: string }[] = [];
+
+    try {
+      setActionLoading("upload");
+
+      for (const file of files) {
+        const result = await uploadFile(file);
+        if (result.error) {
+          setError(`Failed to upload ${file.name}: ${result.error}`);
+          return;
+        }
+        uploadedFileData.push({
+          fileKey: result.fileKey,
+          uploadUrl: result.uploadUrl,
+        });
+      }
+
+      setUploadedFiles(uploadedFileData);
+
+      // Update project with new files
+      const updateData = {
+        fileKeys: uploadedFileData.map((f) => f.fileKey),
+        fileUrls: uploadedFileData.map((f) => f.uploadUrl),
+      };
+
+      await apiService.updateGameProject(project._id, updateData);
+
+      // Reload project to get updated data
+      await loadProject();
+
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteFile = async (fileUrl: string) => {
+    if (!project) return;
+
+    try {
+      setActionLoading("delete");
+
+      // Remove file from current fileUrls
+      const updatedFileUrls = project.fileUrls?.filter((url) => url !== fileUrl) || [];
+
+      const updateData = {
+        fileUrls: updatedFileUrls.length > 0 ? updatedFileUrls : undefined,
+      };
+
+      await apiService.updateGameProject(project._id, updateData);
+
+      // Reload project to get updated data
+      await loadProject();
+
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete file");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (authLoading || loading) {
     return (
@@ -628,6 +719,202 @@ const ProjectDetailPage: React.FC = () => {
                   </div>
                 </div>
               )}
+
+            {/* Project Files - Only for owner */}
+            {isAuthenticated && user?.id === project.owner?.id && (
+              <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-6">
+                <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                  <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Project Files
+                </h2>
+
+                {/* Existing Files */}
+                {project.fileUrls && project.fileUrls.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-white mb-3">
+                      Current Files ({project.fileUrls.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {project.fileUrls.map((fileUrl, index) => {
+                        const fileName = fileUrl.split('/').pop() || `File ${index + 1}`;
+                        const isImage = fileUrl.includes('.jpg') || fileUrl.includes('.jpeg') || fileUrl.includes('.png') || fileUrl.includes('.gif') || fileUrl.includes('.webp');
+                        const isVideo = fileUrl.includes('.mp4') || fileUrl.includes('.avi') || fileUrl.includes('.mov') || fileUrl.includes('.wmv') || fileUrl.includes('.flv') || fileUrl.includes('.webm') || fileUrl.includes('.mkv');
+                        const isArchive = fileUrl.includes('.zip') || fileUrl.includes('.rar') || fileUrl.includes('.7z');
+
+                        let fileType = "File";
+                        let icon = "📄";
+                        if (isImage) {
+                          fileType = "Image";
+                          icon = "🖼️";
+                        } else if (isVideo) {
+                          fileType = "Video";
+                          icon = "🎥";
+                        } else if (isArchive) {
+                          fileType = "Archive";
+                          icon = "📦";
+                        }
+
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="text-lg">{icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                  {fileName}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {fileType}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                              >
+                                View
+                              </a>
+                              <button
+                                onClick={() => handleDeleteFile(fileUrl)}
+                                disabled={actionLoading === "delete"}
+                                className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white text-sm rounded transition-colors"
+                              >
+                                {actionLoading === "delete" ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload New Files */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">
+                    Upload New Files
+                  </h3>
+
+                  <div className="mb-4">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileChange}
+                      accept="video/*,image/*,.zip,.rar,.7z"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
+                    />
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-400">
+                        <strong>Supported formats:</strong>
+                      </p>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>
+                          • <strong>Videos:</strong>{" "}
+                          mp4, avi, mov, wmv, flv, webm, mkv (max 50MB)
+                        </div>
+                        <div>
+                          • <strong>Images:</strong>{" "}
+                          jpg, jpeg, png, gif, webp, svg (max 10MB)
+                        </div>
+                        <div>
+                          • <strong>Archives:</strong>{" "}
+                          zip, rar, 7z (max 100MB)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-300 mb-2">
+                        Files to Upload:
+                      </h4>
+                      <ul className="space-y-2">
+                        {files.map((file, index) => {
+                          const isImage = file.type.startsWith("image/");
+                          const isVideo = file.type.startsWith("video/");
+                          const isArchive = file.type.includes("zip") || file.type.includes("rar") || file.type.includes("7z");
+
+                          let fileType = "File";
+                          if (isImage) fileType = "Image";
+                          else if (isVideo) fileType = "Video";
+                          else if (isArchive) fileType = "Archive";
+
+                          return (
+                            <li
+                              key={index}
+                              className="flex items-center space-x-3 p-2 bg-gray-700/50 rounded-lg"
+                            >
+                              <span className="text-lg">
+                                {isImage ? "🖼️" : isVideo ? "🎥" : isArchive ? "📦" : "📄"}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                  {file.name}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {fileType} • {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+
+                  {uploading && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
+                        <span>Uploading...</span>
+                        <span>{uploadProgress.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleUploadFiles}
+                      disabled={
+                        files.length === 0 ||
+                        uploading ||
+                        actionLoading === "upload" ||
+                        (hasAutoUploaded && uploadedFiles.length > 0)
+                      }
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {uploading || actionLoading === "upload"
+                        ? "Uploading..."
+                        : hasAutoUploaded && uploadedFiles.length > 0
+                        ? "Files Ready"
+                        : "Upload Files"}
+                    </button>
+
+                    {uploading && (
+                      <button
+                        onClick={cancelUpload}
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-medium rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column - Actions and Info */}
@@ -661,6 +948,28 @@ const ProjectDetailPage: React.FC = () => {
                         {isLiked ? "Unlike Project" : "Like Project"}
                       </>
                     )}
+                  </button>
+                )}
+
+                {isAuthenticated && user?.id === project.owner?.id && (
+                  <button
+                    onClick={() => navigate(`/edit-project/${project._id}`)}
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      />
+                    </svg>
+                    Edit Project
                   </button>
                 )}
 

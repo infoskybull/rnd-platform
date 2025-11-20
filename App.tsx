@@ -30,6 +30,7 @@ import ManagePlanPage from "./pages/ManagePlanPage";
 import PaymentPage from "./pages/PaymentPage";
 import PaymentCompletePage from "./pages/PaymentCompletePage";
 import PaymentCancelPage from "./pages/PaymentCancelPage";
+import EditProjectPage from "./pages/EditProjectPage";
 
 // Route Wrappers
 import PublisherRouteWrapper from "./components/PublisherRouteWrapper";
@@ -213,6 +214,10 @@ function App() {
                       element={<CollaborationDetailPage />}
                     />
                     <Route path="/profile/:userId" element={<ProfilePage />} />
+                    <Route
+                      path="/edit-project/:id"
+                      element={<EditProjectPage />}
+                    />
 
                     {/* Error Pages */}
                     <Route path="/404" element={<NotFoundPage />} />
