@@ -74,15 +74,14 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
-  const [bannerUploading, setBannerUploading] = useState(false);
-  const [attachmentsUploading, setAttachmentsUploading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<
     { fileKey: string; uploadUrl: string }[]
   >([]);
-  const [hasAutoUploaded, setHasAutoUploaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [existingFiles, setExistingFiles] = useState<{ url: string; name: string }[]>([]);
+  const [removedFiles, setRemovedFiles] = useState<string[]>([]);
 
   const { uploadFile, uploading, uploadProgress, cancelUpload } =
     useFileUpload();
@@ -104,7 +103,7 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
         title: project.title,
         shortDescription: project.shortDescription,
         projectType: project.projectType,
-        status: project.status,
+        status: project.status as "draft" | "published",
         banner: null,
         bannerPreviewUrl: project.thumbnail || "",
         bannerFileKey: project.thumbnail || "",
@@ -140,6 +139,8 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
           skills: project.creatorCollaborationData.skills || [],
         } : undefined,
       });
+      setExistingFiles(project.fileUrls?.map(url => ({ url, name: url.split('/').pop() || 'File' })) || []);
+      setRemovedFiles([]);
       setLoading(false);
     }
   }, [project]);
@@ -199,8 +200,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
       bannerPreviewUrl: previewUrl,
     }));
 
-    setBannerUploading(true);
-
     try {
       const result = await uploadFile(file);
       if (result.error) {
@@ -231,8 +230,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
         bannerFileKey: "",
       }));
       URL.revokeObjectURL(previewUrl);
-    } finally {
-      setBannerUploading(false);
     }
   };
 
@@ -265,12 +262,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
       return;
     }
 
-    // If we already have uploaded files from preview, don't upload again
-    if (hasAutoUploaded && uploadedFiles.length > 0) {
-      showToastMessage("Files already uploaded from preview", "success");
-      return;
-    }
-
     const uploadedFileData: { fileKey: string; uploadUrl: string }[] = [];
 
     try {
@@ -298,8 +289,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
 
   const handleAttachmentsUpload = async (files: FileList) => {
     if (!files || files.length === 0) return;
-
-    setAttachmentsUploading(true);
 
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
@@ -365,8 +354,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
         }`,
         "error"
       );
-    } finally {
-      setAttachmentsUploading(false);
     }
   };
 
@@ -380,6 +367,10 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
       ...prev,
       attachments: prev.attachments?.filter((_, i) => i !== index) || [],
     }));
+  };
+
+  const handleRemoveExistingFile = (url: string) => {
+    setRemovedFiles(prev => [...prev, url]);
   };
 
   useEffect(() => {
@@ -410,6 +401,13 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
       return;
     }
 
+    const remainingFiles = existingFiles.filter(f => !removedFiles.includes(f.url)).length;
+    const newFiles = uploadedFiles.length;
+    if (remainingFiles === 0 && newFiles === 0) {
+      showToastMessage("Cannot save without any files. Please upload new files or keep existing ones.", "error");
+      return;
+    }
+
     setUpdating(true);
 
     try {
@@ -419,6 +417,8 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
         formData.attachments
           ?.map((attachment) => attachment.fileKey)
           .filter((fileKey) => fileKey) || [];
+
+      const newFileUrls = uploadedFiles.length > 0 ? uploadedFiles.map(f => f.uploadUrl) : existingFiles.filter(f => !removedFiles.includes(f.url)).map(f => f.url);
 
       const updateData = {
         title: formData.title,
@@ -430,7 +430,7 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
         thumbnail: thumbnail,
         attachments: attachmentFileKeys.length > 0 ? attachmentFileKeys : undefined,
         fileKeys: uploadedFiles.length > 0 ? uploadedFiles.map(f => f.fileKey) : undefined,
-        fileUrls: uploadedFiles.length > 0 ? uploadedFiles.map(f => f.uploadUrl) : undefined,
+        fileUrls: newFileUrls.length > 0 ? newFileUrls : undefined,
         ideaSaleData: formData.ideaSaleData,
         productSaleData: formData.productSaleData,
         creatorCollaborationData: formData.creatorCollaborationData,
@@ -990,6 +990,59 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
                 </div>
               </div>
 
+              {existingFiles.filter(f => !removedFiles.includes(f.url)).length > 0 && files.length === 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">
+                    Existing Files:
+                  </h4>
+                  <div className="space-y-2">
+                    {existingFiles.filter(f => !removedFiles.includes(f.url)).map((file, index) => {
+                      const isImage = file.url.includes('.jpg') || file.url.includes('.jpeg') || file.url.includes('.png') || file.url.includes('.gif') || file.url.includes('.webp');
+                      const isVideo = file.url.includes('.mp4') || file.url.includes('.avi') || file.url.includes('.mov') || file.url.includes('.wmv') || file.url.includes('.flv') || file.url.includes('.webm') || file.url.includes('.mkv');
+                      const isArchive = file.url.includes('.zip') || file.url.includes('.rar') || file.url.includes('.7z');
+
+                      let fileType = "File";
+                      let icon = "📄";
+                      if (isImage) {
+                        fileType = "Image";
+                        icon = "🖼️";
+                      } else if (isVideo) {
+                        fileType = "Video";
+                        icon = "🎥";
+                      } else if (isArchive) {
+                        fileType = "Archive";
+                        icon = "📦";
+                      }
+
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <span className="text-lg">{icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white truncate">
+                                {file.name}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {fileType}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveExistingFile(file.url)}
+                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {files.length > 0 && (
                 <div className="mb-4">
                   <h4 className="text-sm font-medium text-gray-300 mb-2">
@@ -1050,16 +1103,11 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
                   disabled={
                     files.length === 0 ||
                     uploading ||
-                    updating ||
-                    (hasAutoUploaded && uploadedFiles.length > 0)
+                    updating
                   }
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {uploading
-                    ? "Uploading..."
-                    : hasAutoUploaded && uploadedFiles.length > 0
-                    ? "Files Ready"
-                    : "Upload Files"}
+                  Upload Files
                 </button>
 
                 {uploading && (
@@ -1078,7 +1126,6 @@ const EditProjectForm: React.FC<EditProjectFormProps> = ({
                     <CheckCircle className="w-5 h-5 text-green-400" />
                     <span className="text-green-400 text-sm font-medium">
                       {uploadedFiles.length} file(s) uploaded successfully
-                      {hasAutoUploaded && " (from preview)"}
                     </span>
                   </div>
                 </div>
