@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { GameProject, ProjectType, ProjectStatus } from "../types";
 import { apiService } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
-import { useFileUpload } from "../hooks/useFileUpload";
 import ResponsiveNavbar from "../components/ResponsiveNavbar";
 import RoleBadge from "../components/RoleBadge";
 import ProjectPreview from "../components/ProjectPreview";
@@ -40,14 +39,7 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [files, setFiles] = useState<File[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<
-    { fileKey: string; uploadUrl: string }[]
-  >([]);
-  const [hasAutoUploaded, setHasAutoUploaded] = useState(false);
 
-  const { uploadFile, uploading, uploadProgress, cancelUpload } =
-    useFileUpload();
 
   const handleLogout = () => {
     logout();
@@ -241,87 +233,6 @@ const ProjectDetailPage: React.FC = () => {
     [project?.attachments, project?.thumbnail]
   );
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
-      setFiles(selectedFiles);
-    }
-  };
-
-  const handleUploadFiles = async () => {
-    if (files.length === 0) {
-      setError("Please select files to upload");
-      return;
-    }
-
-    if (hasAutoUploaded && uploadedFiles.length > 0) {
-      setError("Files already uploaded from preview");
-      return;
-    }
-
-    const uploadedFileData: { fileKey: string; uploadUrl: string }[] = [];
-
-    try {
-      setActionLoading("upload");
-
-      for (const file of files) {
-        const result = await uploadFile(file);
-        if (result.error) {
-          setError(`Failed to upload ${file.name}: ${result.error}`);
-          return;
-        }
-        uploadedFileData.push({
-          fileKey: result.fileKey,
-          uploadUrl: result.uploadUrl,
-        });
-      }
-
-      setUploadedFiles(uploadedFileData);
-
-      // Update project with new files
-      const updateData = {
-        fileKeys: uploadedFileData.map((f) => f.fileKey),
-        fileUrls: uploadedFileData.map((f) => f.uploadUrl),
-      };
-
-      await apiService.updateGameProject(project._id, updateData);
-
-      // Reload project to get updated data
-      await loadProject();
-
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleDeleteFile = async (fileUrl: string) => {
-    if (!project) return;
-
-    try {
-      setActionLoading("delete");
-
-      // Remove file from current fileUrls
-      const updatedFileUrls = project.fileUrls?.filter((url) => url !== fileUrl) || [];
-
-      const updateData = {
-        fileUrls: updatedFileUrls.length > 0 ? updatedFileUrls : undefined,
-      };
-
-      await apiService.updateGameProject(project._id, updateData);
-
-      // Reload project to get updated data
-      await loadProject();
-
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete file");
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   if (authLoading || loading) {
     return (
