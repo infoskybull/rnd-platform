@@ -6,7 +6,6 @@ export const getApiBaseOrigin = (): string => {
     const url = new URL(API_BASE_URL);
     // If path ends with /api, strip it for socket namespace root
     const origin = `${url.protocol}//${url.host}`;
-    console.log("API_BASE_URL", origin);
     return origin;
   } catch (_) {
     // Fallback: rudimentary strip of trailing /api
@@ -1241,6 +1240,10 @@ class ApiService {
     return this.makeRequest(`/game-projects/${id}`);
   }
 
+  async getGameProjectBasicInfo(id: string): Promise<any> {
+    return this.makeRequest(`/game-projects/${id}/basic-info`);
+  }
+
   async getMyProjects(filters: any = {}): Promise<any> {
     const queryParams = new URLSearchParams();
 
@@ -1280,14 +1283,63 @@ class ApiService {
     return this.makeRequest(endpoint);
   }
 
-  async createGameProject(projectData: any): Promise<any> {
+  async createGameProject(projectData: {
+    title: string;
+    shortDescription: string;
+    projectType: string[]; // Array per API docs
+    repoFormat: "react" | "webgl" | "html";
+    status?: string;
+    payToViewAmount: number;
+    productSaleData?: {
+      screenshots?: string[];
+      demoUrl?: string;
+      askingPrice: number;
+      gameGenre?: string;
+      targetPlatform?: string;
+      tags?: string[];
+      techStack?: string;
+      isPlayable?: boolean;
+    };
+    creatorCollaborationData?: {
+      proposal: string;
+      budget: number;
+      timeline: string;
+      prototypeImages?: string[];
+      videoUrl?: string;
+      gameGenre?: string;
+      targetPlatform?: string;
+      tags?: string[];
+      skills?: string[];
+    };
+    searchKeywords?: string[];
+    attachments?: string[];
+    fileKeys?: string[];
+    thumbnail?: string;
+  }): Promise<any> {
     return this.makeRequest("/game-projects", {
       method: "POST",
       body: JSON.stringify(projectData),
     });
   }
 
-  async updateGameProject(id: string, projectData: any): Promise<any> {
+  async updateGameProject(
+    id: string,
+    projectData: {
+      title?: string;
+      shortDescription?: string;
+      projectType?: string[];
+      repoFormat?: "react" | "webgl" | "html";
+      status?: string;
+      productSaleData?: any;
+      creatorCollaborationData?: any;
+      payToViewAmount?: number;
+      searchKeywords?: string[];
+      attachments?: string[];
+      fileKeys?: string[];
+      thumbnail?: string;
+      isFeatured?: boolean; // Only publisher role can set
+    }
+  ): Promise<any> {
     return this.makeRequest(`/game-projects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(projectData),
@@ -1312,7 +1364,10 @@ class ApiService {
     });
   }
 
-  async likeGameProject(id: string): Promise<any> {
+  async likeGameProject(id: string): Promise<{
+    liked: boolean;
+    likeCount: number;
+  }> {
     return this.makeRequest(`/game-projects/${id}/like`, {
       method: "POST",
     });
@@ -1341,7 +1396,8 @@ class ApiService {
       | "collaboration_budget"
       | "contract_advance"
       | "contract_milestone"
-      | "contract_completion";
+      | "contract_completion"
+      | "pay_to_view";
     projectId?: string;
     collaborationId?: string;
     contractId?: string;
@@ -1711,7 +1767,13 @@ class ApiService {
     return this.makeRequest(endpoint);
   }
 
-  async getPublisherStats(): Promise<any> {
+  // Get Publisher Stats
+  async getPublisherStats(): Promise<{
+    purchasedProjects: number;
+    activeCollaborations: number;
+    totalInvestment: number;
+    completedProjects: number;
+  }> {
     return this.makeRequest("/game-projects/publisher-stats");
   }
 
@@ -1826,6 +1888,38 @@ class ApiService {
   async startCollaboration(id: string): Promise<any> {
     return this.makeRequest(`/game-projects/${id}/start-collaboration`, {
       method: "POST",
+    });
+  }
+
+  // Create Collaboration from Project
+  async createCollaborationFromProject(projectId: string): Promise<{
+    projectId: string;
+    description: string;
+    deliverables: string;
+    budget: number;
+    timeline: string;
+    milestones: string[];
+    communicationChannels: string[];
+    communicationDetails: string;
+    termsAndConditions: string;
+    startDate: string;
+  }> {
+    return this.makeRequest(
+      `/game-projects/${projectId}/create-collaboration`,
+      {
+        method: "POST",
+      }
+    );
+  }
+
+  // Toggle Feature (Admin/Publisher)
+  async toggleProjectFeature(
+    projectId: string,
+    isFeatured: boolean
+  ): Promise<any> {
+    return this.makeRequest(`/game-projects/${projectId}/feature`, {
+      method: "PATCH",
+      body: JSON.stringify({ isFeatured }),
     });
   }
 
@@ -2015,11 +2109,29 @@ class ApiService {
     return this.makeRequest("/collaborations/creator/stats");
   }
 
-  async getGameProjectStats(): Promise<any> {
+  // Get Global Stats (Public)
+  async getGameProjectStats(): Promise<{
+    totalProjects: number;
+    publishedProjects: number;
+    soldProjects: number;
+    collaborationProjects: number;
+    totalViews: number;
+    totalLikes: number;
+    averageRating: number;
+  }> {
     return this.makeRequest("/game-projects/stats");
   }
 
-  async getMyDeveloperStats(): Promise<any> {
+  // Get My Stats (Creator)
+  async getMyDeveloperStats(): Promise<{
+    totalProjects: number;
+    publishedProjects: number;
+    soldProjects: number;
+    activeCollaborations: number;
+    totalRevenue: number;
+    totalViews: number;
+    totalLikes: number;
+  }> {
     return this.makeRequest("/game-projects/my-stats");
   }
 
@@ -2050,22 +2162,32 @@ class ApiService {
     }
   }
 
-  // Enhanced project creation with file support
+  // Enhanced project creation with file support (legacy wrapper)
+  // This method is kept for backward compatibility
+  // New code should use createGameProject instead
   async createProjectWithFiles(projectData: {
     title: string;
     shortDescription: string;
-    projectType: "idea_sale" | "product_sale" | "dev_collaboration";
-    ideaSaleData?: any;
+    projectType: ("product_sale" | "dev_collaboration")[]; // Always an array
+    repoFormat?: "react" | "webgl" | "html";
+    status?: string;
+    payToViewAmount: number; // Required - giá trị từ select package
     productSaleData?: any;
     creatorCollaborationData?: any;
+    searchKeywords?: string[];
     fileKeys?: string[]; // S3 keys from presigned-url response
     fileUrls?: string[]; // Upload URLs from presigned-url response
     attachments?: string[]; // Additional attachments like banner images
+    thumbnail?: string;
   }): Promise<any> {
-    return this.makeRequest("/game-projects", {
-      method: "POST",
-      body: JSON.stringify(projectData),
-    });
+    // Normalize data
+    const normalizedData = {
+      ...projectData,
+      projectType: projectData.projectType, // Already an array
+      repoFormat: projectData.repoFormat || "react", // Default to react
+      payToViewAmount: projectData.payToViewAmount, // Required
+    };
+    return this.createGameProject(normalizedData);
   }
 
   // Get download URL for a file from S3

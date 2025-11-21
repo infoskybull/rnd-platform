@@ -134,14 +134,16 @@ const ProjectDetailPage: React.FC = () => {
 
   const handlePurchase = () => {
     if (!project || !isAuthenticated) return;
-    // Navigate to payment page with projectId
-    navigate(`/payment?projectId=${project._id}`);
+    // Navigate to payment page with projectId and paymentType
+    navigate(`/payment?projectId=${project._id}&paymentType=project_purchase`);
   };
 
   const handleStartCollaboration = () => {
     if (!project || !isAuthenticated) return;
-    // Navigate to payment page with projectId for collaboration budget payment
-    navigate(`/payment?projectId=${project._id}`);
+    // Navigate to payment page with projectId and paymentType for collaboration budget payment
+    navigate(
+      `/payment?projectId=${project._id}&paymentType=collaboration_budget`
+    );
   };
 
   const formatPrice = useCallback((price: number) => {
@@ -152,9 +154,6 @@ const ProjectDetailPage: React.FC = () => {
   }, []);
 
   const getPrice = useCallback((): number => {
-    if (project?.ideaSaleData?.askingPrice) {
-      return project.ideaSaleData.askingPrice;
-    }
     if (project?.productSaleData?.askingPrice) {
       return project.productSaleData.askingPrice;
     }
@@ -164,18 +163,54 @@ const ProjectDetailPage: React.FC = () => {
     return 0;
   }, [project]);
 
-  const getProjectTypeLabel = useCallback((type: ProjectType): string => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
+  const getProjectTypeLabel = useCallback(
+    (type: ProjectType | ProjectType[]): string => {
+      // If project has purchasedType, use it to determine the label
+      if (project?.purchasedType) {
+        switch (project.purchasedType) {
+          case "project_purchase":
+            return "Product Sale";
+          case "collaboration_budget":
+            return "Dev Collaboration";
+          default:
+            break;
+        }
+      }
+      // Fallback to projectType
+      const types = Array.isArray(type) ? type : [type];
+      return types
+        .map((t) => {
+          switch (t) {
+            case "product_sale":
+              return "Product Sale";
+            case "dev_collaboration":
+              return "Dev Collaboration";
+            default:
+              return String(t);
+          }
+        })
+        .join(", ");
+    },
+    [project?.purchasedType]
+  );
+
+  // Get effective status based on purchasedType or project status
+  const getEffectiveStatus = useCallback((): ProjectStatus => {
+    if (project?.purchasedType) {
+      // Handle "project_purchase" or "product_sale" -> status = "sold"
+      if (project.purchasedType === "project_purchase") {
+        return "sold";
+      }
+      // Handle both "collaboration_budget" and "dev_collaboration" -> status = "in_collaboration"
+      if (
+        project.purchasedType === "collaboration_budget" ||
+        project.purchasedType === "dev_collaboration"
+      ) {
+        return "in_collaboration";
+      }
     }
-  }, []);
+    return project?.status || "draft";
+  }, [project?.purchasedType, project?.status]);
 
   const getStatusColor = useCallback((status: ProjectStatus): string => {
     switch (status) {
@@ -308,14 +343,14 @@ const ProjectDetailPage: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-2 mb-4 sm:mb-0">
                   <span className="text-2xl">
-                    {getStatusIcon(project.status)}
+                    {getStatusIcon(getEffectiveStatus())}
                   </span>
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                      project.status
+                      getEffectiveStatus()
                     )}`}
                   >
-                    {project.status}
+                    {getEffectiveStatus()}
                   </span>
                 </div>
               </div>
@@ -360,12 +395,10 @@ const ProjectDetailPage: React.FC = () => {
                   <span className="px-3 py-1 bg-indigo-600/20 text-indigo-300 rounded-full text-sm font-medium">
                     {getProjectTypeLabel(project.projectType)}
                   </span>
-                  {(project.ideaSaleData?.gameGenre ||
-                    project.productSaleData?.gameGenre ||
+                  {(project.productSaleData?.gameGenre ||
                     project.creatorCollaborationData?.gameGenre) && (
                     <span className="px-3 py-1 bg-purple-600/20 text-purple-300 rounded-full text-sm font-medium">
-                      {project.ideaSaleData?.gameGenre ||
-                        project.productSaleData?.gameGenre ||
+                      {project.productSaleData?.gameGenre ||
                         project.creatorCollaborationData?.gameGenre}
                     </span>
                   )}
@@ -394,59 +427,6 @@ const ProjectDetailPage: React.FC = () => {
               <h2 className="text-2xl font-bold text-white mb-4">
                 Project Details
               </h2>
-
-              {project.ideaSaleData && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-2">
-                      Idea Description
-                    </h3>
-                    <p className="text-gray-300 leading-relaxed">
-                      {project.ideaSaleData.description}
-                    </p>
-                  </div>
-
-                  {project.ideaSaleData.videoUrl && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-white mb-2">
-                        Demo Video
-                      </h3>
-                      <video
-                        controls
-                        className="w-full h-64 rounded-lg"
-                        poster={project.thumbnail}
-                      >
-                        <source
-                          src={project.ideaSaleData.videoUrl}
-                          type="video/mp4"
-                        />
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  )}
-
-                  {project.ideaSaleData.prototypeImages &&
-                    project.ideaSaleData.prototypeImages.length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-white mb-2">
-                          Prototype Images
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          {project.ideaSaleData.prototypeImages.map(
-                            (image, index) => (
-                              <img
-                                key={index}
-                                src={image}
-                                alt={`Prototype ${index + 1}`}
-                                className="w-full h-32 object-cover rounded-lg"
-                              />
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-                </div>
-              )}
 
               {project.productSaleData && (
                 <div className="space-y-4">
@@ -597,11 +577,9 @@ const ProjectDetailPage: React.FC = () => {
             </div>
 
             {/* Tags */}
-            {(project.ideaSaleData?.tags ||
-              project.productSaleData?.tags ||
+            {(project.productSaleData?.tags ||
               project.creatorCollaborationData?.tags) &&
               (
-                project.ideaSaleData?.tags ||
                 project.productSaleData?.tags ||
                 project.creatorCollaborationData?.tags ||
                 []
@@ -613,7 +591,6 @@ const ProjectDetailPage: React.FC = () => {
                   </h2>
                   <div className="flex flex-wrap gap-2">
                     {(
-                      project.ideaSaleData?.tags ||
                       project.productSaleData?.tags ||
                       project.creatorCollaborationData?.tags ||
                       []
@@ -668,8 +645,12 @@ const ProjectDetailPage: React.FC = () => {
                   project.status === "published" &&
                   user?.id !== project.owner?.id && (
                     <>
-                      {(project.projectType === "idea_sale" ||
-                        project.projectType === "product_sale") && (
+                      {(() => {
+                        const types = Array.isArray(project.projectType)
+                          ? project.projectType
+                          : [project.projectType];
+                        return types.includes("product_sale");
+                      })() && (
                         <button
                           onClick={handlePurchase}
                           className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
@@ -679,12 +660,20 @@ const ProjectDetailPage: React.FC = () => {
                         </button>
                       )}
 
-                      {project.projectType === "dev_collaboration" && (
+                      {(() => {
+                        const types = Array.isArray(project.projectType)
+                          ? project.projectType
+                          : [project.projectType];
+                        return types.includes("dev_collaboration");
+                      })() && (
                         <button
                           onClick={handleStartCollaboration}
                           className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
                         >
-                          🤝 Start Collaboration
+                          🤝 Start Collaboration -{" "}
+                          {formatPrice(
+                            project.creatorCollaborationData?.budget || 0
+                          )}
                         </button>
                       )}
                     </>
@@ -718,24 +707,35 @@ const ProjectDetailPage: React.FC = () => {
                     {getProjectTypeLabel(project.projectType)}
                   </span>
                 </div>
+                {project.purchasedType && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Purchased Type:</span>
+                    <span className="text-white">
+                      {project.purchasedType === "project_purchase"
+                        ? "Product Purchase"
+                        : project.purchasedType === "collaboration_budget" ||
+                          project.purchasedType === "dev_collaboration"
+                        ? "Collaboration Budget"
+                        : project.purchasedType}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Status:</span>
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                      project.status
+                      getEffectiveStatus()
                     )}`}
                   >
-                    {project.status}
+                    {getEffectiveStatus()}
                   </span>
                 </div>
-                {(project.ideaSaleData?.targetPlatform ||
-                  project.productSaleData?.targetPlatform ||
+                {(project.productSaleData?.targetPlatform ||
                   project.creatorCollaborationData?.targetPlatform) && (
                   <div className="flex justify-between">
                     <span className="text-gray-400">Platform:</span>
                     <span className="text-white">
-                      {project.ideaSaleData?.targetPlatform ||
-                        project.productSaleData?.targetPlatform ||
+                      {project.productSaleData?.targetPlatform ||
                         project.creatorCollaborationData?.targetPlatform}
                     </span>
                   </div>

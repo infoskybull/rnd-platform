@@ -57,7 +57,6 @@ export const useInventory = () => {
             project: project as any, // Convert to GameProject format if needed
             purchaseDate: project.soldAt,
             purchasePrice:
-              project.ideaSaleData?.askingPrice ||
               project.productSaleData?.askingPrice ||
               project.creatorCollaborationData?.budget ||
               0,
@@ -219,7 +218,6 @@ export const useInventory = () => {
             project: project as any,
             purchaseDate: project.soldAt,
             purchasePrice:
-              project.ideaSaleData?.askingPrice ||
               project.productSaleData?.askingPrice ||
               project.creatorCollaborationData?.budget ||
               0,

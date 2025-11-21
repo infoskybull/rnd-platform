@@ -9,7 +9,6 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { mainnet, sepolia } from "wagmi/chains";
 import {
-  injectedWallet,
   metaMaskWallet,
   walletConnectWallet,
 } from "@rainbow-me/rainbowkit/wallets";
@@ -45,11 +44,16 @@ const projectId = "9d788138e01cb9fa31ae9e82868f93ca"; // WalletConnect Cloud pro
 
 const chains = [mainnet, sepolia] as const;
 
+// IMPORTANT: Only use metaMaskWallet and walletConnectWallet
+// DO NOT use injectedWallet as it will detect Phantom wallet's Ethereum provider
+// Phantom wallet injects into window.ethereum, causing duplicate detection
+// This ensures we ONLY detect Metamask for Ethereum network
+// Phantom should ONLY be used for Solana network via SolanaWalletContext
 const connectors = connectorsForWallets(
   [
     {
       groupName: "Recommended",
-      wallets: [metaMaskWallet, walletConnectWallet, injectedWallet],
+      wallets: [metaMaskWallet, walletConnectWallet],
     },
   ],
   { appName, projectId }

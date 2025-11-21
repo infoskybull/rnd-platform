@@ -286,17 +286,20 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
     }).format(price);
   };
 
-  const getProjectTypeLabel = (type: ProjectType) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: ProjectType | ProjectType[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product Sale";
+          case "dev_collaboration":
+            return "Dev Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   const getStatusColor = (status: ProjectStatus) => {
@@ -492,27 +495,23 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                         {selectedProject.status}
                       </span>
                     </div>
-                    {(selectedProject.ideaSaleData?.gameGenre ||
-                      selectedProject.productSaleData?.gameGenre ||
+                    {(selectedProject.productSaleData?.gameGenre ||
                       selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.gameGenre ||
-                            selectedProject.productSaleData?.gameGenre ||
+                          {selectedProject.productSaleData?.gameGenre ||
                             selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
-                    {(selectedProject.ideaSaleData?.targetPlatform ||
-                      selectedProject.productSaleData?.targetPlatform ||
+                    {(selectedProject.productSaleData?.targetPlatform ||
                       selectedProject.creatorCollaborationData
                         ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.targetPlatform ||
-                            selectedProject.productSaleData?.targetPlatform ||
+                          {selectedProject.productSaleData?.targetPlatform ||
                             selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
@@ -537,35 +536,6 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                       </div>
                     )}
                   </div>
-
-                  {selectedProject.ideaSaleData && (
-                    <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
-                      <h3 className="text-lg font-semibold text-white mb-2">
-                        Idea Sale Details
-                      </h3>
-                      <p className="text-gray-300 mb-2">
-                        {selectedProject.ideaSaleData.description}
-                      </p>
-                      <div className="text-xl font-bold text-green-400 mb-2">
-                        {formatPrice(selectedProject.ideaSaleData.askingPrice)}
-                      </div>
-                      {selectedProject.ideaSaleData.videoUrl && (
-                        <div className="mt-3">
-                          <video
-                            controls
-                            className="w-full h-48 rounded-lg"
-                            poster={selectedProject.thumbnail || undefined}
-                          >
-                            <source
-                              src={selectedProject.ideaSaleData.videoUrl}
-                              type="video/mp4"
-                            />
-                            Your browser does not support the video tag.
-                          </video>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {selectedProject.productSaleData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -662,11 +632,9 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                     </div>
                   </div>
 
-                  {(selectedProject.ideaSaleData?.tags ||
-                    selectedProject.productSaleData?.tags ||
+                  {(selectedProject.productSaleData?.tags ||
                     selectedProject.creatorCollaborationData?.tags) &&
                     (
-                      selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
                       selectedProject.creatorCollaborationData?.tags ||
                       []
@@ -677,7 +645,6 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                         </h3>
                         <div className="flex flex-wrap gap-2">
                           {(
-                            selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
                             selectedProject.creatorCollaborationData?.tags ||
                             []

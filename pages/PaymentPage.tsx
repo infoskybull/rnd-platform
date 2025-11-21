@@ -3,7 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import ResponsiveNavbar from "../components/ResponsiveNavbar";
 import Web3WalletModal from "../components/Web3WalletModal";
-import { Web3WalletCredentials, GameProject } from "../types";
+import {
+  Web3WalletCredentials,
+  GameProject,
+  GameProjectBasicInfo,
+} from "../types";
 import { useTonConnect } from "../hooks/useTonConnect";
 import { useAccount } from "wagmi";
 import { useSolanaWallet } from "../contexts/SolanaWalletContext";
@@ -40,11 +44,20 @@ const PaymentPage: React.FC = () => {
   const { user, logout } = useAuth();
   const selectedPlanId = searchParams.get("plan") as PlanType | null;
   const projectId = searchParams.get("projectId");
+  const payToView = searchParams.get("payToView") === "true";
+  const paymentTypeParam = searchParams.get("paymentType") as
+    | "project_purchase"
+    | "subscription"
+    | "collaboration_budget"
+    | "pay_to_view"
+    | null;
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("paypal");
   const [showWeb3Modal, setShowWeb3Modal] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [project, setProject] = useState<GameProject | null>(null);
+  const [project, setProject] = useState<
+    GameProject | GameProjectBasicInfo | null
+  >(null);
   const [loadingProject, setLoadingProject] = useState(false);
   const [paypalOrderId, setPaypalOrderId] = useState<string | null>(null);
   const [cardDetails, setCardDetails] = useState({
@@ -66,32 +79,102 @@ const PaymentPage: React.FC = () => {
   const { publicKey: solanaPublicKey, isConnected: isSolanaConnected } =
     useSolanaWallet();
 
-  // Calculate payment amount based on project or plan
+  // Calculate payment amount based on paymentType, project or plan
   const getPaymentAmount = (): number => {
+    // If subscription plan, return plan price
+    if (selectedPlan) {
+      return selectedPlan.price;
+    }
+
     if (project) {
-      // Get price from project based on type
-      if (project.ideaSaleData?.askingPrice) {
-        return project.ideaSaleData.askingPrice;
+      // Use paymentType from query params to determine which price to use
+      if (paymentTypeParam) {
+        if (paymentTypeParam === "pay_to_view") {
+          return project.payToViewAmount || 0;
+        }
+        if (paymentTypeParam === "collaboration_budget") {
+          // Get price from collaboration budget (only for full GameProject)
+          if (
+            "creatorCollaborationData" in project &&
+            project.creatorCollaborationData?.budget
+          ) {
+            return project.creatorCollaborationData.budget;
+          }
+          return 0;
+        }
+        if (paymentTypeParam === "project_purchase") {
+          // Get price from product sale asking price (only for full GameProject)
+          if (
+            "productSaleData" in project &&
+            project.productSaleData?.askingPrice
+          ) {
+            return project.productSaleData.askingPrice;
+          }
+          return 0;
+        }
       }
-      if (project.productSaleData?.askingPrice) {
+
+      // Fallback: If payToView flag is set, use payToViewAmount
+      if (payToView && project.payToViewAmount > 0) {
+        return project.payToViewAmount;
+      }
+
+      // Fallback: Get price from project based on type (only for full GameProject, not basic info)
+      if (
+        "productSaleData" in project &&
+        project.productSaleData?.askingPrice
+      ) {
         return project.productSaleData.askingPrice;
       }
-      if (project.creatorCollaborationData?.budget) {
+      if (
+        "creatorCollaborationData" in project &&
+        project.creatorCollaborationData?.budget
+      ) {
         return project.creatorCollaborationData.budget;
       }
       return 0;
     }
-    if (selectedPlan) {
-      return selectedPlan.price;
-    }
+
     return 0;
   };
 
   const paymentAmount = getPaymentAmount();
 
+  // Helper function to determine payment type
+  const getPaymentType = ():
+    | "project_purchase"
+    | "subscription"
+    | "collaboration_budget"
+    | "pay_to_view" => {
+    // Use paymentType from query params if provided
+    if (paymentTypeParam) {
+      return paymentTypeParam;
+    }
+    // Fallback to auto-detection
+    if (selectedPlanId) {
+      return "subscription";
+    }
+    if (projectId && project) {
+      if (payToView) {
+        return "pay_to_view";
+      }
+      if (
+        Array.isArray(project.projectType) &&
+        project.projectType.includes("dev_collaboration")
+      ) {
+        return "collaboration_budget";
+      }
+      return "project_purchase";
+    }
+    return "project_purchase";
+  };
+
   // Get payment description
   const getPaymentDescription = (): string => {
     if (project) {
+      if (payToView) {
+        return `Pay to view: ${project.title}`;
+      }
       return project.title;
     }
     if (selectedPlan) {
@@ -106,11 +189,18 @@ const PaymentPage: React.FC = () => {
       if (projectId) {
         setLoadingProject(true);
         try {
-          const projectData = await apiService.getGameProjectById(projectId);
-          setProject(projectData);
+          // If payToView, use basic-info endpoint instead of full project detail
+          if (payToView) {
+            const projectData = await apiService.getGameProjectBasicInfo(
+              projectId
+            );
+            setProject(projectData);
+          } else {
+            const projectData = await apiService.getGameProjectById(projectId);
+            setProject(projectData);
+          }
         } catch (error) {
           console.error("Failed to load project:", error);
-          alert("Failed to load project. Please try again.");
           navigate("/");
         } finally {
           setLoadingProject(false);
@@ -119,7 +209,7 @@ const PaymentPage: React.FC = () => {
     };
 
     loadProject();
-  }, [projectId, navigate]);
+  }, [projectId, payToView, navigate]);
 
   // Validate redirect - must have either plan or projectId
   useEffect(() => {
@@ -172,13 +262,25 @@ const PaymentPage: React.FC = () => {
 
     setProcessing(true);
     try {
-      // If project payment, call purchase API
+      // Get payment type using helper function
+      const paymentType = getPaymentType();
+
+      // Create payment based on payment type
       if (projectId && project) {
-        await apiService.purchaseGameProject(projectId);
-        alert(
-          `Payment successful! Project "${project.title}" has been purchased.`
-        );
-        navigate(`/project/${projectId}`);
+        const paymentData = await apiService.createPayment({
+          paymentType,
+          projectId: projectId,
+          amount: paymentAmount,
+          currency: "USD",
+          description: getPaymentDescription(),
+          paymentMethod: "visa",
+        });
+
+        if (paymentData.success) {
+          navigate(`/project-detail/${projectId}`);
+        } else {
+          throw new Error("Failed to process payment");
+        }
       } else if (selectedPlanId) {
         // Create payment for subscription upgrade
         const paymentData = await apiService.createPayment({
@@ -193,16 +295,12 @@ const PaymentPage: React.FC = () => {
         if (paymentData.success && paymentData.data.approvalUrl) {
           // For card payments, we might need to handle differently
           // For now, redirect to PayPal (card payments may need separate flow)
-          alert(
-            `Payment successful! Your plan has been upgraded to ${selectedPlan?.name}.`
-          );
           navigate("/manage-plan");
         } else {
           throw new Error("Failed to process payment");
         }
       }
     } catch (error) {
-      alert("Payment failed. Please try again.");
       console.error("Payment error:", error);
     } finally {
       setProcessing(false);
@@ -212,27 +310,13 @@ const PaymentPage: React.FC = () => {
   // Create payment and redirect to PayPal (Server-side flow)
   const handlePayPalPayment = async () => {
     if (paymentAmount === 0) {
-      alert("Invalid payment amount");
       return;
     }
 
     setProcessing(true);
     try {
-      // Determine payment type based on context
-      let paymentType:
-        | "project_purchase"
-        | "subscription"
-        | "collaboration_budget" = "project_purchase";
-      if (selectedPlanId) {
-        paymentType = "subscription";
-      } else if (projectId && project) {
-        // Check if this is a collaboration project (dev_collaboration)
-        if (project.projectType === "dev_collaboration") {
-          paymentType = "collaboration_budget";
-        } else {
-          paymentType = "project_purchase";
-        }
-      }
+      // Get payment type using helper function
+      const paymentType = getPaymentType();
 
       // Create payment on backend
       const paymentData = await apiService.createPayment({
@@ -260,11 +344,6 @@ const PaymentPage: React.FC = () => {
       }
     } catch (error) {
       console.error("Payment creation error:", error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to initiate payment. Please try again.";
-      alert(errorMessage);
       setProcessing(false);
     }
   };
@@ -273,28 +352,48 @@ const PaymentPage: React.FC = () => {
   const handlePayPalSuccess = async (details: any) => {
     setProcessing(true);
     try {
+      // Get payment type using helper function
+      const paymentType = getPaymentType();
+
       // If project payment, call purchase API with PayPal order details
       if (projectId && project) {
-        // Send PayPal order ID to backend for verification
-        await apiService.purchaseGameProject(projectId, {
-          paymentMethod: "paypal",
-          paypalOrderId: details.id,
-          payerId: details.payer?.payer_id,
-          paymentStatus: details.status,
-        });
-        alert(
-          `Payment successful! Project "${project.title}" has been purchased.`
-        );
-        navigate(`/project/${projectId}`);
+        if (paymentType === "pay_to_view") {
+          // Pay to view payment
+          const paymentData = await apiService.createPayment({
+            paymentType: "pay_to_view",
+            projectId: projectId,
+            amount: paymentAmount,
+            currency: "USD",
+            description: `Pay to view: ${project.title}`,
+            paymentMethod: "paypal",
+          });
+          navigate(`/project-detail/${projectId}`);
+        } else if (paymentType === "collaboration_budget") {
+          // Collaboration budget payment
+          const paymentData = await apiService.createPayment({
+            paymentType: "collaboration_budget",
+            projectId: projectId,
+            amount: paymentAmount,
+            currency: "USD",
+            description: getPaymentDescription(),
+            paymentMethod: "paypal",
+          });
+          navigate(`/project-detail/${projectId}`);
+        } else {
+          // Send PayPal order ID to backend for verification
+          await apiService.purchaseGameProject(projectId, {
+            paymentMethod: "paypal",
+            paypalOrderId: details.id,
+            payerId: details.payer?.payer_id,
+            paymentStatus: details.status,
+          });
+          navigate(`/project-detail/${projectId}`);
+        }
       } else if (selectedPlanId) {
         // TODO: Integrate with payment API for plan upgrade
-        alert(
-          `Payment successful! Your plan has been upgraded to ${selectedPlan?.name}.`
-        );
         navigate("/manage-plan");
       }
     } catch (error) {
-      alert("Payment processing failed. Please contact support.");
       console.error("PayPal payment error:", error);
     } finally {
       setProcessing(false);
@@ -304,13 +403,26 @@ const PaymentPage: React.FC = () => {
   const handleWeb3Payment = async (credentials: Web3WalletCredentials) => {
     setProcessing(true);
     try {
-      // If project payment, call purchase API
+      // Get payment type using helper function
+      const paymentType = getPaymentType();
+
+      // Create payment based on payment type
       if (projectId && project) {
-        await apiService.purchaseGameProject(projectId);
-        alert(
-          `Payment successful! Project "${project.title}" has been purchased.`
-        );
-        navigate(`/project/${projectId}`);
+        const paymentData = await apiService.createPayment({
+          paymentType,
+          projectId: projectId,
+          amount: paymentAmount,
+          currency: "USD",
+          description: getPaymentDescription(),
+          paymentMethod: "web3",
+        });
+
+        if (paymentData.success) {
+          setShowWeb3Modal(false);
+          navigate(`/project-detail/${projectId}`);
+        } else {
+          throw new Error("Failed to process payment");
+        }
       } else if (selectedPlanId) {
         // Create payment for subscription upgrade
         const paymentData = await apiService.createPayment({
@@ -324,9 +436,6 @@ const PaymentPage: React.FC = () => {
 
         if (paymentData.success) {
           // For Web3 payments, backend should handle the transaction
-          alert(
-            `Payment successful! Your plan has been upgraded to ${selectedPlan?.name}.`
-          );
           setShowWeb3Modal(false);
           navigate("/manage-plan");
         } else {
@@ -334,7 +443,6 @@ const PaymentPage: React.FC = () => {
         }
       }
     } catch (error) {
-      alert("Payment failed. Please try again.");
       console.error("Web3 payment error:", error);
     } finally {
       setProcessing(false);
@@ -408,7 +516,9 @@ const PaymentPage: React.FC = () => {
           </h1>
           <p className="text-gray-400">
             {project
-              ? `Purchase: ${project.title}`
+              ? payToView
+                ? `Pay to View: ${project.title}`
+                : `Purchase: ${project.title}`
               : selectedPlan
               ? `Upgrade to ${selectedPlan.name} Plan`
               : "Payment"}
@@ -434,37 +544,77 @@ const PaymentPage: React.FC = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Type</span>
                       <span className="text-white font-medium">
-                        {project.projectType === "idea_sale"
-                          ? "Idea Sale"
-                          : project.projectType === "product_sale"
-                          ? "Product Sale"
-                          : "Dev Collaboration"}
+                        {(() => {
+                          // Use paymentType to determine which type to show
+                          const currentPaymentType = getPaymentType();
+                          if (currentPaymentType === "collaboration_budget") {
+                            return "Dev Collaboration";
+                          }
+                          if (currentPaymentType === "project_purchase") {
+                            return "Product Sale";
+                          }
+                          // Fallback: show all types
+                          const types = Array.isArray(project.projectType)
+                            ? project.projectType
+                            : [project.projectType];
+                          return types
+                            .map((t) => {
+                              switch (t) {
+                                case "product_sale":
+                                  return "Product Sale";
+                                case "dev_collaboration":
+                                  return "Dev Collaboration";
+                                default:
+                                  return String(t);
+                              }
+                            })
+                            .join(", ");
+                        })()}
                       </span>
                     </div>
-                    {project.ideaSaleData?.askingPrice && (
+                    {payToView && project.payToViewAmount > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Asking Price</span>
+                        <span className="text-gray-400">Viewing Fee</span>
                         <span className="text-white font-medium">
-                          ${project.ideaSaleData.askingPrice}
+                          ${project.payToViewAmount.toFixed(2)}
                         </span>
                       </div>
                     )}
-                    {project.productSaleData?.askingPrice && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Asking Price</span>
-                        <span className="text-white font-medium">
-                          ${project.productSaleData.askingPrice}
-                        </span>
-                      </div>
-                    )}
-                    {project.creatorCollaborationData?.budget && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Budget</span>
-                        <span className="text-white font-medium">
-                          ${project.creatorCollaborationData.budget}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const currentPaymentType = getPaymentType();
+                      // Only show asking price for project_purchase
+                      if (
+                        currentPaymentType === "project_purchase" &&
+                        !payToView &&
+                        "productSaleData" in project &&
+                        project.productSaleData?.askingPrice
+                      ) {
+                        return (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Asking Price</span>
+                            <span className="text-white font-medium">
+                              ${project.productSaleData.askingPrice}
+                            </span>
+                          </div>
+                        );
+                      }
+                      // Only show budget for collaboration_budget
+                      if (
+                        currentPaymentType === "collaboration_budget" &&
+                        "creatorCollaborationData" in project &&
+                        project.creatorCollaborationData?.budget
+                      ) {
+                        return (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Budget</span>
+                            <span className="text-white font-medium">
+                              ${project.creatorCollaborationData.budget}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </>
                 ) : selectedPlan ? (
                   <>

@@ -34,40 +34,25 @@ interface ProjectUploadFormProps {
 interface ProjectFormData {
   title: string;
   shortDescription: string;
-  projectType: "idea_sale" | "product_sale" | "dev_collaboration";
   status?: "draft" | "published"; // Add status field
   banner?: File | null;
   bannerPreviewUrl?: string; // For preview display
   bannerFileKey?: string; // For storage
+  gameGenre?: string; // Common field for all packages
+  targetPlatform?: string; // Common field for all packages
+  tags?: string[]; // Common field for all packages
   attachments?: {
     file: File;
     previewUrl: string;
     fileKey: string;
     type: "image" | "video";
   }[];
-  ideaSaleData?: {
-    description: string;
-    askingPrice: number;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
-  };
   productSaleData?: {
-    description: string;
-    codeFolderPath: string;
     askingPrice: number;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
   };
   creatorCollaborationData?: {
-    description: string;
     proposal: string;
-    budget: number;
     timeline: string;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
     skills?: string[];
   };
 }
@@ -83,8 +68,14 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
 }) => {
   const [files, setFiles] = useState<File[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showPackageModal, setShowPackageModal] = useState(false);
   const [modalType, setModalType] = useState<"publish" | "draft">("publish");
   const [showToast, setShowToast] = useState(false);
+  const [selectedPackages, setSelectedPackages] = useState<{
+    productSale?: { selected: boolean; price: number };
+    collaboration?: { selected: boolean; price: number };
+  }>({});
+  const [payToViewAmount, setPayToViewAmount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
   const [uploadedFiles, setUploadedFiles] = useState<
@@ -96,10 +87,35 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
   const [bannerUploadProgress, setBannerUploadProgress] = useState(0);
   const [attachmentsUploading, setAttachmentsUploading] = useState(false);
   const [attachmentsUploadProgress, setAttachmentsUploadProgress] = useState(0);
+  const [hasSetCollaboration, setHasSetCollaboration] = useState(false);
+  const [showCollaborationFields, setShowCollaborationFields] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{
+    title?: boolean;
+    shortDescription?: boolean;
+    proposal?: boolean;
+    timeline?: boolean;
+    budget?: boolean;
+  }>({});
 
   const { uploadFile, uploading, uploadProgress, cancelUpload } =
     useFileUpload();
   const { createProject, creating } = useProjectCreation();
+
+  // Helper function to convert File to data URL (base64) for persistent preview
+  const fileToDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          resolve(e.target.result as string);
+        } else {
+          reject(new Error("Failed to read file"));
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
 
   // Helper function to convert HTML content to a ZIP file
   const createHtmlZipFile = async (
@@ -120,18 +136,13 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
   const [formData, setFormData] = useState<ProjectFormData>({
     title: "",
     shortDescription: "",
-    projectType: "idea_sale",
     banner: null,
     bannerPreviewUrl: "",
     bannerFileKey: "",
+    gameGenre: "",
+    targetPlatform: "PC",
+    tags: [],
     attachments: [],
-    ideaSaleData: {
-      description: "",
-      askingPrice: 0,
-      gameGenre: "",
-      targetPlatform: "PC",
-      tags: [],
-    },
   });
 
   // Handle pre-uploaded file - only run once
@@ -253,18 +264,60 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
 
   const handleCloseModal = () => {
     setShowModal(false);
+    setShowPackageModal(false);
     setFormData({
       title: "",
       shortDescription: "",
-      projectType: "idea_sale",
-      ideaSaleData: {
-        description: "",
-        askingPrice: 0,
-        gameGenre: "",
-        targetPlatform: "PC",
-        tags: [],
-      },
+      gameGenre: "",
+      targetPlatform: "PC",
+      tags: [],
     });
+    setSelectedPackages({});
+    setPayToViewAmount(0);
+    setHasSetCollaboration(false);
+    setShowCollaborationFields(false);
+    setValidationErrors({});
+  };
+
+  const handleNextToPackages = () => {
+    const errors: typeof validationErrors = {};
+    let hasError = false;
+
+    // Validate required fields
+    if (!formData.title.trim()) {
+      errors.title = true;
+      hasError = true;
+    }
+
+    if (!formData.shortDescription.trim()) {
+      errors.shortDescription = true;
+      hasError = true;
+    }
+
+    // Validate collaboration fields if collaboration is set
+    if (showCollaborationFields && hasSetCollaboration) {
+      if (!formData.creatorCollaborationData?.proposal?.trim()) {
+        errors.proposal = true;
+        hasError = true;
+      }
+
+      if (!formData.creatorCollaborationData?.timeline?.trim()) {
+        errors.timeline = true;
+        hasError = true;
+      }
+    }
+
+    if (hasError) {
+      setValidationErrors(errors);
+      showToastMessage("Please fill in all required fields", "error");
+      return;
+    }
+
+    // Clear errors and proceed
+    setValidationErrors({});
+    // Close first modal and open package selection modal
+    setShowModal(false);
+    setShowPackageModal(true);
   };
 
   const handleFormChange = (field: string, value: any) => {
@@ -300,8 +353,14 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
       return;
     }
 
-    // Create preview URL from file immediately
-    const previewUrl = URL.createObjectURL(file);
+    // Convert file to data URL for persistent preview
+    let previewUrl: string;
+    try {
+      previewUrl = await fileToDataURL(file);
+    } catch (error) {
+      showToastMessage("Failed to create preview", "error");
+      return;
+    }
 
     // Update form data with banner file and preview URL
     setFormData((prev) => ({
@@ -324,7 +383,6 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
           bannerPreviewUrl: "",
           bannerFileKey: "",
         }));
-        URL.revokeObjectURL(previewUrl);
         return;
       }
 
@@ -345,7 +403,6 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
         bannerPreviewUrl: "",
         bannerFileKey: "",
       }));
-      URL.revokeObjectURL(previewUrl);
     } finally {
       setBannerUploading(false);
       setBannerUploadProgress(0);
@@ -353,14 +410,6 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
   };
 
   const handleBannerRemove = () => {
-    // Revoke the object URL to free memory
-    if (
-      formData.bannerPreviewUrl &&
-      formData.bannerPreviewUrl.startsWith("blob:")
-    ) {
-      URL.revokeObjectURL(formData.bannerPreviewUrl);
-    }
-
     setFormData((prev) => ({
       ...prev,
       banner: null,
@@ -397,8 +446,8 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
           );
         }
 
-        // Create preview URL from file immediately
-        const previewUrl = URL.createObjectURL(file);
+        // Convert file to data URL for persistent preview
+        const previewUrl = await fileToDataURL(file);
 
         // Add to form data immediately with preview
         const attachment = {
@@ -452,51 +501,70 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
   };
 
   const handleAttachmentRemove = (index: number) => {
-    const attachment = formData.attachments?.[index];
-    if (attachment && attachment.previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(attachment.previewUrl);
-    }
-
     setFormData((prev) => ({
       ...prev,
       attachments: prev.attachments?.filter((_, i) => i !== index) || [],
     }));
   };
 
-  // Cleanup object URLs on component unmount
-  useEffect(() => {
-    return () => {
-      if (
-        formData.bannerPreviewUrl &&
-        formData.bannerPreviewUrl.startsWith("blob:")
-      ) {
-        URL.revokeObjectURL(formData.bannerPreviewUrl);
-      }
+  // No need to cleanup data URLs as they are base64 strings and don't need to be revoked
 
-      // Cleanup attachments URLs
-      formData.attachments?.forEach((attachment) => {
-        if (attachment.previewUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(attachment.previewUrl);
-        }
-      });
-    };
-  }, [formData.bannerPreviewUrl, formData.attachments]);
+  const handlePackageToggle = (
+    packageType: "productSale" | "collaboration"
+  ) => {
+    setSelectedPackages((prev) => {
+      const current = prev[packageType];
+      const isSelected = current?.selected || false;
+
+      return {
+        ...prev,
+        [packageType]: {
+          selected: !isSelected,
+          price: current?.price || 0,
+        },
+      };
+    });
+  };
+
+  const handlePackagePriceChange = (
+    packageType: "productSale" | "collaboration",
+    price: number
+  ) => {
+    setSelectedPackages((prev) => ({
+      ...prev,
+      [packageType]: {
+        selected: prev[packageType]?.selected || false,
+        price,
+      },
+    }));
+  };
 
   const handleSubmit = async () => {
-    if (!formData.title.trim()) {
-      showToastMessage("Please enter a project title", "error");
+    // Check if at least one package is selected
+    const selectedCount = Object.values(selectedPackages).filter(
+      (pkg) => pkg?.selected
+    ).length;
+
+    if (selectedCount === 0) {
+      showToastMessage("Please select at least one package", "error");
       return;
     }
 
-    if (!formData.shortDescription.trim()) {
-      showToastMessage("Please enter a short description", "error");
+    // Check if all selected packages have valid prices
+    const hasInvalidPrice = Object.values(selectedPackages).some(
+      (pkg) => pkg?.selected && (!pkg.price || pkg.price <= 0)
+    );
+
+    if (hasInvalidPrice) {
+      showToastMessage(
+        "Please set a valid price for all selected packages",
+        "error"
+      );
       return;
     }
 
     try {
       // Automatically extract fileKeys and fileUrls from uploaded files
-      // fileKeys = fileKey từ presigned-url response
-      // fileUrls = uploadUrl từ presigned-url response
       const fileKeys = uploadedFiles.map((file) => file.fileKey);
       const fileUrls = uploadedFiles.map((file) => file.uploadUrl);
 
@@ -509,17 +577,54 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
           ?.map((attachment) => attachment.fileKey)
           .filter((fileKey) => fileKey) || [];
 
-      const projectData = {
-        ...formData,
+      // Determine project type array based on selected packages
+      const projectTypes: ("product_sale" | "dev_collaboration")[] = [];
+      if (selectedPackages.productSale?.selected) {
+        projectTypes.push("product_sale");
+      }
+      if (selectedPackages.collaboration?.selected) {
+        projectTypes.push("dev_collaboration");
+      }
+
+      // Prepare project data based on selected packages
+      const projectData: any = {
+        title: formData.title,
+        shortDescription: formData.shortDescription,
+        projectType: projectTypes,
+        repoFormat: "html", // Default to html, can be made configurable later
         status: (modalType === "publish" ? "published" : "draft") as
           | "draft"
-          | "published", // Set status based on modal type
+          | "published",
+        payToViewAmount: payToViewAmount,
         fileKeys: fileKeys.length > 0 ? fileKeys : undefined,
         fileUrls: fileUrls.length > 0 ? fileUrls : undefined,
         thumbnail: thumbnail,
         attachments:
           attachmentFileKeys.length > 0 ? attachmentFileKeys : undefined,
       };
+
+      // Add package-specific data only if package is selected
+      if (selectedPackages.productSale?.selected) {
+        projectData.productSaleData = {
+          askingPrice: selectedPackages.productSale.price,
+          gameGenre: formData.gameGenre || "",
+          targetPlatform: formData.targetPlatform || "PC",
+          tags: formData.tags || [],
+        };
+      }
+
+      // Add collaboration data only if collaboration package is selected
+      if (selectedPackages.collaboration?.selected) {
+        projectData.creatorCollaborationData = {
+          proposal: formData.creatorCollaborationData?.proposal || "",
+          budget: selectedPackages.collaboration.price,
+          timeline: formData.creatorCollaborationData?.timeline || "",
+          skills: formData.creatorCollaborationData?.skills || [],
+          gameGenre: formData.gameGenre || "",
+          targetPlatform: formData.targetPlatform || "PC",
+          tags: formData.tags || [],
+        };
+      }
 
       const result = await createProject(projectData);
 
@@ -531,6 +636,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
 
         showToastMessage(message, "success");
         setShowModal(false);
+        setShowPackageModal(false);
 
         setTimeout(() => {
           if (onSuccess && result.projectId) {
@@ -545,198 +651,6 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
     } catch (error) {
       console.error("Error creating project:", error);
       showToastMessage("Failed to create project. Please try again.", "error");
-    }
-  };
-
-  const renderProjectTypeForm = () => {
-    switch (formData.projectType) {
-      case "idea_sale":
-        return (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Idea Description *
-              </label>
-              <textarea
-                value={formData.ideaSaleData?.description || ""}
-                onChange={(e) =>
-                  handleFormChange("ideaSaleData.description", e.target.value)
-                }
-                rows={4}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                placeholder="Describe your game idea in detail"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Asking Price ($) *
-              </label>
-              <input
-                type="number"
-                value={formData.ideaSaleData?.askingPrice || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "ideaSaleData.askingPrice",
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                required
-              />
-            </div>
-          </>
-        );
-
-      case "product_sale":
-        return (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Product Description *
-              </label>
-              <textarea
-                value={formData.productSaleData?.description || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "productSaleData.description",
-                    e.target.value
-                  )
-                }
-                rows={4}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                placeholder="Describe your game product"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Code Folder Path *
-              </label>
-              <input
-                type="text"
-                value={formData.productSaleData?.codeFolderPath || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "productSaleData.codeFolderPath",
-                    e.target.value
-                  )
-                }
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="/path/to/code"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Asking Price ($) *
-              </label>
-              <input
-                type="number"
-                value={formData.productSaleData?.askingPrice || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "productSaleData.askingPrice",
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                required
-              />
-            </div>
-          </>
-        );
-
-      case "dev_collaboration":
-        return (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Collaboration Description *
-              </label>
-              <textarea
-                value={formData.creatorCollaborationData?.description || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "creatorCollaborationData.description",
-                    e.target.value
-                  )
-                }
-                rows={3}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                placeholder="Describe the collaboration opportunity"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Proposal *
-              </label>
-              <textarea
-                value={formData.creatorCollaborationData?.proposal || ""}
-                onChange={(e) =>
-                  handleFormChange(
-                    "creatorCollaborationData.proposal",
-                    e.target.value
-                  )
-                }
-                rows={4}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                placeholder="Describe your proposal for collaboration"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Budget ($) *
-                </label>
-                <input
-                  type="number"
-                  value={formData.creatorCollaborationData?.budget || ""}
-                  onChange={(e) =>
-                    handleFormChange(
-                      "creatorCollaborationData.budget",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Timeline *
-                </label>
-                <input
-                  type="text"
-                  value={formData.creatorCollaborationData?.timeline || ""}
-                  onChange={(e) =>
-                    handleFormChange(
-                      "creatorCollaborationData.timeline",
-                      e.target.value
-                    )
-                  }
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="e.g., 3 months, 6 weeks"
-                  required
-                />
-              </div>
-            </div>
-          </>
-        );
-
-      default:
-        return null;
     }
   };
 
@@ -1000,8 +914,20 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                   <input
                     type="text"
                     value={formData.title}
-                    onChange={(e) => handleFormChange("title", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    onChange={(e) => {
+                      handleFormChange("title", e.target.value);
+                      if (validationErrors.title) {
+                        setValidationErrors((prev) => ({
+                          ...prev,
+                          title: false,
+                        }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                      validationErrors.title
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                        : "border-gray-600"
+                    }`}
                     placeholder="Enter project title"
                     required
                   />
@@ -1013,11 +939,21 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                   </label>
                   <textarea
                     value={formData.shortDescription}
-                    onChange={(e) =>
-                      handleFormChange("shortDescription", e.target.value)
-                    }
+                    onChange={(e) => {
+                      handleFormChange("shortDescription", e.target.value);
+                      if (validationErrors.shortDescription) {
+                        setValidationErrors((prev) => ({
+                          ...prev,
+                          shortDescription: false,
+                        }));
+                      }
+                    }}
                     rows={3}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none ${
+                      validationErrors.shortDescription
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                        : "border-gray-600"
+                    }`}
                     placeholder="Brief description of your project"
                     required
                   />
@@ -1189,104 +1125,154 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Project Type *
-                  </label>
-                  <select
-                    value={formData.projectType}
-                    onChange={(e) => {
-                      const newType = e.target.value as
-                        | "idea_sale"
-                        | "product_sale"
-                        | "dev_collaboration";
-                      handleFormChange("projectType", newType);
-                      // Reset project type specific data
-                      if (newType === "idea_sale") {
-                        setFormData((prev) => ({
-                          ...prev,
-                          projectType: newType,
-                          ideaSaleData: {
-                            description: "",
-                            askingPrice: 0,
-                            gameGenre: "",
-                            targetPlatform: "PC",
-                            tags: [],
-                          },
-                          productSaleData: undefined,
-                          creatorCollaborationData: undefined,
-                        }));
-                      } else if (newType === "product_sale") {
-                        setFormData((prev) => ({
-                          ...prev,
-                          projectType: newType,
-                          productSaleData: {
-                            description: "",
-                            codeFolderPath: "",
-                            askingPrice: 0,
-                            gameGenre: "",
-                            targetPlatform: "PC",
-                            tags: [],
-                          },
-                          ideaSaleData: undefined,
-                          creatorCollaborationData: undefined,
-                        }));
-                      } else if (newType === "dev_collaboration") {
-                        setFormData((prev) => ({
-                          ...prev,
-                          projectType: newType,
-                          creatorCollaborationData: {
-                            description: "",
-                            proposal: "",
-                            budget: 0,
-                            timeline: "",
-                            gameGenre: "",
-                            targetPlatform: "PC",
-                            tags: [],
-                            skills: [],
-                          },
-                          ideaSaleData: undefined,
-                          productSaleData: undefined,
-                        }));
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="idea_sale">Idea Sale</option>
-                    <option value="product_sale">Product Sale</option>
-                    <option value="dev_collaboration">
-                      Development Collaboration
-                    </option>
-                  </select>
+                {/* Collaboration Section */}
+                <div className="border-t border-gray-600 pt-4 mt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">
+                      Collaboration Information
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newState = !showCollaborationFields;
+                        setShowCollaborationFields(newState);
+                        if (newState) {
+                          setHasSetCollaboration(true);
+                        } else {
+                          setHasSetCollaboration(false);
+                          // Clear collaboration data when toggled off
+                          setFormData((prev) => ({
+                            ...prev,
+                            creatorCollaborationData: {
+                              ...prev.creatorCollaborationData,
+                              proposal: "",
+                              timeline: "",
+                              skills: [],
+                            } as any,
+                          }));
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        showCollaborationFields
+                          ? "bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/50"
+                          : "bg-gray-600 hover:bg-gray-500 text-white"
+                      }`}
+                    >
+                      {showCollaborationFields ? (
+                        <span className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Collaboration Active</span>
+                        </span>
+                      ) : (
+                        "Set Collaboration"
+                      )}
+                    </button>
+                  </div>
+
+                  {showCollaborationFields && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Proposal *
+                        </label>
+                        <textarea
+                          value={
+                            formData.creatorCollaborationData?.proposal || ""
+                          }
+                          onChange={(e) => {
+                            handleFormChange(
+                              "creatorCollaborationData.proposal",
+                              e.target.value
+                            );
+                            if (validationErrors.proposal) {
+                              setValidationErrors((prev) => ({
+                                ...prev,
+                                proposal: false,
+                              }));
+                            }
+                          }}
+                          rows={4}
+                          className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none ${
+                            validationErrors.proposal
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : "border-gray-600"
+                          }`}
+                          placeholder="Describe your collaboration proposal..."
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Timeline *
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            formData.creatorCollaborationData?.timeline || ""
+                          }
+                          onChange={(e) => {
+                            handleFormChange(
+                              "creatorCollaborationData.timeline",
+                              e.target.value
+                            );
+                            if (validationErrors.timeline) {
+                              setValidationErrors((prev) => ({
+                                ...prev,
+                                timeline: false,
+                              }));
+                            }
+                          }}
+                          className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                            validationErrors.timeline
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : "border-gray-600"
+                          }`}
+                          placeholder="e.g., 3 months, 6 months"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Required Skills (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            formData.creatorCollaborationData?.skills?.join(
+                              ", "
+                            ) || ""
+                          }
+                          onChange={(e) => {
+                            const skills = e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter((s) => s.length > 0);
+                            setFormData((prev) => ({
+                              ...prev,
+                              creatorCollaborationData: {
+                                ...prev.creatorCollaborationData,
+                                skills: skills,
+                              } as any,
+                            }));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="e.g., Unity, C#, Game Design"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Common fields for all project types */}
+                {/* Common fields */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Game Genre
                     </label>
                     <select
-                      value={
-                        formData.ideaSaleData?.gameGenre ||
-                        formData.productSaleData?.gameGenre ||
-                        formData.creatorCollaborationData?.gameGenre ||
-                        ""
-                      }
+                      value={formData.gameGenre || ""}
                       onChange={(e) => {
-                        const genre = e.target.value;
-                        if (formData.projectType === "idea_sale") {
-                          handleFormChange("ideaSaleData.gameGenre", genre);
-                        } else if (formData.projectType === "product_sale") {
-                          handleFormChange("productSaleData.gameGenre", genre);
-                        } else if (
-                          formData.projectType === "dev_collaboration"
-                        ) {
-                          handleFormChange(
-                            "creatorCollaborationData.gameGenre",
-                            genre
-                          );
-                        }
+                        handleFormChange("gameGenre", e.target.value);
                       }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     >
@@ -1308,32 +1294,9 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                       Target Platform
                     </label>
                     <select
-                      value={
-                        formData.ideaSaleData?.targetPlatform ||
-                        formData.productSaleData?.targetPlatform ||
-                        formData.creatorCollaborationData?.targetPlatform ||
-                        "PC"
-                      }
+                      value={formData.targetPlatform || "PC"}
                       onChange={(e) => {
-                        const platform = e.target.value;
-                        if (formData.projectType === "idea_sale") {
-                          handleFormChange(
-                            "ideaSaleData.targetPlatform",
-                            platform
-                          );
-                        } else if (formData.projectType === "product_sale") {
-                          handleFormChange(
-                            "productSaleData.targetPlatform",
-                            platform
-                          );
-                        } else if (
-                          formData.projectType === "dev_collaboration"
-                        ) {
-                          handleFormChange(
-                            "creatorCollaborationData.targetPlatform",
-                            platform
-                          );
-                        }
+                        handleFormChange("targetPlatform", e.target.value);
                       }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     >
@@ -1346,9 +1309,27 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                     </select>
                   </div>
                 </div>
-
-                {/* Project type specific fields */}
-                {renderProjectTypeForm()}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Tags (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.tags?.join(", ") || ""}
+                    onChange={(e) => {
+                      const tags = e.target.value
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter((t) => t.length > 0);
+                      setFormData((prev) => ({
+                        ...prev,
+                        tags: tags,
+                      }));
+                    }}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g., action, multiplayer, indie"
+                  />
+                </div>
               </form>
 
               {/* Divider */}
@@ -1363,12 +1344,306 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={handleSubmit}
+                  onClick={handleNextToPackages}
                   disabled={
                     creating ||
                     !formData.title.trim() ||
                     !formData.shortDescription.trim()
                   }
+                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Package Selection Modal */}
+      {showPackageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center space-x-3">
+                  <Globe className="w-6 h-6 text-indigo-400" />
+                  <h2 className="text-xl font-bold text-white">
+                    Select Packages
+                  </h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPackageModal(false);
+                    setShowModal(true);
+                    // Show collaboration fields if collaboration was set
+                    if (hasSetCollaboration) {
+                      setShowCollaborationFields(true);
+                    }
+                  }}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <p className="text-gray-400 mb-6">
+                Choose the packages you want to offer to publishers. Select at
+                least one package and set its price.
+              </p>
+
+              {!hasSetCollaboration && (
+                <div className="mb-6 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
+                  <p className="text-yellow-400 text-sm">
+                    <strong>Note:</strong> To select the Collaboration package,
+                    you must set collaboration information in the previous step.
+                    Please go back and click "Set Collaboration" button.
+                  </p>
+                </div>
+              )}
+
+              {/* Pay to View Amount */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Pay to View Amount ($) *
+                </label>
+                <p className="text-xs text-gray-400 mb-2">
+                  Set the amount users must pay to view this project
+                </p>
+                <input
+                  type="number"
+                  value={payToViewAmount}
+                  onChange={(e) =>
+                    setPayToViewAmount(parseFloat(e.target.value) || 0)
+                  }
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Product Sale Package */}
+                <div
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all flex flex-col ${
+                    selectedPackages.productSale?.selected
+                      ? "border-indigo-500 bg-indigo-500/10"
+                      : "border-gray-600 hover:border-gray-500"
+                  }`}
+                  onClick={() => handlePackageToggle("productSale")}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col items-center text-center flex-1">
+                      <div
+                        className={`w-16 h-16 rounded-lg flex items-center justify-center mb-3 ${
+                          selectedPackages.productSale?.selected
+                            ? "bg-indigo-600"
+                            : "bg-green-600"
+                        }`}
+                      >
+                        <CheckCircle className="w-8 h-8 text-white" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-1">
+                        Product Sale
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        Sell your completed game product
+                      </p>
+                    </div>
+                    <div
+                      className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        selectedPackages.productSale?.selected
+                          ? "bg-indigo-600 border-indigo-600"
+                          : "border-gray-500"
+                      }`}
+                    >
+                      {selectedPackages.productSale?.selected && (
+                        <CheckCircle className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  {selectedPackages.productSale?.selected &&
+                    selectedPackages.productSale.price > 0 && (
+                      <div className="text-center mb-3">
+                        <div className="text-xl font-bold text-green-400">
+                          ${selectedPackages.productSale.price.toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                  <div
+                    className={`mt-auto pt-4 border-t border-gray-600 ${
+                      selectedPackages.productSale?.selected
+                        ? "block"
+                        : "hidden"
+                    }`}
+                  >
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Price ($) *
+                    </label>
+                    <input
+                      type="number"
+                      value={selectedPackages.productSale?.price || ""}
+                      onChange={(e) =>
+                        handlePackagePriceChange(
+                          "productSale",
+                          parseFloat(e.target.value) || 0
+                        )
+                      }
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  {/* Hidden input to maintain layout when not selected */}
+                  <div
+                    className={`mt-auto pt-4 border-t border-gray-600 ${
+                      selectedPackages.productSale?.selected
+                        ? "hidden"
+                        : "invisible"
+                    }`}
+                  >
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Price ($) *
+                    </label>
+                    <input
+                      type="number"
+                      disabled
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                {/* Collaboration Package */}
+                <div
+                  className={`border-2 rounded-lg p-4 transition-all flex flex-col ${
+                    !hasSetCollaboration
+                      ? "border-gray-700 bg-gray-800/50 opacity-50 cursor-not-allowed"
+                      : selectedPackages.collaboration?.selected
+                      ? "border-indigo-500 bg-indigo-500/10 cursor-pointer"
+                      : "border-gray-600 hover:border-gray-500 cursor-pointer"
+                  }`}
+                  onClick={() => {
+                    if (hasSetCollaboration) {
+                      handlePackageToggle("collaboration");
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col items-center text-center flex-1">
+                      <div
+                        className={`w-16 h-16 rounded-lg flex items-center justify-center mb-3 ${
+                          selectedPackages.collaboration?.selected
+                            ? "bg-indigo-600"
+                            : "bg-blue-600"
+                        }`}
+                      >
+                        <Globe className="w-8 h-8 text-white" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-1">
+                        Collaboration
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        Collaborate with publishers on development
+                      </p>
+                      {!hasSetCollaboration && (
+                        <p className="text-xs text-yellow-400 mt-1">
+                          Set collaboration info first
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        selectedPackages.collaboration?.selected
+                          ? "bg-indigo-600 border-indigo-600"
+                          : "border-gray-500"
+                      }`}
+                    >
+                      {selectedPackages.collaboration?.selected && (
+                        <CheckCircle className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  {selectedPackages.collaboration?.selected &&
+                    selectedPackages.collaboration.price > 0 && (
+                      <div className="text-center mb-3">
+                        <div className="text-xl font-bold text-blue-400">
+                          ${selectedPackages.collaboration.price.toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                  <div
+                    className={`mt-auto pt-4 border-t border-gray-600 ${
+                      selectedPackages.collaboration?.selected
+                        ? "block"
+                        : "hidden"
+                    }`}
+                  >
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Budget ($) *
+                    </label>
+                    <input
+                      type="number"
+                      value={selectedPackages.collaboration?.price || ""}
+                      onChange={(e) =>
+                        handlePackagePriceChange(
+                          "collaboration",
+                          parseFloat(e.target.value) || 0
+                        )
+                      }
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      disabled={!hasSetCollaboration}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  {/* Hidden input to maintain layout when not selected */}
+                  <div
+                    className={`mt-auto pt-4 border-t border-gray-600 ${
+                      selectedPackages.collaboration?.selected
+                        ? "hidden"
+                        : "invisible"
+                    }`}
+                  >
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Budget ($) *
+                    </label>
+                    <input
+                      type="number"
+                      disabled
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-600 mt-8 mb-8"></div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowPackageModal(false);
+                    setShowModal(true);
+                    // Show collaboration fields if collaboration was set
+                    if (hasSetCollaboration) {
+                      setShowCollaborationFields(true);
+                    }
+                  }}
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={creating}
                   className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
                   {creating ? (

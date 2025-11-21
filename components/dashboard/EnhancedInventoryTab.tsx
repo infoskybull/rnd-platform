@@ -195,17 +195,20 @@ const EnhancedInventoryTab: React.FC = () => {
   };
 
   // Get project type label
-  const getProjectTypeLabel = (type: string) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: string | string[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product Sale";
+          case "dev_collaboration":
+            return "Dev Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   // Get status color
@@ -225,7 +228,6 @@ const EnhancedInventoryTab: React.FC = () => {
   // Get price from project data
   const getProjectPrice = (item: InventoryItem) => {
     return (
-      item.ideaSaleData?.askingPrice ||
       item.productSaleData?.askingPrice ||
       item.creatorCollaborationData?.budget ||
       0
@@ -287,12 +289,10 @@ const EnhancedInventoryTab: React.FC = () => {
               </div>
             </div>
 
-            {(item.ideaSaleData?.tags ||
-              item.productSaleData?.tags ||
+            {(item.productSaleData?.tags ||
               item.creatorCollaborationData?.tags) && (
               <div className="flex flex-wrap gap-1 mb-3">
                 {(
-                  item.ideaSaleData?.tags ||
                   item.productSaleData?.tags ||
                   item.creatorCollaborationData?.tags ||
                   []
@@ -533,12 +533,10 @@ const EnhancedInventoryTab: React.FC = () => {
         </div>
 
         {/* Tags if available */}
-        {(item.project.ideaSaleData?.tags ||
-          item.project.productSaleData?.tags ||
+        {(item.project.productSaleData?.tags ||
           item.project.creatorCollaborationData?.tags) && (
           <div className="flex flex-wrap gap-1">
             {(
-              item.project.ideaSaleData?.tags ||
               item.project.productSaleData?.tags ||
               item.project.creatorCollaborationData?.tags ||
               []
@@ -554,7 +552,6 @@ const EnhancedInventoryTab: React.FC = () => {
                 </span>
               ))}
             {(
-              item.project.ideaSaleData?.tags ||
               item.project.productSaleData?.tags ||
               item.project.creatorCollaborationData?.tags ||
               []
@@ -562,7 +559,6 @@ const EnhancedInventoryTab: React.FC = () => {
               <span className="px-2 py-1 bg-gray-600/20 text-gray-400 rounded-full text-xs">
                 +
                 {(
-                  item.project.ideaSaleData?.tags ||
                   item.project.productSaleData?.tags ||
                   item.project.creatorCollaborationData?.tags ||
                   []
@@ -800,7 +796,6 @@ const EnhancedInventoryTab: React.FC = () => {
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             >
               <option value="">All Types</option>
-              <option value="idea_sale">Idea Sale</option>
               <option value="product_sale">Product Sale</option>
               <option value="dev_collaboration">Dev Collaboration</option>
             </select>

@@ -61,17 +61,20 @@ const PurchaseInventoryDemo: React.FC = () => {
     }).format(price);
   };
 
-  const getProjectTypeLabel = (type: string) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: string | string[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product Sale";
+          case "dev_collaboration":
+            return "Dev Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   return (
@@ -167,11 +170,6 @@ const PurchaseInventoryDemo: React.FC = () => {
                         </span>
                       </div>
 
-                      {project.ideaSaleData?.askingPrice && (
-                        <div className="text-lg font-bold text-green-400 mb-3">
-                          {formatPrice(project.ideaSaleData.askingPrice)}
-                        </div>
-                      )}
 
                       {project.productSaleData?.askingPrice && (
                         <div className="text-lg font-bold text-blue-400 mb-3">

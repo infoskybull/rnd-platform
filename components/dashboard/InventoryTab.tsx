@@ -90,17 +90,20 @@ const InventoryTab: React.FC = () => {
     }).format(price);
   };
 
-  const getProjectTypeLabel = (type: string) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: string | string[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product Sale";
+          case "dev_collaboration":
+            return "Dev Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   const getStatusColor = (status: string) => {
@@ -187,14 +190,6 @@ const InventoryTab: React.FC = () => {
                 </span>
               </div>
             )}
-            {project.ideaSaleData?.askingPrice && (
-              <div className="flex items-center gap-1">
-                <DollarSign className="h-4 w-4" />
-                <span className="text-green-400 font-medium">
-                  {formatPrice(project.ideaSaleData.askingPrice)}
-                </span>
-              </div>
-            )}
             {project.productSaleData?.askingPrice && (
               <div className="flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
@@ -259,11 +254,6 @@ const InventoryTab: React.FC = () => {
                 {project.originalDeveloper.lastName}
               </span>
             )}
-            {project.ideaSaleData?.askingPrice && (
-              <span className="text-green-400 font-medium">
-                {formatPrice(project.ideaSaleData.askingPrice)}
-              </span>
-            )}
             {project.productSaleData?.askingPrice && (
               <span className="text-blue-400 font-medium">
                 {formatPrice(project.productSaleData.askingPrice)}
@@ -312,12 +302,6 @@ const InventoryTab: React.FC = () => {
           <div className="text-center">
             <div className="text-2xl mb-2">
               <LightBulbIcon className="w-8 h-8 text-yellow-400" />
-            </div>
-            <h3 className="text-sm font-semibold text-white mb-1">
-              Idea Sales
-            </h3>
-            <div className="text-xl font-bold text-green-400">
-              {stats?.ideaSales || 0}
             </div>
           </div>
         </div>
@@ -390,7 +374,6 @@ const InventoryTab: React.FC = () => {
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             >
               <option value="">All Types</option>
-              <option value="idea_sale">Idea Sale</option>
               <option value="product_sale">Product Sale</option>
               <option value="dev_collaboration">Dev Collaboration</option>
             </select>

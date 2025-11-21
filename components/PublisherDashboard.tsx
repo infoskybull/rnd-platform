@@ -51,17 +51,20 @@ const formatPrice = (price: number) => {
   }).format(price);
 };
 
-const getProjectTypeLabel = (type: ProjectType) => {
-  switch (type) {
-    case "idea_sale":
-      return "Idea Sale";
-    case "product_sale":
-      return "Product Sale";
-    case "dev_collaboration":
-      return "Dev Collaboration";
-    default:
-      return type;
-  }
+const getProjectTypeLabel = (type: ProjectType | ProjectType[]) => {
+  const types = Array.isArray(type) ? type : [type];
+  return types
+    .map((t) => {
+      switch (t) {
+        case "product_sale":
+          return "Product Sale";
+        case "dev_collaboration":
+          return "Dev Collaboration";
+        default:
+          return String(t);
+      }
+    })
+    .join(", ");
 };
 
 const getStatusColor = (status: ProjectStatus) => {
@@ -177,13 +180,14 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
 
     return {
       totalProjects: allProjects.length,
-      ideaSales: allProjects.filter((p) => p.projectType === "idea_sale")
-        .length,
-      productSales: allProjects.filter((p) => p.projectType === "product_sale")
-        .length,
-      collaborations: allProjects.filter(
-        (p) => p.projectType === "dev_collaboration"
-      ).length,
+      productSales: allProjects.filter((p) => {
+        const types = Array.isArray(p.projectType) ? p.projectType : [p.projectType];
+        return types.includes("product_sale");
+      }).length,
+      collaborations: allProjects.filter((p) => {
+        const types = Array.isArray(p.projectType) ? p.projectType : [p.projectType];
+        return types.includes("dev_collaboration");
+      }).length,
     };
   }, [allProjects]);
 
@@ -443,10 +447,33 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
   );
 
   const handleViewProject = useCallback(
-    (projectId: string) => {
-      navigate(`/project-detail/${projectId}`);
+    (project: GameProject) => {
+      // Check if user needs to pay to view
+      if (project) {
+        const isOwner = 
+          user &&
+          (project.creatorId === user.id ||
+            project.owner?.id === user.id ||
+            project.originalDeveloper?.id === user.id);
+
+        // Check if user has already paid to view (user id in viewerIds)
+        const hasPaidToView =
+          user && project.viewerIds && project.viewerIds.includes(user.id);
+
+        // If not owner and payToViewAmount > 0 and user hasn't paid, redirect to payment page
+        if (!isOwner && project.payToViewAmount > 0 && !hasPaidToView) {
+          // If not authenticated, redirect to login first with redirect URL
+          if (!user) {
+            navigate(`/login?redirect=/payment?projectId=${project._id}&payToView=true`);
+            return;
+          }
+          navigate(`/payment?projectId=${project._id}&payToView=true`);
+          return;
+        }
+      }
+      navigate(`/project-detail/${project._id}`);
     },
-    [navigate]
+    [navigate, user]
   );
 
   // GSAP animations for project cards
@@ -540,7 +567,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     <option value="">All Types</option>
-                    <option value="idea_sale">Idea Sale</option>
                     <option value="product_sale">Product Sale</option>
                     <option value="dev_collaboration">Dev Collaboration</option>
                   </select>
@@ -605,12 +631,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     total}
                 </div>
                 <div className="text-sm text-gray-400">Total Projects</div>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
-                <div className="text-2xl font-bold text-green-400">
-                  {stats?.ideaSales || calculatedStats?.ideaSales || 0}
-                </div>
-                <div className="text-sm text-gray-400">Idea Sales</div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-blue-400">
@@ -729,12 +749,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                           </div>
                         </div>
 
-                        {project.ideaSaleData && (
-                          <div className="text-base sm:text-lg font-bold text-green-400">
-                            {formatPrice(project.ideaSaleData.askingPrice)}
-                          </div>
-                        )}
-
                         {project.productSaleData && (
                           <div className="text-base sm:text-lg font-bold text-blue-400">
                             {formatPrice(project.productSaleData.askingPrice)}
@@ -760,16 +774,14 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                           />
                         </div>
 
-                        {(project.ideaSaleData?.gameGenre ||
-                          project.productSaleData?.gameGenre ||
+                        {(project.productSaleData?.gameGenre ||
                           project.creatorCollaborationData?.gameGenre) && (
                           <div className="mt-2">
                             <span className="text-xs text-gray-500">
                               Genre:{" "}
                             </span>
                             <span className="text-xs text-gray-300 truncate block sm:inline">
-                              {project.ideaSaleData?.gameGenre ||
-                                project.productSaleData?.gameGenre ||
+                              {project.productSaleData?.gameGenre ||
                                 project.creatorCollaborationData?.gameGenre}
                             </span>
                           </div>
@@ -1131,64 +1143,29 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                         {selectedProject.status}
                       </span>
                     </div>
-                    {(selectedProject.ideaSaleData?.gameGenre ||
-                      selectedProject.productSaleData?.gameGenre ||
+                    {(selectedProject.productSaleData?.gameGenre ||
                       selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.gameGenre ||
-                            selectedProject.productSaleData?.gameGenre ||
+                          {selectedProject.productSaleData?.gameGenre ||
                             selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
-                    {(selectedProject.ideaSaleData?.targetPlatform ||
-                      selectedProject.productSaleData?.targetPlatform ||
+                    {(selectedProject.productSaleData?.targetPlatform ||
                       selectedProject.creatorCollaborationData
                         ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.targetPlatform ||
-                            selectedProject.productSaleData?.targetPlatform ||
+                          {selectedProject.productSaleData?.targetPlatform ||
                             selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
                       </div>
                     )}
                   </div>
-
-                  {selectedProject.ideaSaleData && (
-                    <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
-                      <h3 className="text-lg font-semibold text-white mb-2">
-                        Idea Sale Details
-                      </h3>
-                      <p className="text-gray-300 mb-2">
-                        {selectedProject.ideaSaleData.description}
-                      </p>
-                      <div className="text-xl font-bold text-green-400 mb-2">
-                        {formatPrice(selectedProject.ideaSaleData.askingPrice)}
-                      </div>
-                      {selectedProject.ideaSaleData.videoUrl && (
-                        <div className="mt-3">
-                          <video
-                            controls
-                            className="w-full h-48 rounded-lg"
-                            poster={
-                              getProjectBanner(selectedProject) || undefined
-                            }
-                          >
-                            <source
-                              src={selectedProject.ideaSaleData.videoUrl}
-                              type="video/mp4"
-                            />
-                            Your browser does not support the video tag.
-                          </video>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {selectedProject.productSaleData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -1285,11 +1262,9 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                     </div>
                   </div>
 
-                  {(selectedProject.ideaSaleData?.tags ||
-                    selectedProject.productSaleData?.tags ||
+                  {(selectedProject.productSaleData?.tags ||
                     selectedProject.creatorCollaborationData?.tags) &&
                     (
-                      selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
                       selectedProject.creatorCollaborationData?.tags ||
                       []
@@ -1300,7 +1275,6 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
                         </h3>
                         <div className="flex flex-wrap gap-2">
                           {(
-                            selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
                             selectedProject.creatorCollaborationData?.tags ||
                             []
@@ -1318,17 +1292,47 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({
 
                   <div className="space-y-3">
                     <button
-                      onClick={() => handleViewProject(selectedProject._id)}
-                      className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                      onClick={() => handleViewProject(selectedProject)}
+                      className={`w-full px-4 py-2 text-white font-medium rounded-lg transition-colors flex items-center justify-center ${
+                        (() => {
+                          const isOwner = 
+                            user &&
+                            (selectedProject.creatorId === user.id ||
+                              selectedProject.owner?.id === user.id ||
+                              selectedProject.originalDeveloper?.id === user.id);
+                          const hasPaidToView =
+                            user && selectedProject.viewerIds && selectedProject.viewerIds.includes(user.id);
+                          const needsPayment = !isOwner && selectedProject.payToViewAmount > 0 && !hasPaidToView;
+                          return needsPayment
+                            ? "bg-green-600 hover:bg-green-700"
+                            : "bg-indigo-600 hover:bg-indigo-700";
+                        })()
+                      }`}
                     >
-                      <EyeIcon className="w-4 h-4 inline mr-1" /> View Project
-                      Details
+                      <EyeIcon className="w-4 h-4 inline mr-1" />{" "}
+                      {(() => {
+                        const isOwner = 
+                          user &&
+                          (selectedProject.creatorId === user.id ||
+                            selectedProject.owner?.id === user.id ||
+                            selectedProject.originalDeveloper?.id === user.id);
+                        const hasPaidToView =
+                          user && selectedProject.viewerIds && selectedProject.viewerIds.includes(user.id);
+                        const needsPayment = !isOwner && selectedProject.payToViewAmount > 0 && !hasPaidToView;
+                        return needsPayment
+                          ? `Pay $${selectedProject.payToViewAmount.toFixed(2)} to View Detail`
+                          : "View Project Details";
+                      })()}
                     </button>
 
                     {selectedProject.status === "published" && (
                       <>
-                        {(selectedProject.projectType === "idea_sale" ||
-                          selectedProject.projectType === "product_sale") && (
+                        {(() => {
+                          const types = Array.isArray(selectedProject.projectType)
+                            ? selectedProject.projectType
+                            : [selectedProject.projectType];
+                          return types.includes("product_sale");
+                        })() && (
                           <PurchaseButton
                             project={selectedProject}
                             size="lg"

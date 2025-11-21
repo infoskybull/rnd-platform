@@ -23,14 +23,11 @@ const PurchaseButton: React.FC<PurchaseButtonProps> = ({
   const navigate = useNavigate();
 
   const handlePurchase = () => {
-    // Navigate to payment page with projectId
-    navigate(`/payment?projectId=${project._id}`);
+    // Navigate to payment page with projectId and paymentType
+    navigate(`/payment?projectId=${project._id}&paymentType=project_purchase`);
   };
 
   const getPrice = () => {
-    if (project.ideaSaleData?.askingPrice) {
-      return project.ideaSaleData.askingPrice;
-    }
     if (project.productSaleData?.askingPrice) {
       return project.productSaleData.askingPrice;
     }
@@ -69,8 +66,12 @@ const PurchaseButton: React.FC<PurchaseButtonProps> = ({
   const price = getPrice();
   const isPurchasable =
     project.status === "published" &&
-    (project.projectType === "idea_sale" ||
-      project.projectType === "product_sale") &&
+    (() => {
+      const types = Array.isArray(project.projectType)
+        ? project.projectType
+        : [project.projectType];
+      return types.includes("product_sale");
+    })() &&
     price !== null;
 
   if (!isPurchasable) {
@@ -91,9 +92,7 @@ const PurchaseButton: React.FC<PurchaseButtonProps> = ({
     >
       <ShoppingCart className={getIconSize()} />
       <span>
-        {showPrice && price
-          ? `Purchase - ${formatPrice(price)}`
-          : "Purchase"}
+        {showPrice && price ? `Purchase - ${formatPrice(price)}` : "Purchase"}
       </span>
     </button>
   );

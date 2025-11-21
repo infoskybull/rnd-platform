@@ -34,7 +34,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
     useState<PurchaseActivity | null>(null);
   const [developerCollaborationProjects, setDeveloperCollaborationProjects] =
     useState<DeveloperCollaborationProjects | null>(null);
-  const [ideaSaleProjects, setIdeaSaleProjects] = useState<any[]>([]);
   const [productSaleProjects, setProductSaleProjects] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -81,7 +80,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
             activities: (purchaseHistoryResponse.projects || []).map((project: any) => {
               // Get price from project data
               const purchasePrice =
-                project.ideaSaleData?.askingPrice ||
                 project.productSaleData?.askingPrice ||
                 project.creatorCollaborationData?.budget ||
                 0;
@@ -155,7 +153,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
           }
         }
       } else {
-        // Fetch collaboration projects, idea sale, and product sale projects for creators
+        // Fetch collaboration projects and product sale projects for creators
         try {
           // Calculate date range based on selected period
           const now = new Date();
@@ -204,17 +202,14 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
             ),
           };
 
-          // Filter idea sale and product sale projects
+          // Filter product sale projects
           const allProjects = myProjectsResponse.projects || [];
-          const ideaSales = allProjects.filter(
-            (p: any) => p.projectType === "idea_sale" && p.status === "sold"
-          );
-          const productSales = allProjects.filter(
-            (p: any) => p.projectType === "product_sale" && p.status === "sold"
-          );
+          const productSales = allProjects.filter((p: any) => {
+            const types = Array.isArray(p.projectType) ? p.projectType : [p.projectType];
+            return types.includes("product_sale") && p.status === "sold";
+          });
 
           setDeveloperCollaborationProjects(mappedCollaborations);
-          setIdeaSaleProjects(ideaSales);
           setProductSaleProjects(productSales);
           
           // Note: totalPages will be calculated in the render function based on combined projects
@@ -236,7 +231,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                 projects: [],
               });
             }
-            setIdeaSaleProjects([]);
             setProductSaleProjects([]);
           } catch (fallbackError) {
             console.error("Fallback API also failed:", fallbackError);
@@ -244,7 +238,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
               totalProjects: 0,
               projects: [],
             });
-            setIdeaSaleProjects([]);
             setProductSaleProjects([]);
           }
         }
@@ -271,7 +264,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
           totalProjects: 0,
           projects: [],
         });
-        setIdeaSaleProjects([]);
         setProductSaleProjects([]);
       }
     } finally {
@@ -414,7 +406,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                   <div className="text-center">
                     <div className="text-xl sm:text-2xl font-bold text-indigo-400">
                       {(developerCollaborationProjects?.totalProjects || 0) + 
-                       (ideaSaleProjects?.length || 0) + 
                        (productSaleProjects?.length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -428,7 +419,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                       {(developerCollaborationProjects?.projects?.filter(
                         (p) => p.status === "active"
                       ).length || 0) + 
-                       (ideaSaleProjects?.filter((p: any) => p.status === "active").length || 0) +
                        (productSaleProjects?.filter((p: any) => p.status === "active").length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -442,7 +432,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                       {(developerCollaborationProjects?.projects?.filter(
                         (p) => p.status === "completed"
                       ).length || 0) + 
-                       (ideaSaleProjects?.filter((p: any) => p.status === "sold" || p.status === "completed").length || 0) +
                        (productSaleProjects?.filter((p: any) => p.status === "sold" || p.status === "completed").length || 0)}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -539,7 +528,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                   </p>
                 </div>
               )
-            ) : // Creator All Projects (Collaboration + Idea Sale + Product Sale)
+            ) : // Creator All Projects (Collaboration + Product Sale)
             (() => {
               // Combine all projects into a unified format
               const allProjects: Array<{
@@ -550,7 +539,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                 amount: number;
                 date: string;
                 status: string;
-                type: 'collaboration' | 'idea_sale' | 'product_sale';
+                type: 'collaboration' | 'product_sale';
                 buyerName?: string;
                 buyerEmail?: string;
               }> = [];
@@ -568,25 +557,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                   type: 'collaboration',
                   buyerName: project.publisherName,
                   buyerEmail: project.publisherEmail,
-                });
-              });
-
-              // Add idea sale projects
-              ideaSaleProjects.forEach((project: any) => {
-                const buyer = project.buyer || project.purchaser || {};
-                allProjects.push({
-                  id: project._id || project.id || '',
-                  projectTitle: project.title || 'Unknown Project',
-                  projectType: 'IDEA_SALE',
-                  projectStatus: project.status || 'sold',
-                  amount: project.ideaSaleData?.askingPrice || project.soldPrice || 0,
-                  date: project.soldAt || project.createdAt || '',
-                  status: project.status === 'sold' ? 'completed' : project.status,
-                  type: 'idea_sale',
-                  buyerName: buyer.firstName && buyer.lastName 
-                    ? `${buyer.firstName} ${buyer.lastName}`.trim()
-                    : buyer.email || 'Unknown Buyer',
-                  buyerEmail: buyer.email,
                 });
               });
 
@@ -628,8 +598,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                       switch (project.type) {
                         case 'collaboration':
                           return '🤝';
-                        case 'idea_sale':
-                          return '💡';
                         case 'product_sale':
                           return '📦';
                         default:
@@ -641,8 +609,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ userRole }) => {
                       switch (project.type) {
                         case 'collaboration':
                           return 'bg-green-500/20';
-                        case 'idea_sale':
-                          return 'bg-yellow-500/20';
                         case 'product_sale':
                           return 'bg-blue-500/20';
                         default:

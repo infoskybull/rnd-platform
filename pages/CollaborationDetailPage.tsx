@@ -998,7 +998,25 @@ const CollaborationDetailPage: React.FC = () => {
                     Type
                   </div>
                   <div className="text-white capitalize text-sm sm:text-base">
-                    {collaboration.project?.projectType?.replace("_", " ")}
+                    {(() => {
+                      const projectType = collaboration.project?.projectType;
+                      if (!projectType) return "N/A";
+                      const types = Array.isArray(projectType)
+                        ? projectType
+                        : [projectType];
+                      return types
+                        .map((t) => {
+                          switch (t) {
+                            case "product_sale":
+                              return "Product Sale";
+                            case "dev_collaboration":
+                              return "Dev Collaboration";
+                            default:
+                              return String(t).replace("_", " ");
+                          }
+                        })
+                        .join(", ");
+                    })()}
                   </div>
                 </div>
                 <div>

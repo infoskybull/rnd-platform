@@ -4,33 +4,32 @@ import { apiService } from "../services/api";
 interface ProjectData {
   title: string;
   shortDescription: string;
-  projectType: "idea_sale" | "product_sale" | "dev_collaboration";
-  status?: "draft" | "published"; // Add status field
-  ideaSaleData?: {
-    description: string;
-    askingPrice: number;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
-  };
+  projectType: ("product_sale" | "dev_collaboration")[]; // Always an array
+  repoFormat: "react" | "webgl" | "html"; // Required per API docs
+  status?: "draft" | "published";
+  payToViewAmount: number; // Required - giá trị từ select package để creator set
   productSaleData?: {
-    description: string;
-    codeFolderPath: string;
+    screenshots?: string[];
+    demoUrl?: string;
     askingPrice: number;
     gameGenre?: string;
     targetPlatform?: string;
     tags?: string[];
+    techStack?: string;
+    isPlayable?: boolean;
   };
   creatorCollaborationData?: {
-    description: string;
     proposal: string;
     budget: number;
     timeline: string;
+    prototypeImages?: string[];
+    videoUrl?: string;
     gameGenre?: string;
     targetPlatform?: string;
     tags?: string[];
     skills?: string[];
   };
+  searchKeywords?: string[]; // Added per API docs
   fileKeys?: string[]; // S3 keys from presigned-url response
   fileUrls?: string[]; // Upload URLs from presigned-url response
   attachments?: string[];
@@ -66,73 +65,67 @@ export const useProjectCreation = () => {
       throw new Error("Short description must be less than 500 characters");
     }
 
-    // Validate project type specific data
-    switch (projectData.projectType) {
-      case "idea_sale":
-        if (!projectData.ideaSaleData) {
-          throw new Error("Idea sale data is required");
-        }
-        if (
-          !projectData.ideaSaleData.description ||
-          projectData.ideaSaleData.description.trim().length === 0
-        ) {
-          throw new Error("Idea description is required");
-        }
-        if (projectData.ideaSaleData.askingPrice <= 0) {
-          throw new Error("Asking price must be greater than 0");
-        }
-        break;
+    // Validate projectType is an array and not empty
+    if (
+      !Array.isArray(projectData.projectType) ||
+      projectData.projectType.length === 0
+    ) {
+      throw new Error("Project type must be a non-empty array");
+    }
 
-      case "product_sale":
-        if (!projectData.productSaleData) {
-          throw new Error("Product sale data is required");
-        }
-        if (
-          !projectData.productSaleData.description ||
-          projectData.productSaleData.description.trim().length === 0
-        ) {
-          throw new Error("Product description is required");
-        }
-        if (
-          !projectData.productSaleData.codeFolderPath ||
-          projectData.productSaleData.codeFolderPath.trim().length === 0
-        ) {
-          throw new Error("Code folder path is required");
-        }
-        if (projectData.productSaleData.askingPrice <= 0) {
-          throw new Error("Asking price must be greater than 0");
-        }
-        break;
+    // Validate each project type in the array
+    const validTypes = ["product_sale", "dev_collaboration"];
+    for (const type of projectData.projectType) {
+      if (!validTypes.includes(type)) {
+        throw new Error(
+          `Invalid project type: ${type}. Must be one of: ${validTypes.join(
+            ", "
+          )}`
+        );
+      }
+    }
 
-      case "dev_collaboration":
-        if (!projectData.creatorCollaborationData) {
-          throw new Error("Development collaboration data is required");
-        }
-        if (
-          !projectData.creatorCollaborationData.description ||
-          projectData.creatorCollaborationData.description.trim().length === 0
-        ) {
-          throw new Error("Collaboration description is required");
-        }
-        if (
-          !projectData.creatorCollaborationData.proposal ||
-          projectData.creatorCollaborationData.proposal.trim().length === 0
-        ) {
-          throw new Error("Collaboration proposal is required");
-        }
-        if (projectData.creatorCollaborationData.budget <= 0) {
-          throw new Error("Budget must be greater than 0");
-        }
-        if (
-          !projectData.creatorCollaborationData.timeline ||
-          projectData.creatorCollaborationData.timeline.trim().length === 0
-        ) {
-          throw new Error("Timeline is required");
-        }
-        break;
+    // Validate payToViewAmount
+    if (
+      typeof projectData.payToViewAmount !== "number" ||
+      projectData.payToViewAmount < 0
+    ) {
+      throw new Error("payToViewAmount must be a number >= 0");
+    }
 
-      default:
-        throw new Error("Invalid project type");
+    // Validate project type specific data based on what's in the array
+    if (projectData.projectType.includes("product_sale")) {
+      if (!projectData.productSaleData) {
+        throw new Error(
+          "Product sale data is required when projectType includes 'product_sale'"
+        );
+      }
+      if (projectData.productSaleData.askingPrice <= 0) {
+        throw new Error("Asking price must be greater than 0");
+      }
+    }
+
+    if (projectData.projectType.includes("dev_collaboration")) {
+      if (!projectData.creatorCollaborationData) {
+        throw new Error(
+          "Development collaboration data is required when projectType includes 'dev_collaboration'"
+        );
+      }
+      if (
+        !projectData.creatorCollaborationData.proposal ||
+        projectData.creatorCollaborationData.proposal.trim().length === 0
+      ) {
+        throw new Error("Collaboration proposal is required");
+      }
+      if (projectData.creatorCollaborationData.budget <= 0) {
+        throw new Error("Budget must be greater than 0");
+      }
+      if (
+        !projectData.creatorCollaborationData.timeline ||
+        projectData.creatorCollaborationData.timeline.trim().length === 0
+      ) {
+        throw new Error("Timeline is required");
+      }
     }
   };
 
@@ -151,20 +144,24 @@ export const useProjectCreation = () => {
         throw new Error("No authentication token found. Please login first.");
       }
 
-      // Prepare the request body
+      // Prepare the request body according to API documentation
       const requestBody = {
         title: projectData.title.trim(),
         shortDescription: projectData.shortDescription.trim(),
-        projectType: projectData.projectType,
+        projectType: projectData.projectType, // Already an array
+        repoFormat: projectData.repoFormat,
         status: projectData.status || "draft", // Default to draft if not specified
-        ...(projectData.ideaSaleData && {
-          ideaSaleData: projectData.ideaSaleData,
-        }),
+        payToViewAmount: projectData.payToViewAmount, // Required - giá trị từ select package
         ...(projectData.productSaleData && {
-          productSaleData: projectData.productSaleData,
+          productSaleData: {
+            ...projectData.productSaleData,
+          },
         }),
         ...(projectData.creatorCollaborationData && {
           creatorCollaborationData: projectData.creatorCollaborationData,
+        }),
+        ...(projectData.searchKeywords && {
+          searchKeywords: projectData.searchKeywords,
         }),
         ...(projectData.fileKeys && { fileKeys: projectData.fileKeys }),
         ...(projectData.fileUrls && { fileUrls: projectData.fileUrls }),
@@ -176,7 +173,8 @@ export const useProjectCreation = () => {
 
       console.log("Creating project with data:", requestBody);
 
-      const result = await apiService.createProjectWithFiles(requestBody);
+      // Use the new createGameProject method that matches API docs
+      const result = await apiService.createGameProject(requestBody);
       console.log("Project created successfully:", result);
 
       return {

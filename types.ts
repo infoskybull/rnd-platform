@@ -89,7 +89,7 @@ export interface AuthState {
 }
 
 // Game Project Types
-export type ProjectType = "idea_sale" | "product_sale" | "dev_collaboration";
+export type ProjectType = "product_sale" | "dev_collaboration";
 export type ProjectStatus =
   | "draft"
   | "published"
@@ -98,27 +98,19 @@ export type ProjectStatus =
   | "completed"
   | "cancelled";
 
-export interface IdeaSaleData {
-  description: string;
-  videoUrl?: string;
-  prototypeImages: string[];
-  askingPrice: number;
-  gameGenre?: string;
-  targetPlatform?: string;
-  tags: string[];
-}
+// RepoFormat enum as per API documentation
+export type RepoFormat = "react" | "webgl" | "html";
 
 export interface ProductSaleData {
   description: string;
-  codeFolderPath: string;
-  screenshots: string[];
+  screenshots?: string[]; // Optional per API docs
   demoUrl?: string;
   askingPrice: number;
   gameGenre?: string;
   targetPlatform?: string;
-  tags: string[];
+  tags?: string[]; // Optional per API docs
   techStack?: string;
-  isPlayable: boolean;
+  isPlayable?: boolean; // Optional per API docs
 }
 
 export interface CreatorCollaborationData {
@@ -126,14 +118,70 @@ export interface CreatorCollaborationData {
   proposal: string;
   budget: number;
   timeline: string;
-  prototypeImages: string[];
+  prototypeImages?: string[]; // Optional per API docs
   videoUrl?: string;
   gameGenre?: string;
   targetPlatform?: string;
-  tags: string[];
-  skills: string[];
+  tags?: string[]; // Optional per API docs
+  skills?: string[]; // Optional per API docs
 }
 
+// GameProjectResponse interface matching API documentation
+export interface GameProjectResponse {
+  _id: string;
+  creatorId: string;
+  owner: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  originalDeveloper?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  title: string;
+  shortDescription: string;
+  projectType: ProjectType[]; // Array per API docs
+  repoFormat: RepoFormat;
+  status: ProjectStatus;
+  productSaleData?: ProductSaleData;
+  creatorCollaborationData?: CreatorCollaborationData;
+  publisherId?: string;
+  soldAt?: string; // ISO 8601 date string
+  collaborationStartDate?: string; // ISO 8601 date string
+  collaborationEndDate?: string; // ISO 8601 date string
+  viewCount: number;
+  likeCount: number;
+  likedBy: string[]; // Array of user IDs
+  publishedAt?: string; // ISO 8601 date string
+  isFeatured: boolean;
+  searchKeywords: string[];
+  attachments: string[]; // Array of URLs
+  fileUrls: string[]; // Array of URLs
+  thumbnail?: string; // URL (transformed from fileKey)
+  averageRating: number;
+  reviewCount: number;
+  payToViewAmount: number; // Added per API docs
+  viewerIds?: string[]; // Array of user IDs who have paid to view
+  createdAt: string; // ISO 8601 date string
+  updatedAt: string; // ISO 8601 date string
+}
+
+// Basic project info for payment (payToView)
+export interface GameProjectBasicInfo {
+  _id: string;
+  title: string;
+  shortDescription: string;
+  payToViewAmount: number;
+  projectType?: ProjectType[];
+  thumbnail?: string;
+  viewerIds?: string[]; // Array of user IDs who have paid to view
+}
+
+// Legacy GameProject interface for backward compatibility
 export interface GameProject {
   _id: string;
   creatorId: string;
@@ -141,19 +189,24 @@ export interface GameProject {
   originalDeveloper?: User; // Creator who originally created the project
   title: string;
   shortDescription: string;
-  projectType: ProjectType;
+  projectType: ProjectType[]; // Always an array
+  repoFormat?: RepoFormat; // Added per API docs
   status: ProjectStatus;
-  ideaSaleData?: IdeaSaleData;
   productSaleData?: ProductSaleData;
   creatorCollaborationData?: CreatorCollaborationData;
   publisherId?: string;
-  soldAt?: Date;
-  collaborationStartDate?: Date;
-  collaborationEndDate?: Date;
+  soldAt?: Date | string;
+  collaborationStartDate?: Date | string;
+  collaborationEndDate?: Date | string;
+  purchasedType?:
+    | "project_purchase"
+    | "collaboration_budget"
+    | "dev_collaboration"
+    | "product_sale"; // Type based on how project was purchased
   viewCount: number;
   likeCount: number;
   likedBy: string[];
-  publishedAt?: Date;
+  publishedAt?: Date | string;
   isFeatured: boolean;
   searchKeywords: string[];
   attachments: string[];
@@ -161,12 +214,14 @@ export interface GameProject {
   averageRating: number;
   reviewCount: number;
   thumbnail?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  payToViewAmount: number; // Required - giá trị từ select package
+  viewerIds?: string[]; // Array of user IDs who have paid to view
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export interface GameProjectListResponse {
-  projects: GameProject[];
+  projects: GameProjectResponse[] | GameProject[]; // Support both formats
   total: number;
   page: number;
   limit: number;
@@ -174,7 +229,7 @@ export interface GameProjectListResponse {
 }
 
 export interface GameProjectFilters {
-  projectType?: ProjectType;
+  projectType?: ProjectType; // Single type for filtering
   status?: ProjectStatus;
   creatorId?: string;
   publisherId?: string;
@@ -197,6 +252,54 @@ export interface GameProjectFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+}
+
+// Stats interfaces per API documentation
+export interface GlobalStats {
+  totalProjects: number;
+  publishedProjects: number;
+  soldProjects: number;
+  collaborationProjects: number;
+  totalViews: number;
+  totalLikes: number;
+  averageRating: number;
+}
+
+export interface CreatorStats {
+  totalProjects: number;
+  publishedProjects: number;
+  soldProjects: number;
+  activeCollaborations: number;
+  totalRevenue: number;
+  totalViews: number;
+  totalLikes: number;
+}
+
+export interface PublisherStats {
+  purchasedProjects: number;
+  activeCollaborations: number;
+  totalInvestment: number;
+  completedProjects: number;
+}
+
+// Like response interface
+export interface LikeResponse {
+  liked: boolean;
+  likeCount: number;
+}
+
+// Create collaboration from project response
+export interface CreateCollaborationFromProjectResponse {
+  projectId: string;
+  description: string;
+  deliverables: string;
+  budget: number;
+  timeline: string;
+  milestones: string[];
+  communicationChannels: string[];
+  communicationDetails: string;
+  termsAndConditions: string;
+  startDate: string; // ISO 8601
 }
 
 // File Upload Types
@@ -224,17 +327,11 @@ export interface PresignedUrlResponse {
 export interface ProjectCreationData {
   title: string;
   shortDescription: string;
-  projectType: ProjectType;
-  ideaSaleData?: {
-    description: string;
-    askingPrice: number;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
-  };
+  projectType: ProjectType[];
+  repoFormat: RepoFormat;
+  payToViewAmount: number;
   productSaleData?: {
     description: string;
-    codeFolderPath: string;
     askingPrice: number;
     gameGenre?: string;
     targetPlatform?: string;
@@ -280,7 +377,8 @@ export interface PurchaseResponse {
 export interface InventoryFilters {
   page?: number;
   limit?: number;
-  projectType?: "idea_sale" | "product_sale" | "dev_collaboration";
+  projectType?: "product_sale" | "dev_collaboration"; // Keep for backward compatibility
+  purchasedType?: "project_purchase" | "collaboration_budget"; // Filter by purchasedType
   status?: "sold" | "in_collaboration" | "completed";
   search?: string;
   gameGenre?: string;
@@ -293,7 +391,7 @@ export interface InventoryFilters {
 export interface PurchaseHistoryFilters {
   page?: number;
   limit?: number;
-  projectType?: "idea_sale" | "product_sale" | "dev_collaboration";
+  projectType?: "product_sale" | "dev_collaboration";
   search?: string;
   sortBy?: "soldAt" | "createdAt" | "askingPrice" | "title";
   sortOrder?: "asc" | "desc";
@@ -321,16 +419,9 @@ export interface InventoryItem {
   _id: string;
   title: string;
   shortDescription: string;
-  projectType: "idea_sale" | "product_sale" | "dev_collaboration";
+  projectType: ("product_sale" | "dev_collaboration")[];
   status: "sold" | "in_collaboration" | "completed";
   soldAt: string;
-  ideaSaleData?: {
-    description: string;
-    askingPrice: number;
-    gameGenre: string;
-    targetPlatform: string;
-    tags: string[];
-  };
   productSaleData?: {
     description: string;
     askingPrice: number;
@@ -457,7 +548,7 @@ export interface Collaboration {
     _id: string;
     title: string;
     shortDescription: string;
-    projectType: "idea_sale" | "product_sale" | "dev_collaboration";
+    projectType: ("product_sale" | "dev_collaboration")[];
     status: "sold" | "in_collaboration" | "completed";
   };
   publisherId: string;
@@ -535,6 +626,7 @@ export interface CollaborationFilters {
     | "testing"
     | "deployment"
     | "completed";
+  purchasedType?: "project_purchase" | "collaboration_budget"; // Filter by purchasedType instead of projectType
   search?: string;
   sortBy?: "createdAt" | "updatedAt" | "budget" | "progressPercentage";
   sortOrder?: "asc" | "desc";
@@ -606,7 +698,7 @@ export interface UpdateMilestoneStatusRequest {
 export interface AnalyticsFilters {
   dateFrom?: string; // ISO 8601 format
   dateTo?: string; // ISO 8601 format
-  projectType?: "IDEA_SALE" | "PRODUCT_SALE" | "DEV_COLLABORATION";
+  projectType?: "PRODUCT_SALE" | "DEV_COLLABORATION";
   period?: "6months" | "12months" | "24months";
   page?: number;
   limit?: number;

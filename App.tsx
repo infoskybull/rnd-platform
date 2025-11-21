@@ -1,4 +1,3 @@
-import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -15,7 +14,6 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import DashboardRouter from "./pages/DashboardRouter";
 import CreateProjectPage from "./pages/CreateProjectPage";
 import CreateProjectAIPage from "./pages/CreateProjectAIPage";
-import CreateProjectUploadPage from "./pages/CreateProjectUploadPage";
 import CreateProjectUploadPreviewPage from "./pages/CreateProjectUploadPreviewPage";
 import CreateProjectCreatePage from "./pages/CreateProjectCreatePage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
@@ -99,7 +97,6 @@ function App() {
                     {/* Protected routes */}
                     <Route path="/main" element={<MainPage />} />
                     <Route path="/dashboard" element={<DashboardRouter />} />
-                    <Route path="/marketplace" element={<DashboardRouter />} />
 
                     {/* Publisher Dashboard Routes */}
                     <Route

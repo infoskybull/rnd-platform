@@ -15,11 +15,10 @@ import {
 } from "../types";
 import { apiService } from "../services/api";
 import { User } from "../types";
-import RnDLogo from "../components/icons/RnDLogo";
-import RoleBadge from "../components/RoleBadge";
 import Sidebar, { TabType } from "../components/Sidebar";
 import PurchaseButton from "../components/PurchaseButton";
-import { Menu, X, User as UserIcon } from "lucide-react";
+import { User as UserIcon } from "lucide-react";
+import ResponsiveNavbar from "../components/ResponsiveNavbar";
 import { getProjectBanner, handleBannerError } from "../utils/projectUtils";
 import { useSidebar } from "../contexts/SidebarContext";
 import {
@@ -84,14 +83,13 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
   const [selectedProject, setSelectedProject] = useState<GameProject | null>(
     null
   );
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [allProjects, setAllProjects] = useState<GameProject[]>([]);
   const [ownerData, setOwnerData] = useState<Record<string, any>>({});
-  
+
   // Track liked status for selected project
   const [isLiked, setIsLiked] = useState(false);
 
@@ -101,13 +99,18 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
 
     return {
       totalProjects: allProjects.length,
-      ideaSales: allProjects.filter((p) => p.projectType === "idea_sale")
-        .length,
-      productSales: allProjects.filter((p) => p.projectType === "product_sale")
-        .length,
-      collaborations: allProjects.filter(
-        (p) => p.projectType === "dev_collaboration"
-      ).length,
+      productSales: allProjects.filter((p) => {
+        const types = Array.isArray(p.projectType)
+          ? p.projectType
+          : [p.projectType];
+        return types.includes("product_sale");
+      }).length,
+      collaborations: allProjects.filter((p) => {
+        const types = Array.isArray(p.projectType)
+          ? p.projectType
+          : [p.projectType];
+        return types.includes("dev_collaboration");
+      }).length,
     };
   }, [allProjects]);
 
@@ -315,25 +318,40 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [filters.page, totalPages, handlePageChange]);
 
-  const handleStartCollaboration = async (projectId: string) => {
-    try {
-      setActionLoading(`collaborate-${projectId}`);
-      await apiService.startCollaboration(projectId);
-      // Refresh projects and stats to update status
-      loadProjects();
-      loadAllProjects();
-      setSelectedProject(null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to start collaboration"
-      );
-    } finally {
-      setActionLoading(null);
-    }
+  const handleStartCollaboration = (projectId: string) => {
+    // Navigate to payment page with projectId and paymentType for collaboration budget payment
+    navigate(
+      `/payment?projectId=${projectId}&paymentType=collaboration_budget`
+    );
   };
 
-  const handleViewProject = (projectId: string) => {
-    navigate(`/project-detail/${projectId}`);
+  const handleViewProject = (project: GameProject) => {
+    // Check if user needs to pay to view
+    if (project) {
+      const isOwner =
+        user &&
+        (project.creatorId === user.id ||
+          project.owner?.id === user.id ||
+          project.originalDeveloper?.id === user.id);
+
+      // Check if user has already paid to view (user id in viewerIds)
+      const hasPaidToView =
+        user && project.viewerIds && project.viewerIds.includes(user.id);
+
+      // If not owner and payToViewAmount > 0 and user hasn't paid, redirect to payment page
+      if (!isOwner && project.payToViewAmount > 0 && !hasPaidToView) {
+        // If not authenticated, redirect to login first with redirect URL
+        if (!user) {
+          navigate(
+            `/login?redirect=/payment?projectId=${project._id}&payToView=true`
+          );
+          return;
+        }
+        navigate(`/payment?projectId=${project._id}&payToView=true`);
+        return;
+      }
+    }
+    navigate(`/project-detail/${project._id}`);
   };
 
   // Handle like/unlike project
@@ -465,17 +483,20 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
     }).format(price);
   };
 
-  const getProjectTypeLabel = (type: ProjectType) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product Sale";
-      case "dev_collaboration":
-        return "Dev Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: ProjectType | ProjectType[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product Sale";
+          case "dev_collaboration":
+            return "Dev Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   const getStatusColor = (status: ProjectStatus) => {
@@ -518,83 +539,12 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700 shadow-lg sticky top-0 z-10">
-          <div className="px-4 sm:px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <RnDLogo size={32} className="sm:w-10 sm:h-10" />
-                <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-white">
-                  Game <span className="text-indigo-400">Marketplace</span>
-                </h1>
-              </div>
-
-              {/* Desktop Navigation */}
-              <div className="hidden sm:flex items-center space-x-4">
-                <div className="text-right">
-                  <p className="text-sm text-gray-300">
-                    Welcome,{" "}
-                    <span className="font-medium text-white">{user.name}</span>
-                  </p>
-                  <div className="flex items-center justify-end space-x-2 text-xs text-gray-400">
-                    <span>{user.email}</span>
-                    <RoleBadge role={user.role} size="sm" />
-                  </div>
-                </div>
-                <button
-                  onClick={onLogout}
-                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 transition-colors"
-                >
-                  Log Out
-                </button>
-              </div>
-
-              {/* Mobile Menu Button */}
-              <div className="sm:hidden">
-                <button
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                  className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  {mobileMenuOpen ? (
-                    <X className="w-6 h-6" />
-                  ) : (
-                    <Menu className="w-6 h-6" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Mobile Menu */}
-            {mobileMenuOpen && (
-              <div className="sm:hidden mt-4 pt-4 border-t border-gray-700">
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-300">
-                      Welcome,{" "}
-                      <span className="font-medium text-white">
-                        {user.name}
-                      </span>
-                    </p>
-                    <div className="flex items-center justify-center space-x-2 text-xs text-gray-400 mt-1">
-                      <span>{user.email.split("@")[0]}</span>
-                      <RoleBadge role={user.role} size="sm" />
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setMobileMenuOpen(false);
-                      }}
-                      className="w-full px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 transition-colors"
-                    >
-                      Log Out
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </header>
+        <ResponsiveNavbar
+          title="Game Marketplace"
+          titleColor="text-indigo-400"
+          user={user}
+          onLogout={onLogout}
+        />
 
         <div className="flex-1 overflow-y-auto dark-scrollbar">
           <main className="p-4 sm:p-6">
@@ -627,7 +577,6 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     <option value="">All Types</option>
-                    <option value="idea_sale">Idea Sale</option>
                     <option value="product_sale">Product Sale</option>
                     <option value="dev_collaboration">Dev Collaboration</option>
                   </select>
@@ -692,12 +641,6 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     total}
                 </div>
                 <div className="text-sm text-gray-400">Total Projects</div>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
-                <div className="text-2xl font-bold text-green-400">
-                  {stats?.ideaSales || calculatedStats?.ideaSales || 0}
-                </div>
-                <div className="text-sm text-gray-400">Idea Sales</div>
               </div>
               <div className="bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4">
                 <div className="text-2xl font-bold text-blue-400">
@@ -816,12 +759,6 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                           </div>
                         </div>
 
-                        {project.ideaSaleData && (
-                          <div className="text-base sm:text-lg font-bold text-green-400">
-                            {formatPrice(project.ideaSaleData.askingPrice)}
-                          </div>
-                        )}
-
                         {project.productSaleData && (
                           <div className="text-base sm:text-lg font-bold text-blue-400">
                             {formatPrice(project.productSaleData.askingPrice)}
@@ -854,16 +791,14 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                           />
                         </div>
 
-                        {(project.ideaSaleData?.gameGenre ||
-                          project.productSaleData?.gameGenre ||
+                        {(project.productSaleData?.gameGenre ||
                           project.creatorCollaborationData?.gameGenre) && (
                           <div className="mt-2">
                             <span className="text-xs text-gray-500">
                               Genre:{" "}
                             </span>
                             <span className="text-xs text-gray-300 truncate block sm:inline">
-                              {project.ideaSaleData?.gameGenre ||
-                                project.productSaleData?.gameGenre ||
+                              {project.productSaleData?.gameGenre ||
                                 project.creatorCollaborationData?.gameGenre}
                             </span>
                           </div>
@@ -1094,64 +1029,29 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                         {selectedProject.status}
                       </span>
                     </div>
-                    {(selectedProject.ideaSaleData?.gameGenre ||
-                      selectedProject.productSaleData?.gameGenre ||
+                    {(selectedProject.productSaleData?.gameGenre ||
                       selectedProject.creatorCollaborationData?.gameGenre) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Genre:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.gameGenre ||
-                            selectedProject.productSaleData?.gameGenre ||
+                          {selectedProject.productSaleData?.gameGenre ||
                             selectedProject.creatorCollaborationData?.gameGenre}
                         </span>
                       </div>
                     )}
-                    {(selectedProject.ideaSaleData?.targetPlatform ||
-                      selectedProject.productSaleData?.targetPlatform ||
+                    {(selectedProject.productSaleData?.targetPlatform ||
                       selectedProject.creatorCollaborationData
                         ?.targetPlatform) && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Platform:</span>
                         <span className="text-white">
-                          {selectedProject.ideaSaleData?.targetPlatform ||
-                            selectedProject.productSaleData?.targetPlatform ||
+                          {selectedProject.productSaleData?.targetPlatform ||
                             selectedProject.creatorCollaborationData
                               ?.targetPlatform}
                         </span>
                       </div>
                     )}
                   </div>
-
-                  {selectedProject.ideaSaleData && (
-                    <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
-                      <h3 className="text-lg font-semibold text-white mb-2">
-                        Idea Sale Details
-                      </h3>
-                      <p className="text-gray-300 mb-2">
-                        {selectedProject.ideaSaleData.description}
-                      </p>
-                      <div className="text-xl font-bold text-green-400 mb-2">
-                        {formatPrice(selectedProject.ideaSaleData.askingPrice)}
-                      </div>
-                      {selectedProject.ideaSaleData.videoUrl && (
-                        <div className="mt-3">
-                          <video
-                            controls
-                            className="w-full h-48 rounded-lg"
-                            poster={
-                              getProjectBanner(selectedProject) || undefined
-                            }
-                          >
-                            <source
-                              src={selectedProject.ideaSaleData.videoUrl}
-                              type="video/mp4"
-                            />
-                            Your browser does not support the video tag.
-                          </video>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {selectedProject.productSaleData && (
                     <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
@@ -1248,11 +1148,9 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                     </div>
                   </div>
 
-                  {(selectedProject.ideaSaleData?.tags ||
-                    selectedProject.productSaleData?.tags ||
+                  {(selectedProject.productSaleData?.tags ||
                     selectedProject.creatorCollaborationData?.tags) &&
                     (
-                      selectedProject.ideaSaleData?.tags ||
                       selectedProject.productSaleData?.tags ||
                       selectedProject.creatorCollaborationData?.tags ||
                       []
@@ -1263,7 +1161,6 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                         </h3>
                         <div className="flex flex-wrap gap-2">
                           {(
-                            selectedProject.ideaSaleData?.tags ||
                             selectedProject.productSaleData?.tags ||
                             selectedProject.creatorCollaborationData?.tags ||
                             []
@@ -1281,17 +1178,59 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
 
                   <div className="space-y-3">
                     <button
-                      onClick={() => handleViewProject(selectedProject._id)}
-                      className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                      onClick={() => handleViewProject(selectedProject)}
+                      className={`w-full px-4 py-2 text-white font-medium rounded-lg transition-colors flex items-center justify-center ${(() => {
+                        const isOwner =
+                          user &&
+                          (selectedProject.creatorId === user.id ||
+                            selectedProject.owner?.id === user.id ||
+                            selectedProject.originalDeveloper?.id === user.id);
+                        const hasPaidToView =
+                          user &&
+                          selectedProject.viewerIds &&
+                          selectedProject.viewerIds.includes(user.id);
+                        const needsPayment =
+                          !isOwner &&
+                          selectedProject.payToViewAmount > 0 &&
+                          !hasPaidToView;
+                        return needsPayment
+                          ? "bg-green-600 hover:bg-green-700"
+                          : "bg-indigo-600 hover:bg-indigo-700";
+                      })()}`}
                     >
-                      <EyeIcon className="w-4 h-4 inline mr-1" /> View Project
-                      Details
+                      <EyeIcon className="w-4 h-4 inline mr-1" />{" "}
+                      {(() => {
+                        const isOwner =
+                          user &&
+                          (selectedProject.creatorId === user.id ||
+                            selectedProject.owner?.id === user.id ||
+                            selectedProject.originalDeveloper?.id === user.id);
+                        const hasPaidToView =
+                          user &&
+                          selectedProject.viewerIds &&
+                          selectedProject.viewerIds.includes(user.id);
+                        const needsPayment =
+                          !isOwner &&
+                          selectedProject.payToViewAmount > 0 &&
+                          !hasPaidToView;
+                        return needsPayment
+                          ? `Pay $${selectedProject.payToViewAmount.toFixed(
+                              2
+                            )} to View Detail`
+                          : "View Project Details";
+                      })()}
                     </button>
 
                     {selectedProject.status === "published" && (
                       <>
-                        {(selectedProject.projectType === "idea_sale" ||
-                          selectedProject.projectType === "product_sale") && (
+                        {(() => {
+                          const types = Array.isArray(
+                            selectedProject.projectType
+                          )
+                            ? selectedProject.projectType
+                            : [selectedProject.projectType];
+                          return types.includes("product_sale");
+                        })() && (
                           <PurchaseButton
                             project={selectedProject}
                             size="lg"
@@ -1309,27 +1248,21 @@ const PublisherBrowseGamesPage: React.FC<PublisherBrowseGamesPageProps> = ({
                           />
                         )}
 
-                        {selectedProject.projectType ===
-                          "dev_collaboration" && (
+                        {(() => {
+                          const types = Array.isArray(
+                            selectedProject.projectType
+                          )
+                            ? selectedProject.projectType
+                            : [selectedProject.projectType];
+                          return types.includes("dev_collaboration");
+                        })() && (
                           <button
                             onClick={() =>
                               handleStartCollaboration(selectedProject._id)
                             }
-                            disabled={
-                              actionLoading ===
-                              `collaborate-${selectedProject._id}`
-                            }
-                            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+                            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
                           >
-                            {actionLoading ===
-                            `collaborate-${selectedProject._id}` ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Starting...
-                              </>
-                            ) : (
-                              "Start Collaboration"
-                            )}
+                            🤝 Start Collaboration
                           </button>
                         )}
                       </>

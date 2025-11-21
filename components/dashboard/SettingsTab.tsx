@@ -367,16 +367,63 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
         }
         walletAddress = ethAddress;
       } else if (walletType === "solana") {
-        if (!isSolanaConnected || !solanaPublicKey) {
+        // First, try to get publicKey from provider if already connected
+        let providerPublicKey: string | null = null;
+        if (typeof window !== "undefined") {
+          const provider = window.solana?.isPhantom 
+            ? (window.solana as any) 
+            : (window.phantom?.solana as any);
+          
+          if (provider?.publicKey) {
+            try {
+              // PublicKey object has toString() method
+              providerPublicKey = typeof provider.publicKey.toString === 'function' 
+                ? provider.publicKey.toString()
+                : String(provider.publicKey);
+            } catch (e) {
+              // Fallback to string conversion
+              providerPublicKey = String(provider.publicKey);
+            }
+          }
+        }
+        
+        // If not connected in context but provider has publicKey, use provider directly
+        if ((!isSolanaConnected || !solanaPublicKey) && !providerPublicKey) {
           try {
             await connectSolana();
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait a bit for state to update
+            await new Promise((resolve) => setTimeout(resolve, 300));
           } catch (error) {
             setLinkError("Failed to connect Solana wallet");
             return;
           }
         }
+        
+        // Try to get publicKey from multiple sources:
+        // 1. From hook state (preferred, most up-to-date)
         walletAddress = solanaPublicKey?.toString() || null;
+        
+        // 2. If not available from hook, use provider publicKey (could be from already connected wallet)
+        if (!walletAddress && providerPublicKey) {
+          walletAddress = providerPublicKey;
+        }
+        
+        // 3. Last resort: check provider again after connection attempt
+        if (!walletAddress && typeof window !== "undefined") {
+          const provider = window.solana?.isPhantom 
+            ? (window.solana as any) 
+            : (window.phantom?.solana as any);
+          
+          if (provider?.publicKey) {
+            try {
+              walletAddress = typeof provider.publicKey.toString === 'function' 
+                ? provider.publicKey.toString()
+                : String(provider.publicKey);
+            } catch (e) {
+              walletAddress = String(provider.publicKey);
+            }
+          }
+        }
       }
 
       if (!walletAddress) {
@@ -390,17 +437,33 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
         walletType
       );
 
-      if (checkResult.data?.exists && checkResult.data?.userId !== user.id) {
-        setLinkError("This wallet is already linked to another account");
-        return;
+      // If wallet exists, check which account it's linked to
+      if (checkResult.data?.exists) {
+        const walletUserId = checkResult.data?.userId;
+        const currentUserId = user.id;
+        
+        // Only show error if wallet is linked to a different user (and userId is valid)
+        if (walletUserId && currentUserId && walletUserId !== currentUserId) {
+          setLinkError("This wallet is already linked to another account");
+          return;
+        }
+
+        // If wallet is already linked to current user, refresh user data and exit
+        if (walletUserId && currentUserId && walletUserId === currentUserId) {
+          // Wallet is already linked to this account, just refresh to sync state
+          fetchedFromAPIRef.current = false;
+          await fetchUserWallets(false); // Allow refresh to sync Redux store
+          setLinkSuccess(`${walletType.toUpperCase()} wallet is already linked to your account`);
+          return;
+        }
       }
 
-      // Check if wallet is already linked to this account
+      // Check if wallet is already linked to this account (frontend check)
       const isAlreadyLinked = linkedWallets.some(
         (w) => w.type === walletType && w.address === walletAddress
       );
       if (isAlreadyLinked) {
-        setLinkError("This wallet is already linked to your account");
+        setLinkSuccess(`${walletType.toUpperCase()} wallet is already linked to your account`);
         return;
       }
 

@@ -4,7 +4,7 @@ import { apiService } from "./api";
 export interface AnalyticsFilters {
   dateFrom?: string; // ISO 8601 format
   dateTo?: string; // ISO 8601 format
-  projectType?: "IDEA_SALE" | "PRODUCT_SALE" | "DEV_COLLABORATION";
+  projectType?: "PRODUCT_SALE" | "DEV_COLLABORATION";
   period?: "6months" | "12months" | "24months";
   page?: number;
   limit?: number;

@@ -272,7 +272,6 @@ class InventoryService {
 
       // Group by price range based on asking price
       const askingPrice =
-        item.ideaSaleData?.askingPrice ||
         item.productSaleData?.askingPrice ||
         item.creatorCollaborationData?.budget ||
         0;

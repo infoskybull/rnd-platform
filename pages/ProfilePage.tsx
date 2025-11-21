@@ -86,10 +86,10 @@ const ProfilePage: React.FC = () => {
     alert("Direct messaging feature will be implemented soon!");
   };
 
-  const getProjectTypeIcon = (type: string) => {
-    switch (type) {
-      case "idea_sale":
-        return <Lightbulb className="w-4 h-4" />;
+  const getProjectTypeIcon = (type: string | string[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    const firstType = types[0];
+    switch (firstType) {
       case "product_sale":
         return <Package className="w-4 h-4" />;
       case "dev_collaboration":
@@ -99,17 +99,20 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const getProjectTypeLabel = (type: string) => {
-    switch (type) {
-      case "idea_sale":
-        return "Idea Sale";
-      case "product_sale":
-        return "Product";
-      case "dev_collaboration":
-        return "Collaboration";
-      default:
-        return type;
-    }
+  const getProjectTypeLabel = (type: string | string[]) => {
+    const types = Array.isArray(type) ? type : [type];
+    return types
+      .map((t) => {
+        switch (t) {
+          case "product_sale":
+            return "Product";
+          case "dev_collaboration":
+            return "Collaboration";
+          default:
+            return String(t);
+        }
+      })
+      .join(", ");
   };
 
   if (loading) {

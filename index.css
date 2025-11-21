@@ -1,34 +1,54 @@
 /* Custom Scrollbar Styles */
 .scrollbar-thin {
-  scrollbar-width: thin;
+  scrollbar-width: thin !important;
+  scrollbar-color: #4b5563 transparent !important;
+  -ms-overflow-style: -ms-autohiding-scrollbar !important;
 }
 
 .scrollbar-thumb-gray-600 {
-  scrollbar-color: #4b5563 transparent;
+  scrollbar-color: #4b5563 transparent !important;
 }
 
 .scrollbar-track-gray-800 {
-  scrollbar-color: #4b5563 #1f2937;
+  scrollbar-color: #4b5563 #1f2937 !important;
 }
 
-/* Webkit Scrollbar Styles */
+/* Webkit Scrollbar Styles - Chrome, Edge, Safari */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 8px !important;
+  height: 8px !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: #1f2937;
-  border-radius: 4px;
+  background: #1f2937 !important;
+  border-radius: 4px !important;
+  -webkit-border-radius: 4px !important;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
+  background: #4b5563 !important;
+  border-radius: 4px !important;
+  -webkit-border-radius: 4px !important;
+  transition: background-color 0.2s ease !important;
+  -webkit-transition: background-color 0.2s ease !important;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #6b7280 !important;
+}
+
+/* Edge specific support */
+@supports (-ms-ime-align: auto) {
+  .scrollbar-thin {
+    -ms-overflow-style: -ms-autohiding-scrollbar !important;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+  }
 }
 
 /* Fixed Height Layout Utilities */

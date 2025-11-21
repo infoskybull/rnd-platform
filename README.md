@@ -12,7 +12,7 @@ A comprehensive game development marketplace platform where creators can showcas
 
 - **Creator Dashboard**: View and manage all your created projects
 - **Project Management**: Create, edit, publish, and delete game projects
-- **Project Types**: Support for Idea Sales, Product Sales, and Development Collaboration
+- **Project Types**: Support for Product Sales, and Development Collaboration
 - **Analytics**: Track views, likes, and performance metrics
 - **File Upload**: Upload and preview game prototypes
 
@@ -33,9 +33,8 @@ A comprehensive game development marketplace platform where creators can showcas
 
 ## Project Types
 
-1. **Idea Sale**: Creators create game concepts with descriptions and videos to sell to publishers
-2. **Product Sale**: Creators upload complete prototype code/folders for sale
-3. **Dev Collaboration**: Creators propose collaboration requests with budget and timeline
+1. **Product Sale**: Creators upload complete prototype code/folders for sale
+2. **Dev Collaboration**: Creators propose collaboration requests with budget and timeline
 
 ## Run Locally
 
@@ -51,14 +50,14 @@ A comprehensive game development marketplace platform where creators can showcas
 
    ```
    GEMINI_API_KEY=your_gemini_api_key_here
-   
+
    # PayPal Configuration (for payment integration)
    # Get your Sandbox Client ID from: https://developer.paypal.com/dashboard/applications/sandbox
    VITE_PAYPAL_CLIENT_ID_SANDBOX=your_sandbox_client_id_here
-   
+
    # For production, get Live Client ID from: https://developer.paypal.com/dashboard/applications/live
    VITE_PAYPAL_CLIENT_ID_LIVE=your_live_client_id_here
-   
+
    # PayPal Mode: "sandbox" for testing, "production" for live payments
    VITE_PAYPAL_MODE=sandbox
    ```
@@ -78,16 +77,19 @@ The application includes PayPal payment integration with Sandbox mode for testin
 ### Setup PayPal Sandbox
 
 1. **Create a PayPal Developer Account**
+
    - Go to [PayPal Developer Dashboard](https://developer.paypal.com/)
    - Sign in or create an account
 
 2. **Create a Sandbox App**
+
    - Navigate to [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox)
    - Click "Create App"
    - Select "Merchant" or "Personal" app type
    - Copy your **Sandbox Client ID**
 
 3. **Configure Environment Variables**
+
    - Add `VITE_PAYPAL_CLIENT_ID_SANDBOX` to your `.env` file with your Sandbox Client ID
    - Set `VITE_PAYPAL_MODE=sandbox` for testing
 
@@ -99,6 +101,7 @@ The application includes PayPal payment integration with Sandbox mode for testin
 ### Production Setup
 
 When ready for production:
+
 1. Create a Live App in [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/applications/live)
 2. Copy your Live Client ID
 3. Set `VITE_PAYPAL_CLIENT_ID_LIVE` in `.env`
@@ -111,6 +114,7 @@ When ready for production:
 Nếu backend cần verify PayPal payments, xem hướng dẫn chi tiết trong file [PAYPAL_BACKEND_INTEGRATION.md](./PAYPAL_BACKEND_INTEGRATION.md).
 
 **Tóm tắt:**
+
 - Frontend chỉ cần `Client ID` (đã có)
 - Backend cần `Client Secret` để verify payments với PayPal API
 - Set PayPal Secret ở backend `.env` file, không phải frontend

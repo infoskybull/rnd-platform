@@ -79,7 +79,6 @@ export const mockProjects: GameProject[] = [
     productSaleData: {
       description:
         "A complete mobile puzzle game built with Unity. Features 50+ levels, unique puzzle mechanics, beautiful hand-drawn artwork, and smooth touch controls. The game includes a level editor, achievements system, and social features.",
-      codeFolderPath: "/projects/puzzle_quest_mobile",
       screenshots: [
         mockThumbnails[3],
         mockThumbnails[4],
@@ -228,7 +227,6 @@ export const mockProjects: GameProject[] = [
     productSaleData: {
       description:
         "A complete racing simulator built with Unreal Engine. Features realistic physics, 50+ licensed cars, multiple tracks, and VR support. Includes career mode, multiplayer racing, and extensive customization options.",
-      codeFolderPath: "/projects/racing_simulator_pro",
       screenshots: [mockThumbnails[2], mockThumbnails[3], mockThumbnails[4]],
       demoUrl: "https://racing-sim-demo.com",
       askingPrice: 25000,
@@ -291,7 +289,6 @@ export const mockProjects: GameProject[] = [
     productSaleData: {
       description:
         "A complete 2D platformer featuring hand-drawn artwork, smooth animations, and an engaging story. Includes 30+ levels, collectibles, achievements, and multiple difficulty settings.",
-      codeFolderPath: "/projects/platformer_adventure",
       screenshots: [mockThumbnails[7], mockThumbnails[8], mockThumbnails[9]],
       demoUrl: "https://platformer-demo.com",
       askingPrice: 6000,
@@ -400,7 +397,6 @@ export const mockProjects: GameProject[] = [
     productSaleData: {
       description:
         "An educational game designed to make math learning fun and engaging. Features adaptive difficulty, progress tracking, and curriculum alignment. Suitable for children aged 6-12.",
-      codeFolderPath: "/projects/math_educational_game",
       screenshots: [mockThumbnails[3], mockThumbnails[4], mockThumbnails[5]],
       demoUrl: "https://math-game-demo.com",
       askingPrice: 8000,

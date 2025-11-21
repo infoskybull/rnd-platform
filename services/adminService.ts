@@ -69,7 +69,7 @@ export interface AdminAnalyticsFilters {
   dateFrom?: string; // ISO 8601 format
   dateTo?: string; // ISO 8601 format
   period?: "6months" | "12months" | "24months";
-  projectType?: "IDEA_SALE" | "PRODUCT_SALE" | "DEV_COLLABORATION";
+  projectType?: "PRODUCT_SALE" | "DEV_COLLABORATION";
 }
 
 export interface SystemOverview {
