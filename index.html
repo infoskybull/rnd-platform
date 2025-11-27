@@ -65,11 +65,22 @@
     />
     <meta name="apple-mobile-web-app-title" content="RnD Games" />
 
+    <!-- Google Fonts - Istok Web -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Istok+Web:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ["'Istok Web'", "sans-serif"],
+            },
             colors: {
               "brand-blue": "#1e40af",
               "brand-blue-light": "#2563eb",

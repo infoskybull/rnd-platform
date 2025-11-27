@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Login from "../components/Login";
 import RnDLogo from "../components/icons/RnDLogo";
@@ -23,7 +23,8 @@ const LoginPage: React.FC = () => {
   // Authentication handlers using the useAuth hook - MUST be at top level
   const handleLogin = useCallback(
     async (credentials: LoginCredentials) => {
-      clearError(); // Clear any previous errors
+      // Don't clear error here - let it be set by the login action
+      // Error will be set in Redux state when login fails
       try {
         await login(credentials);
         // Navigation will be handled by useEffect when isAuthenticated and user are both available
@@ -40,11 +41,12 @@ const LoginPage: React.FC = () => {
           // dispatch(setRequires2FA(true));
           // throw err; // Let Login component handle this
         }
-        // Other errors are handled by the useAuth hook
+        // Other errors are handled by the useAuth hook and set in Redux state
+        // Don't throw here - let error be displayed from Redux state
         throw err;
       }
     },
-    [login, clearError]
+    [login]
   );
 
   const handleLoginWith2FA = useCallback(
@@ -76,24 +78,41 @@ const LoginPage: React.FC = () => {
   );
 
   // Redirect to dashboard if already authenticated
+  // Only navigate when actually authenticated (not during login failure)
   useEffect(() => {
     console.log("LoginPage useEffect triggered:", {
       isAuthenticated,
       user: user ? { id: user.id, email: user.email, role: user.role } : null,
       hasRole: user?.role,
+      error,
+      isLoading,
     });
-    // Only proceed if we have both authentication status and user data
-    if (user && user.role) {
+    // Only proceed if:
+    // 1. We have both authentication status and user data
+    // 2. User is actually authenticated (isAuthenticated is true)
+    // 3. Not currently loading
+    // 4. No error (to prevent navigation during failed login)
+    if (isAuthenticated && user && user.role && !isLoading && !error) {
       // Navigate based on user role
       if (user.role === "admin") {
         navigate("/admin/accounts");
       } else if (user.role === "publisher") {
-        navigate("/dashboard/publisher/browse-games");
+        navigate("/dashboard/publisher/dashboard");
       } else if (user.role === "creator") {
-        navigate("/dashboard/creator/your-projects");
+        navigate("/dashboard/creator/dashboard");
       }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, isLoading, error]);
+
+  // Memoize navigate callback to prevent re-renders
+  // MUST be before any early returns to follow Rules of Hooks
+  const handleSwitchToSignUp = useCallback(() => {
+    navigate("/signup");
+  }, [navigate]);
+
+  // Memoize requires2FA boolean to prevent unnecessary re-renders
+  // MUST be before any early returns to follow Rules of Hooks
+  const requires2FAValue = useMemo(() => !!requires2FA, [requires2FA]);
 
   // Show loading spinner while checking authentication
   if (isLoading && !user) {
@@ -114,13 +133,13 @@ const LoginPage: React.FC = () => {
       <Login
         onLogin={handleLogin}
         onLoginWith2FA={handleLoginWith2FA}
-        onTonConnectLogin={handleWeb3WalletLogin}
+        handleWeb3WalletLogin={handleWeb3WalletLogin}
         isLoading={isLoading}
         error={error}
         clearError={clearError}
-        requires2FAFromGlobal={!!requires2FA}
+        requires2FAFromGlobal={requires2FAValue}
         clear2FARequired={clearRequires2FA}
-        onSwitchToSignUp={() => navigate("/signup")}
+        onSwitchToSignUp={handleSwitchToSignUp}
       />
     </>
   );

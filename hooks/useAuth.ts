@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { LoginCredentials, SignUpData, Web3WalletCredentials } from "../types";
 import { useTonConnect } from "./useTonConnect";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -32,16 +32,7 @@ export const useAuth = () => {
       try {
         await dispatch(loginUser(credentials)).unwrap();
       } catch (error: any) {
-        // Log error để debug
-        console.log("[useAuth] Login error caught:", error);
-        console.log("[useAuth] Error type:", typeof error);
-        console.log(
-          "[useAuth] Error keys:",
-          error ? Object.keys(error) : "no keys"
-        );
-        console.log("[useAuth] Error.requires2FA:", error?.requires2FA);
-
-        // Pass error through để component có thể handle
+        // Pass error through to let component handle it
         throw error;
       }
     },
@@ -125,18 +116,33 @@ export const useAuth = () => {
     }
   }, [dispatch]);
 
-  return {
-    ...authState,
-    login,
-    loginWith2FA: loginWith2FAHandler,
-    web3WalletLogin: web3WalletLoginHandler,
-    signup,
-    logout,
-    clearError: clearErrorHandler,
-    clearRequires2FA: clearRequires2FAHandler,
-    refreshUser: refreshUserHandler,
-    isAuthenticated: !!authState.user,
-  };
+  // Memoize return object to prevent unnecessary re-renders
+  // Only recreate when authState or callbacks actually change
+  return useMemo(
+    () => ({
+      ...authState,
+      login,
+      loginWith2FA: loginWith2FAHandler,
+      web3WalletLogin: web3WalletLoginHandler,
+      signup,
+      logout,
+      clearError: clearErrorHandler,
+      clearRequires2FA: clearRequires2FAHandler,
+      refreshUser: refreshUserHandler,
+      isAuthenticated: !!authState.user,
+    }),
+    [
+      authState,
+      login,
+      loginWith2FAHandler,
+      web3WalletLoginHandler,
+      signup,
+      logout,
+      clearErrorHandler,
+      clearRequires2FAHandler,
+      refreshUserHandler,
+    ]
+  );
 };
 
 export default useAuth;

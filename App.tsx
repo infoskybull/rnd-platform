@@ -100,8 +100,24 @@ function App() {
 
                     {/* Publisher Dashboard Routes */}
                     <Route
+                      path="/dashboard/publisher/dashboard"
+                      element={<PublisherRouteWrapper page="dashboard" />}
+                    />
+                    <Route
                       path="/dashboard/publisher/browse-games"
                       element={<PublisherRouteWrapper page="browse-games" />}
+                    />
+                    <Route
+                      path="/dashboard/publisher/marketplace"
+                      element={<PublisherRouteWrapper page="marketplace" />}
+                    />
+                    <Route
+                      path="/dashboard/publisher/prototype-detail/:id"
+                      element={<PublisherRouteWrapper page="prototype-detail" />}
+                    />
+                    <Route
+                      path="/dashboard/publisher/portfolio/:id"
+                      element={<PublisherRouteWrapper page="portfolio" />}
                     />
                     <Route
                       path="/dashboard/publisher/messages"
@@ -133,6 +149,22 @@ function App() {
                     />
 
                     {/* Creator Dashboard Routes */}
+                    <Route
+                      path="/dashboard/creator/dashboard"
+                      element={<CreatorRouteWrapper page="dashboard" />}
+                    />
+                    <Route
+                      path="/dashboard/creator/use-ai"
+                      element={<CreatorRouteWrapper page="use-ai" />}
+                    />
+                    <Route
+                      path="/dashboard/creator/upload"
+                      element={<CreatorRouteWrapper page="upload" />}
+                    />
+                    <Route
+                      path="/dashboard/creator/upload-success"
+                      element={<CreatorRouteWrapper page="upload-success" />}
+                    />
                     <Route
                       path="/dashboard/creator/your-projects"
                       element={<CreatorRouteWrapper page="your-projects" />}

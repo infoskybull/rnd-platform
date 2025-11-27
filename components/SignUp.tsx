@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { SignUpData } from "../types";
-import RnDLogo from "./icons/RnDLogo";
 import { gsap } from "gsap";
 import { useNavigate } from "react-router-dom";
 
@@ -34,34 +33,15 @@ const SignUp: React.FC<SignUpProps> = ({
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const logoRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    // Entrance animations
-    const tl = gsap.timeline();
-
-    if (logoRef.current) {
-      tl.fromTo(
-        logoRef.current,
-        { scale: 0, rotation: -180, opacity: 0 },
-        {
-          scale: 1,
-          rotation: 0,
-          opacity: 1,
-          duration: 0.8,
-          ease: "back.out(1.7)",
-        }
-      );
-    }
-
+    // Entrance animation for form
     if (formRef.current) {
-      tl.fromTo(
+      gsap.fromTo(
         formRef.current,
-        { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" },
-        "-=0.4"
+        { y: 30, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }
       );
     }
   }, []);
@@ -235,310 +215,318 @@ const SignUp: React.FC<SignUpProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div ref={logoRef} className="flex justify-center mb-6">
-            <RnDLogo size={80} />
-          </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-400">
-            Join the RnD Game Marketplace
-          </p>
+    <div className="min-h-screen bg-gray-900 flex flex-col">
+      {/* Top Navigation */}
+      <div className="w-full px-6 py-4 flex items-center justify-between bg-white">
+        <div className="font-bold text-gray-900 text-lg">Platform</div>
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={() => navigate("/login")}
+            className="text-base font-semibold text-gray-900"
+            disabled={isLoading}
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/signup")}
+            className="text-base text-gray-900 hover:text-gray-700"
+            disabled={isLoading}
+          >
+            Sign up
+          </button>
         </div>
+      </div>
 
-        <form
-          ref={formRef}
-          className="mt-8 space-y-6 bg-gray-800 p-8 rounded-xl border border-gray-700"
-          onSubmit={handleSubmit}
-        >
-          {error && (
-            <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center px-4 bg-gray-100">
+        <div className="max-w-lg w-full">
+          <form
+            ref={formRef}
+            className="bg-white p-10 rounded-xl shadow-2xl space-y-6"
+            onSubmit={handleSubmit}
+          >
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
+              Create your account
+            </h2>
 
-          {/* Wallet Message Display */}
-          {walletInfo?.message && (
-            <div className="bg-yellow-900/20 border border-yellow-500 text-yellow-400 px-4 py-3 rounded-lg">
-              <div className="flex items-center">
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                  />
-                </svg>
-                <span>{walletInfo.message}</span>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+                {error}
               </div>
-              {walletInfo.address && (
-                <div className="mt-2 text-sm text-yellow-300">
-                  <span className="font-medium">Wallet Address:</span>
-                  <div className="mt-1 break-all text-xs font-mono bg-yellow-900/30 px-2 py-1 rounded border border-yellow-600/30">
-                    {walletInfo.address}
+            )}
+
+            {/* Wallet Message Display */}
+            {walletInfo?.message && (
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg">
+                <div className="flex items-center">
+                  <svg
+                    className="w-5 h-5 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                    />
+                  </svg>
+                  <span>{walletInfo.message}</span>
+                </div>
+                {walletInfo.address && (
+                  <div className="mt-2 text-sm text-yellow-700">
+                    <span className="font-medium">Wallet Address:</span>
+                    <div className="mt-1 break-all text-xs font-mono bg-yellow-100 px-2 py-1 rounded border border-yellow-300">
+                      {walletInfo.address}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="firstName"
+                    className="block text-sm font-bold text-gray-900 mb-2"
+                  >
+                    First Name
+                  </label>
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    autoComplete="given-name"
+                    required
+                    className={`appearance-none relative block w-full px-3 py-2.5 border ${
+                      fieldErrors.firstName
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                    placeholder="First name"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      handleInputChange("firstName", e.target.value)
+                    }
+                    onBlur={() => handleBlur("firstName")}
+                    disabled={isLoading}
+                  />
+                  {fieldErrors.firstName && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {fieldErrors.firstName}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="lastName"
+                    className="block text-sm font-bold text-gray-900 mb-2"
+                  >
+                    Last Name
+                  </label>
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    autoComplete="family-name"
+                    required
+                    className={`appearance-none relative block w-full px-3 py-2.5 border ${
+                      fieldErrors.lastName
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                    placeholder="Last name"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      handleInputChange("lastName", e.target.value)
+                    }
+                    onBlur={() => handleBlur("lastName")}
+                    disabled={isLoading}
+                  />
+                  {fieldErrors.lastName && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {fieldErrors.lastName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Required for KYC (Know Your Customer) verification
+              </p>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-3">
+                  Role
+                </label>
+                <div className="space-y-3">
+                  <div className="flex items-start">
+                    <input
+                      id="role-publisher"
+                      name="role"
+                      type="radio"
+                      value="publisher"
+                      checked={formData.role === "publisher"}
+                      onChange={(e) =>
+                        handleInputChange("role", e.target.value)
+                      }
+                      disabled={isLoading}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 bg-white mt-0.5"
+                    />
+                    <label
+                      htmlFor="role-publisher"
+                      className="ml-3 text-sm text-gray-900"
+                    >
+                      <span className="font-medium block">Publisher</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Buy and distribute games to customers
+                      </span>
+                    </label>
+                  </div>
+                  <div className="flex items-start">
+                    <input
+                      id="role-creator"
+                      name="role"
+                      type="radio"
+                      value="creator"
+                      checked={formData.role === "creator"}
+                      onChange={(e) =>
+                        handleInputChange("role", e.target.value)
+                      }
+                      disabled={isLoading}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 bg-white mt-0.5"
+                    />
+                    <label
+                      htmlFor="role-creator"
+                      className="ml-3 text-sm text-gray-900"
+                    >
+                      <span className="font-medium block">Creator</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Create and upload games for sale
+                      </span>
+                    </label>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="firstName"
-                  className="block text-sm font-medium text-gray-300 mb-2"
-                >
-                  First Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  autoComplete="given-name"
-                  required
-                  className={`appearance-none relative block w-full px-3 py-3 border ${
-                    fieldErrors.firstName ? "border-red-500" : "border-gray-600"
-                  } placeholder-gray-400 text-gray-100 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:z-10 sm:text-sm transition-colors`}
-                  placeholder="First name"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    handleInputChange("firstName", e.target.value)
-                  }
-                  onBlur={() => handleBlur("firstName")}
-                  disabled={isLoading}
-                />
-                {fieldErrors.firstName && (
-                  <p className="mt-1 text-sm text-red-400">
-                    {fieldErrors.firstName}
+                {fieldErrors.role && (
+                  <p className="mt-2 text-sm text-red-600">
+                    {fieldErrors.role}
                   </p>
                 )}
               </div>
 
               <div>
                 <label
-                  htmlFor="lastName"
-                  className="block text-sm font-medium text-gray-300 mb-2"
+                  htmlFor="email"
+                  className="block text-sm font-bold text-gray-900 mb-2"
                 >
-                  Last Name <span className="text-red-400">*</span>
+                  Email
                 </label>
                 <input
-                  id="lastName"
-                  name="lastName"
+                  id="email"
+                  name="email"
                   type="text"
-                  autoComplete="family-name"
+                  autoComplete="email"
                   required
-                  className={`appearance-none relative block w-full px-3 py-3 border ${
-                    fieldErrors.lastName ? "border-red-500" : "border-gray-600"
-                  } placeholder-gray-400 text-gray-100 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:z-10 sm:text-sm transition-colors`}
-                  placeholder="Last name"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    handleInputChange("lastName", e.target.value)
-                  }
-                  onBlur={() => handleBlur("lastName")}
+                  className={`appearance-none relative block w-full px-3 py-2.5 border ${
+                    fieldErrors.email ? "border-red-500" : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                  placeholder="Enter your email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  onBlur={() => handleBlur("email")}
                   disabled={isLoading}
                 />
-                {fieldErrors.lastName && (
-                  <p className="mt-1 text-sm text-red-400">
-                    {fieldErrors.lastName}
+                {fieldErrors.email && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {fieldErrors.email}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-bold text-gray-900 mb-2"
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  className={`appearance-none relative block w-full px-3 py-2.5 border ${
+                    fieldErrors.password ? "border-red-500" : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                  placeholder="Create a strong password"
+                  value={formData.password}
+                  onChange={(e) =>
+                    handleInputChange("password", e.target.value)
+                  }
+                  onBlur={() => handleBlur("password")}
+                  disabled={isLoading}
+                />
+                {fieldErrors.password && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {fieldErrors.password}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Must be at least 8 characters with uppercase, lowercase, and
+                  number
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-sm font-bold text-gray-900 mb-2"
+                >
+                  Confirm Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  className={`appearance-none relative block w-full px-3 py-2.5 border ${
+                    fieldErrors.confirmPassword
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={(e) =>
+                    handleInputChange("confirmPassword", e.target.value)
+                  }
+                  onBlur={() => handleBlur("confirmPassword")}
+                  disabled={isLoading}
+                />
+                {fieldErrors.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {fieldErrors.confirmPassword}
                   </p>
                 )}
               </div>
             </div>
 
-            <p className="text-xs text-gray-500">
-              Required for KYC (Know Your Customer) verification
-            </p>
-
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-3">
-                Role <span className="text-red-400">*</span>
-              </label>
-              <div className="space-y-3">
-                <div className="flex items-center">
-                  <input
-                    id="role-publisher"
-                    name="role"
-                    type="radio"
-                    value="publisher"
-                    checked={formData.role === "publisher"}
-                    onChange={(e) => handleInputChange("role", e.target.value)}
-                    disabled={isLoading}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-600 bg-gray-700"
-                  />
-                  <label
-                    htmlFor="role-publisher"
-                    className="ml-3 text-sm text-gray-300"
-                  >
-                    <span className="font-medium">Publisher</span>
-                    <span className="block text-xs text-gray-500">
-                      Buy and distribute games to customers
-                    </span>
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    id="role-creator"
-                    name="role"
-                    type="radio"
-                    value="creator"
-                    checked={formData.role === "creator"}
-                    onChange={(e) => handleInputChange("role", e.target.value)}
-                    disabled={isLoading}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-600 bg-gray-700"
-                  />
-                  <label
-                    htmlFor="role-creator"
-                    className="ml-3 text-sm text-gray-300"
-                  >
-                    <span className="font-medium">Creator</span>
-                    <span className="block text-xs text-gray-500">
-                      Create and upload games for sale
-                    </span>
-                  </label>
-                </div>
-              </div>
-              {fieldErrors.role && (
-                <p className="mt-2 text-sm text-red-400">{fieldErrors.role}</p>
-              )}
-            </div>
-
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Email <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="text"
-                autoComplete="email"
-                required
-                className={`appearance-none relative block w-full px-3 py-3 border ${
-                  fieldErrors.email ? "border-red-500" : "border-gray-600"
-                } placeholder-gray-400 text-gray-100 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:z-10 sm:text-sm transition-colors`}
-                placeholder="Enter your email"
-                value={formData.email}
-                onChange={(e) => handleInputChange("email", e.target.value)}
-                onBlur={() => handleBlur("email")}
-                disabled={isLoading}
-              />
-              {fieldErrors.email && (
-                <p className="mt-1 text-sm text-red-400">{fieldErrors.email}</p>
-              )}
-            </div>
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Password <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className={`appearance-none relative block w-full px-3 py-3 border ${
-                  fieldErrors.password ? "border-red-500" : "border-gray-600"
-                } placeholder-gray-400 text-gray-100 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:z-10 sm:text-sm transition-colors`}
-                placeholder="Create a strong password"
-                value={formData.password}
-                onChange={(e) => handleInputChange("password", e.target.value)}
-                onBlur={() => handleBlur("password")}
-                disabled={isLoading}
-              />
-              {fieldErrors.password && (
-                <p className="mt-1 text-sm text-red-400">
-                  {fieldErrors.password}
-                </p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">
-                Must be at least 8 characters with uppercase, lowercase, and
-                number
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Confirm Password <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                className={`appearance-none relative block w-full px-3 py-3 border ${
-                  fieldErrors.confirmPassword
-                    ? "border-red-500"
-                    : "border-gray-600"
-                } placeholder-gray-400 text-gray-100 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:z-10 sm:text-sm transition-colors`}
-                placeholder="Confirm your password"
-                value={formData.confirmPassword}
-                onChange={(e) =>
-                  handleInputChange("confirmPassword", e.target.value)
-                }
-                onBlur={() => handleBlur("confirmPassword")}
-                disabled={isLoading}
-              />
-              {fieldErrors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-400">
-                  {fieldErrors.confirmPassword}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-blue-900/20 border border-blue-500 text-blue-300 px-4 py-3 rounded-lg">
-            <p className="text-sm">
-              <span className="font-semibold">KYC Notice:</span> Your name and
-              role selection will be used for identity verification to comply
-              with marketplace regulations. This information is securely stored
-              and used only for verification and role-based access control
-              purposes.
-            </p>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading ? "Creating account..." : "Create account"}
-            </button>
-          </div>
-
-          <div className="text-center">
-            <p className="text-sm text-gray-400">
-              Already have an account?{" "}
               <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="font-medium text-indigo-400 hover:text-indigo-300"
+                type="submit"
                 disabled={isLoading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Sign in here
+                {isLoading ? "Creating account..." : "Create account"}
               </button>
-            </p>
-          </div>
-        </form>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

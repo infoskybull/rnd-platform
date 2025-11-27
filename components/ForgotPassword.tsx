@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { apiService } from "../services/api";
-import RnDLogo from "./icons/RnDLogo";
 import { gsap } from "gsap";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle } from "lucide-react";
 
 interface ForgotPasswordProps {
   onBackToLogin: () => void;
@@ -29,7 +28,6 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -251,17 +249,17 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
       case "email":
         return (
           <>
-            <h2 className="text-2xl在过去 font-bold text-white mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
               Forgot your password?
             </h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className="text-gray-500 text-sm mb-6 text-center">
               Enter your email address and we'll send you a 6-digit verification
               code
             </p>
 
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
+            <form onSubmit={handleEmailSubmit} className="space-y-6">
               {error && (
-                <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
                   {error}
                 </div>
               )}
@@ -269,9 +267,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <div>
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-gray-300 mb-2"
+                  className="block text-sm font-bold text-gray-900 mb-2"
                 >
-                  Email Address <span className="text-red-400">*</span>
+                  Email address
                 </label>
                 <input
                   id="email"
@@ -285,14 +283,14 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   }}
                   disabled={isLoading}
                   className={`w-full px-3 py-3 border ${
-                    fieldErrors.email ? "border-red-500" : "border-gray-600"
-                  } rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors`}
-                  placeholder="Enter your email"
+                    fieldErrors.email ? "border-red-500" : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
+                  placeholder="Enter email"
                   required
                   autoFocus
                 />
                 {fieldErrors.email && (
-                  <p className="mt-1 text-sm text-red-400">
+                  <p className="mt-1 text-sm text-red-500">
                     {fieldErrors.email}
                   </p>
                 )}
@@ -301,7 +299,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? "Sending..." : "Send verification code"}
               </button>
@@ -310,9 +308,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                 type="button"
                 onClick={onBackToLogin}
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg border border-gray-600 text-gray-300 font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-gray-500 text-white font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Back to login 显{" "}
+                Back to login
               </button>
             </form>
           </>
@@ -321,16 +319,17 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
       case "pin":
         return (
           <>
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
               Enter verification code
             </h2>
-            <p className="text-gray-400 text-sm mb-6">
-              We've sent a 6-digit code to <strong>{email}</strong>
+            <p className="text-gray-500 text-sm mb-6 text-center">
+              We've sent a 6-digit code to{" "}
+              <strong className="text-gray-900">{email}</strong>
             </p>
 
             <form onSubmit={handlePinSubmit} className="space-y-6">
               {error && (
-                <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
                   <div className="flex items-center gap-2">
                     <XCircle className="w-5 h-5" />
                     <span>{error}</span>
@@ -339,7 +338,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-4 text-center">
+                <label className="block text-sm font-bold text-gray-900 mb-4 text-center">
                   Enter 6-digit code
                 </label>
                 <div className="flex gap-2 justify-center">
@@ -357,7 +356,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                       onKeyDown={(e) => handlePinKeyDown(index, e)}
                       onPaste={handlePinPaste}
                       disabled={isLoading}
-                      className="w-12 h-14 text-center text-xl font-bold border border-gray-600 rounded-lg bg-gray-700 text-gray-100 focus:outlineровка-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+                      className="w-12 h-14 text-center text-xl font-bold border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                     />
                   ))}
                 </div>
@@ -366,7 +365,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? "Verifying..." : "Verify code"}
               </button>
@@ -381,7 +380,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   setCurrentStep("email");
                 }}
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg border border-gray-600 text-gray-300 font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-gray-500 text-white font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Back to email
               </button>
@@ -392,16 +391,16 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
       case "password":
         return (
           <>
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
               Create new password
             </h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className="text-gray-500 text-sm mb-6 text-center">
               Please enter a new password for your account
             </p>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <form onSubmit={handlePasswordSubmit} className="space-y-6">
               {error && (
-                <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
                   {error}
                 </div>
               )}
@@ -409,9 +408,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <div>
                 <label
                   htmlFor="newPassword"
-                  className="block text-sm font-medium text-gray-300 mb-2"
+                  className="block text-sm font-bold text-gray-900 mb-2"
                 >
-                  New Password <span className="text-red-400">*</span>
+                  New Password
                 </label>
                 <input
                   id="newPassword"
@@ -427,14 +426,14 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   className={`w-full px-3 py-3 border ${
                     fieldErrors.newPassword
                       ? "border-red-500"
-                      : "border-gray-600"
-                  } rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors`}
+                      : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
                   placeholder="Enter new password"
                   required
                   autoFocus
                 />
                 {fieldErrors.newPassword && (
-                  <p className="mt-1 text-sm text-red-400">
+                  <p className="mt-1 text-sm text-red-500">
                     {fieldErrors.newPassword}
                   </p>
                 )}
@@ -447,9 +446,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-gray-300 mb-2"
+                  className="block text-sm font-bold text-gray-900 mb-2"
                 >
-                  Confirm Password <span className="text-red-400">*</span>
+                  Confirm Password
                 </label>
                 <input
                   id="confirmPassword"
@@ -465,13 +464,13 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   className={`w-full px-3 py-3 border ${
                     fieldErrors.confirmPassword
                       ? "border-red-500"
-                      : "border-gray-600"
-                  } rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors`}
+                      : "border-gray-300"
+                  } placeholder-gray-400 text-gray-900 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-colors`}
                   placeholder="Confirm new password"
                   required
                 />
                 {fieldErrors.confirmPassword && (
-                  <p className="mt-1 text-sm谥号 text-red-400">
+                  <p className="mt-1 text-sm text-red-500">
                     {fieldErrors.confirmPassword}
                   </p>
                 )}
@@ -480,7 +479,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? "Resetting..." : "Reset password"}
               </button>
@@ -492,7 +491,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   setCurrentStep("pin");
                 }}
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg border border-gray-600 text-gray-300 font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-gray-500 text-white font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Back to code
               </button>
@@ -503,24 +502,24 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
       case "success":
         return (
           <>
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
               Password Reset Successful!
             </h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className="text-gray-500 text-sm mb-6 text-center">
               Your password has been reset successfully. You can now log in with
               your new password.
             </p>
 
             <div className="flex flex-col items-center justify-center space-y-6">
               {/* Success Icon */}
-              <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center animate-pulse">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
                 <CheckCircle className="w-12 h-12 text-green-500" />
               </div>
 
               {/* User Info */}
-              <div className="bg-gray-700/50 p-4 rounded-lg w-full border border-gray-600">
-                <p className="text-gray-400 text-sm mb-2">Email:</p>
-                <p className="text-white font-medium">{email}</p>
+              <div className="bg-gray-50 p-4 rounded-lg w-full border border-gray-200">
+                <p className="text-gray-500 text-sm mb-2">Email:</p>
+                <p className="text-gray-900 font-medium">{email}</p>
               </div>
 
               {/* Back to Login Button */}
@@ -535,7 +534,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
                   setPin(["", "", "", "", "", ""]);
                   navigate("/login");
                 }}
-                className="w-full py-3 px-4 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+                className="w-full py-3 px-4 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
               >
                 Back to Login
               </button>
@@ -546,16 +545,41 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBackToLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div ref={logoRef} className="flex justify-center mb-6">
-            <RnDLogo size={80} />
-          </div>
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Top Navigation */}
+      <div className="w-full px-6 py-4 flex items-center justify-between bg-white">
+        <div ref={logoRef} className="font-bold text-gray-900 text-lg">
+          Platform
         </div>
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            className="text-base font-semibold text-gray-900"
+            disabled={isLoading}
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/signup")}
+            className="text-base text-gray-900 hover:text-gray-700"
+            disabled={isLoading}
+          >
+            Sign up
+          </button>
+        </div>
+      </div>
 
-        <div className="mt-8 space-y-6 bg-gray-800 p-8 rounded-xl border border-gray-700">
-          {renderStepContent()}
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center px-4 bg-gray-100">
+        <div className="max-w-lg w-full">
+          <div
+            ref={formRef as unknown as React.RefObject<HTMLDivElement>}
+            className="bg-white p-10 rounded-xl shadow-2xl space-y-6"
+          >
+            {renderStepContent()}
+          </div>
         </div>
       </div>
     </div>

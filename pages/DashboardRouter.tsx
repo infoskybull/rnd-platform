@@ -33,9 +33,9 @@ const DashboardRouter: React.FC = () => {
   if (user.role === "admin") {
     return <Navigate to="/admin/accounts" replace />;
   } else if (user.role === "publisher") {
-    return <Navigate to="/dashboard/publisher/browse-games" replace />;
+    return <Navigate to="/dashboard/publisher/dashboard" replace />;
   } else if (user.role === "creator") {
-    return <Navigate to="/dashboard/creator/your-projects" replace />;
+    return <Navigate to="/dashboard/creator/dashboard" replace />;
   }
 
   return <Navigate to="/" replace />;

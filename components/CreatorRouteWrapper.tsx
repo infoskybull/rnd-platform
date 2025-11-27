@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import CreatorDashboardPage from "../pages/CreatorDashboardPage";
 import CreatorYourProjectsPage from "../pages/CreatorYourProjectsPage";
 import CreatorCollaborationsPage from "../pages/CreatorCollaborationsPage";
 import CreatorContractsPage from "../pages/CreatorContractsPage";
@@ -8,6 +9,9 @@ import CreatorStatsPage from "../pages/CreatorStatsPage";
 import CreatorHistoryPage from "../pages/CreatorHistoryPage";
 import CreatorSettingsPage from "../pages/CreatorSettingsPage";
 import CreatorMessagesPage from "../pages/CreatorMessagesPage";
+import CreatorUseAIPage from "../pages/CreatorUseAIPage";
+import CreatorUploadPage from "../pages/CreatorUploadPage";
+import CreatorUploadSuccessPage from "../pages/CreatorUploadSuccessPage";
 import {
   PlanAccessRequirement,
   getPlanCode,
@@ -16,6 +20,10 @@ import {
 
 interface CreatorRouteWrapperProps {
   page:
+    | "dashboard"
+    | "use-ai"
+    | "upload"
+    | "upload-success"
     | "your-projects"
     | "collaborations"
     | "contracts"
@@ -32,6 +40,10 @@ const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
     CreatorRouteWrapperProps["page"],
     PlanAccessRequirement | undefined
   > = {
+    dashboard: undefined,
+    "use-ai": undefined,
+    upload: undefined,
+    "upload-success": undefined,
     "your-projects": undefined,
     collaborations: undefined,
     contracts: undefined,
@@ -86,6 +98,16 @@ const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
 
   // Render the appropriate page based on the page prop
   switch (page) {
+    case "dashboard":
+      return <CreatorDashboardPage user={user} onLogout={handleLogout} />;
+    case "use-ai":
+      return <CreatorUseAIPage user={user} onLogout={handleLogout} />;
+    case "upload":
+      return <CreatorUploadPage user={user} onLogout={handleLogout} />;
+    case "upload-success":
+      return (
+        <CreatorUploadSuccessPage user={user} onLogout={handleLogout} />
+      );
     case "your-projects":
       return <CreatorYourProjectsPage user={user} onLogout={handleLogout} />;
     case "collaborations":

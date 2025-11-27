@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import PublisherDashboardPage from "../pages/PublisherDashboardPage";
 import PublisherBrowseGamesPage from "../pages/PublisherBrowseGamesPage";
 import PublisherInventoryPage from "../pages/PublisherInventoryPage";
 import PublisherCollaborationsPage from "../pages/PublisherCollaborationsPage";
@@ -9,6 +10,9 @@ import PublisherStatsPage from "../pages/PublisherStatsPage";
 import PublisherHistoryPage from "../pages/PublisherHistoryPage";
 import PublisherSettingsPage from "../pages/PublisherSettingsPage";
 import PublisherMessagesPage from "../pages/PublisherMessagesPage";
+import PublisherMarketplacePage from "../pages/PublisherMarketplacePage";
+import PublisherPrototypeDetailPage from "../pages/PublisherPrototypeDetailPage";
+import PublisherPortfolioPage from "../pages/PublisherPortfolioPage";
 import {
   PlanAccessRequirement,
   getPlanCode,
@@ -17,7 +21,11 @@ import {
 
 interface PublisherRouteWrapperProps {
   page:
+    | "dashboard"
     | "browse-games"
+    | "marketplace"
+    | "prototype-detail"
+    | "portfolio"
     | "inventory"
     | "collaborations"
     | "contracts"
@@ -36,7 +44,11 @@ const PublisherRouteWrapper: React.FC<PublisherRouteWrapperProps> = ({
     PublisherRouteWrapperProps["page"],
     PlanAccessRequirement | undefined
   > = {
+    dashboard: undefined,
     "browse-games": undefined,
+    marketplace: undefined,
+    "prototype-detail": undefined,
+    portfolio: undefined,
     inventory: undefined,
     collaborations: undefined,
     contracts: undefined,
@@ -91,8 +103,18 @@ const PublisherRouteWrapper: React.FC<PublisherRouteWrapperProps> = ({
 
   // Render the appropriate page based on the page prop
   switch (page) {
+    case "dashboard":
+      return <PublisherDashboardPage user={user} onLogout={handleLogout} />;
     case "browse-games":
       return <PublisherBrowseGamesPage user={user} onLogout={handleLogout} />;
+    case "marketplace":
+      return <PublisherMarketplacePage user={user} onLogout={handleLogout} />;
+    case "prototype-detail":
+      return (
+        <PublisherPrototypeDetailPage user={user} onLogout={handleLogout} />
+      );
+    case "portfolio":
+      return <PublisherPortfolioPage user={user} onLogout={handleLogout} />;
     case "inventory":
       return <PublisherInventoryPage user={user} onLogout={handleLogout} />;
     case "collaborations":
