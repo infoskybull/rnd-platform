@@ -928,7 +928,10 @@ const CreateProjectAIPage: React.FC = () => {
                       <textarea
                         value={formData.productSaleData?.description || ""}
                         onChange={(e) =>
-                          handleFormChange("productSaleData.description", e.target.value)
+                          handleFormChange(
+                            "productSaleData.description",
+                            e.target.value
+                          )
                         }
                         rows={3}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
@@ -967,9 +970,14 @@ const CreateProjectAIPage: React.FC = () => {
                         Proposal
                       </label>
                       <textarea
-                        value={formData.creatorCollaborationData?.proposal || ""}
+                        value={
+                          formData.creatorCollaborationData?.proposal || ""
+                        }
                         onChange={(e) =>
-                          handleFormChange("creatorCollaborationData.proposal", e.target.value)
+                          handleFormChange(
+                            "creatorCollaborationData.proposal",
+                            e.target.value
+                          )
                         }
                         rows={3}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
@@ -1001,9 +1009,14 @@ const CreateProjectAIPage: React.FC = () => {
                       </label>
                       <input
                         type="text"
-                        value={formData.creatorCollaborationData?.timeline || ""}
+                        value={
+                          formData.creatorCollaborationData?.timeline || ""
+                        }
                         onChange={(e) =>
-                          handleFormChange("creatorCollaborationData.timeline", e.target.value)
+                          handleFormChange(
+                            "creatorCollaborationData.timeline",
+                            e.target.value
+                          )
                         }
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         placeholder="e.g., 3 months"

@@ -2,6 +2,17 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { User } from "../types";
 import { generateGameCodeStream } from "../services/geminiService";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import {
+  setProjectName as setProjectNameAction,
+  setMessages as setMessagesAction,
+  addMessage as addMessageAction,
+  updateMessage as updateMessageAction,
+  removeMessage as removeMessageAction,
+  setGeneratedCode as setGeneratedCodeAction,
+  setIsGenerationComplete as setIsGenerationCompleteAction,
+  resetAIPageState as resetAIPageStateAction,
+} from "../store/aiPageSlice";
 
 interface CreatorUseAIPageProps {
   user: User;
@@ -49,27 +60,30 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
   onLogout,
 }) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
+  // Get state from Redux store
+  const aiPageState = useAppSelector((state) => state.aiPage);
+  const projectName = aiPageState.projectName;
+  const isGenerationComplete = aiPageState.isGenerationComplete;
+  const generatedCodeFromStore = aiPageState.generatedCode;
+
+  // Convert Redux messages (with ISO string timestamps) to component format (with Date objects)
+  const messagesFromStore = aiPageState.messages.map((msg) => ({
+    ...msg,
+    timestamp: new Date(msg.timestamp),
+  }));
+
   const [activeTab, setActiveTab] = useState<"preview" | "code" | "fullscreen">(
     "preview"
   );
-  const [projectName, setProjectName] = useState("Project name");
-  const [isEditingName, setIsEditingName] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "1",
-      text: "Hello! I'm your AI assistant. Describe a game you'd like to create, and I'll generate the code for you!",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(messagesFromStore);
   const [generatedCode, setGeneratedCode] = useState<string>(
-    INITIAL_HTML_PLACEHOLDER
+    generatedCodeFromStore || INITIAL_HTML_PLACEHOLDER
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isGenerationComplete, setIsGenerationComplete] =
-    useState<boolean>(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>("");
@@ -81,6 +95,146 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
   const isGeneratingRef = useRef<boolean>(false);
   const shouldCancelGenerationRef = useRef<boolean>(false);
   const justCancelledRef = useRef<boolean>(false);
+
+  // Initialize local state from Redux on mount only
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      if (aiPageState.messages.length > 0) {
+        const newMessages = aiPageState.messages.map((msg) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+
+        // If generation is complete, remove any generating messages
+        let finalMessages = newMessages;
+        if (isGenerationComplete) {
+          finalMessages = newMessages.filter((msg) => !msg.isGenerating);
+          setIsLoading(false);
+          isGeneratingRef.current = false;
+
+          // Update Redux if we removed generating messages
+          if (finalMessages.length !== newMessages.length) {
+            const messagesToStore = finalMessages.map((msg) => ({
+              id: msg.id,
+              text: msg.text,
+              isUser: msg.isUser,
+              timestamp: msg.timestamp.toISOString(),
+              isGenerating: msg.isGenerating,
+            }));
+            dispatch(setMessagesAction(messagesToStore));
+          }
+        } else {
+          // Check if there's any message still generating
+          const hasGeneratingMessage = newMessages.some(
+            (msg) => msg.isGenerating
+          );
+          if (hasGeneratingMessage) {
+            setIsLoading(true);
+            isGeneratingRef.current = true;
+          } else {
+            setIsLoading(false);
+            isGeneratingRef.current = false;
+          }
+        }
+
+        setMessages(finalMessages);
+      } else {
+        setIsLoading(false);
+        isGeneratingRef.current = false;
+      }
+
+      if (generatedCodeFromStore) {
+        setGeneratedCode(generatedCodeFromStore);
+      }
+
+      hasInitialized.current = true;
+    }
+  }, []); // Only run once on mount
+
+  // Handle when isGenerationComplete changes (e.g., when navigating back)
+  useEffect(() => {
+    if (hasInitialized.current && isGenerationComplete) {
+      // If generation is complete, remove any generating messages
+      setMessages((prevMessages) => {
+        const filteredMessages = prevMessages.filter(
+          (msg) => !msg.isGenerating
+        );
+
+        // Update Redux if we removed generating messages
+        if (filteredMessages.length !== prevMessages.length) {
+          const messagesToStore = filteredMessages.map((msg) => ({
+            id: msg.id,
+            text: msg.text,
+            isUser: msg.isUser,
+            timestamp: msg.timestamp.toISOString(),
+            isGenerating: msg.isGenerating,
+          }));
+          dispatch(setMessagesAction(messagesToStore));
+        }
+
+        return filteredMessages;
+      });
+
+      setIsLoading(false);
+      isGeneratingRef.current = false;
+    }
+  }, [isGenerationComplete, dispatch]);
+
+  // Update Redux when messages change (but skip initial sync)
+  const prevMessagesLengthRef = useRef(messages.length);
+  const prevMessagesIdsRef = useRef(messages.map((m) => m.id).join(","));
+
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      prevMessagesLengthRef.current = messages.length;
+      prevMessagesIdsRef.current = messages.map((m) => m.id).join(",");
+      return;
+    }
+
+    const currentLength = messages.length;
+    const currentIds = messages.map((m) => m.id).join(",");
+
+    // Only update if messages actually changed
+    if (
+      currentLength !== prevMessagesLengthRef.current ||
+      currentIds !== prevMessagesIdsRef.current
+    ) {
+      const messagesToStore = messages.map((msg) => ({
+        id: msg.id,
+        text: msg.text,
+        isUser: msg.isUser,
+        timestamp: msg.timestamp.toISOString(),
+        isGenerating: msg.isGenerating,
+      }));
+      dispatch(setMessagesAction(messagesToStore));
+      prevMessagesLengthRef.current = currentLength;
+      prevMessagesIdsRef.current = currentIds;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, messages.map((m) => m.id).join(",")]);
+
+  // Update Redux when generated code changes (debounced)
+  const codeUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!hasInitialized.current) return;
+
+    if (codeUpdateTimeoutRef.current) {
+      clearTimeout(codeUpdateTimeoutRef.current);
+    }
+
+    if (generatedCode && generatedCode !== INITIAL_HTML_PLACEHOLDER) {
+      codeUpdateTimeoutRef.current = setTimeout(() => {
+        dispatch(setGeneratedCodeAction(generatedCode));
+      }, 500);
+    }
+
+    return () => {
+      if (codeUpdateTimeoutRef.current) {
+        clearTimeout(codeUpdateTimeoutRef.current);
+      }
+    };
+  }, [generatedCode, dispatch]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -123,9 +277,10 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
       }
       // Reset code and preview to initial state
       setGeneratedCode(INITIAL_HTML_PLACEHOLDER);
+      dispatch(setGeneratedCodeAction(""));
       setIsLoading(true);
       setError(null);
-      setIsGenerationComplete(false);
+      dispatch(setIsGenerationCompleteAction(false));
 
       // Add a loading message for AI response
       const loadingMessageId = (Date.now() + 1).toString();
@@ -180,7 +335,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
         }
 
         // Mark generation as complete
-        setIsGenerationComplete(true);
+        dispatch(setIsGenerationCompleteAction(true));
         isGeneratingRef.current = false;
 
         // Update the loading message with final response
@@ -317,9 +472,10 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     // Resubmit the edited message
     // Reset code and preview to initial state first
     setGeneratedCode(INITIAL_HTML_PLACEHOLDER);
+    dispatch(setGeneratedCodeAction(""));
     setIsLoading(true);
     setError(null);
-    setIsGenerationComplete(false);
+    dispatch(setIsGenerationCompleteAction(false));
 
     // Add a loading message for AI response
     const loadingMessageId = (Date.now() + 1).toString();
@@ -374,7 +530,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
       }
 
       // Mark generation as complete
-      setIsGenerationComplete(true);
+      dispatch(setIsGenerationCompleteAction(true));
       isGeneratingRef.current = false;
 
       // Update the loading message with final response
@@ -439,7 +595,15 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     }
   };
 
-  const handleBackToStart = () => {
+  const handleClearAll = () => {
+    // Cancel any ongoing generation first
+    shouldCancelGenerationRef.current = true;
+    isGeneratingRef.current = false;
+    
+    // Reset Redux state (messages, generated code, project name, isGenerationComplete)
+    dispatch(resetAIPageStateAction());
+    
+    // Clear local state
     setMessages([
       {
         id: "1",
@@ -451,9 +615,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     setGeneratedCode(INITIAL_HTML_PLACEHOLDER);
     setInputValue("");
     setError(null);
-    setIsGenerationComplete(false);
     setUploadedFiles([]);
     setActiveTab("preview");
+    setIsLoading(false);
+    
+    // Reset generation complete status in Redux
+    dispatch(setIsGenerationCompleteAction(false));
   };
 
   const handleFileButtonClick = () => {
@@ -595,7 +762,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-blue text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -615,7 +782,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-blue text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -635,7 +802,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-blue text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -646,54 +813,15 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
         </div>
       </div>
 
-      {/* Project Name Header - Above both panels */}
-      <div className="w-full px-6 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
+      {/* Header with Clear all button */}
+      <div className="w-full px-6 py-3 border-b border-gray-200 bg-white flex items-center justify-start">
         <button
-          onClick={handleBackToStart}
-          className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          onClick={handleClearAll}
+          className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          Back to start
+          Clear all
         </button>
-
-        <div className="flex items-center gap-2">
-          {isEditingName ? (
-            <input
-              type="text"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              onBlur={() => setIsEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setIsEditingName(false);
-              }}
-              className="text-base font-semibold text-gray-900 border-b border-blue-500 focus:outline-none"
-              autoFocus
-            />
-          ) : (
-            <>
-              <h2 className="text-base font-semibold text-gray-900">
-                {projectName}
-              </h2>
-              <button
-                onClick={() => setIsEditingName(true)}
-                className="p-1 text-gray-400 hover:text-gray-600"
-              >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M4 21C3.71667 21 3.47933 20.904 3.288 20.712C3.09667 20.52 3.00067 20.2827 3 20V17.575C3 17.3083 3.05 17.054 3.15 16.812C3.25 16.57 3.39167 16.3577 3.575 16.175L16.2 3.575C16.4 3.39167 16.621 3.25 16.863 3.15C17.105 3.05 17.359 3 17.625 3C17.891 3 18.1493 3.05 18.4 3.15C18.6507 3.25 18.8673 3.4 19.05 3.6L20.425 5C20.625 5.18333 20.7707 5.4 20.862 5.65C20.9533 5.9 20.9993 6.15 21 6.4C21 6.66667 20.954 6.921 20.862 7.163C20.77 7.405 20.6243 7.62567 20.425 7.825L7.825 20.425C7.64167 20.6083 7.429 20.75 7.187 20.85C6.945 20.95 6.691 21 6.425 21H4ZM17.6 7.8L19 6.4L17.6 5L16.2 6.4L17.6 7.8Z"
-                    fill="#757575"
-                  />
-                </svg>
-              </button>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
           <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
             <svg
               width="28"
@@ -951,13 +1079,13 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                               xmlns="http://www.w3.org/2000/svg"
                             >
                               <path
-                                fill-rule="evenodd"
+                                fillRule="evenodd"
                                 clipRule="evenodd"
                                 d="M0 8.66709C0 7.76535 0.358213 6.90055 0.995837 6.26293C1.63346 5.6253 2.49826 5.26709 3.4 5.26709H5.605V7.26709H3.4C3.0287 7.26709 2.6726 7.41459 2.41005 7.67714C2.1475 7.93969 2 8.29579 2 8.66709V15.8671C2 16.2384 2.1475 16.5945 2.41005 16.857C2.6726 17.1196 3.0287 17.2671 3.4 17.2671H10.6C10.9713 17.2671 11.3274 17.1196 11.5899 16.857C11.8525 16.5945 12 16.2384 12 15.8671V14.0671H14V15.8671C14 16.7688 13.6418 17.6336 13.0042 18.2713C12.3665 18.9089 11.5017 19.2671 10.6 19.2671H3.4C2.49826 19.2671 1.63346 18.9089 0.995837 18.2713C0.358213 17.6336 0 16.7688 0 15.8671V8.66709Z"
                                 fill="currentColor"
                               />
                               <path
-                                fill-rule="evenodd"
+                                fillRule="evenodd"
                                 clipRule="evenodd"
                                 d="M8 0H16C17.0609 0 18.0783 0.421427 18.8284 1.17157C19.5786 1.92172 20 2.93913 20 4V12C20 13.0609 19.5786 14.0783 18.8284 14.8284C18.0783 15.5786 17.0609 16 16 16H8C6.93913 16 5.92172 15.5786 5.17157 14.8284C4.42143 14.0783 4 13.0609 4 12V4C4 2.93913 4.42143 1.92172 5.17157 1.17157C5.92172 0.421427 6.93913 0 8 0ZM8 2C7.46957 2 6.96086 2.21071 6.58579 2.58579C6.21071 2.96086 6 3.46957 6 4V12C6 12.5304 6.21071 13.0391 6.58579 13.4142C6.96086 13.7893 7.46957 14 8 14H16C16.5304 14 17.0391 13.7893 17.4142 13.4142C17.7893 13.0391 18 12.5304 18 12V4C18 3.46957 17.7893 2.96086 17.4142 2.58579C17.0391 2.21071 16.5304 2 16 2H8Z"
                                 fill="currentColor"
@@ -1182,8 +1310,8 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full max-w-md mx-auto">
-                    <div className="bg-white rounded-lg border border-gray-300 shadow-sm aspect-[9/16] overflow-hidden">
+                  <div className="w-full max-w-md mx-auto flex flex-col items-center">
+                    <div className="bg-white rounded-lg border border-gray-300 shadow-sm aspect-[9/16] overflow-hidden w-full">
                       <iframe
                         srcDoc={generatedCode || INITIAL_HTML_PLACEHOLDER}
                         title="Game Preview"
@@ -1191,6 +1319,23 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                         sandbox="allow-scripts"
                       />
                     </div>
+                    {isGenerationComplete && (
+                      <button
+                        onClick={() => {
+                          // Navigate to upload page with generated code
+                          navigate("/dashboard/creator/upload", {
+                            state: {
+                              generatedCode,
+                              projectName,
+                              source: "ai-generator",
+                            },
+                          });
+                        }}
+                        className="my-4 px-8 py-3 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Submit
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

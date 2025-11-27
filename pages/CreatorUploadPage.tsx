@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { User } from "../types";
 import CustomCheckbox from "../components/CustomCheckbox";
 import FileUploadSection from "../components/FileUploadSection";
+import { useAppSelector, useAppDispatch } from "../store/hooks";
+import { suggestTags } from "../services/geminiService";
+import { setProjectName as setProjectNameAction } from "../store/aiPageSlice";
 
 interface CreatorUploadPageProps {
   user: User;
@@ -14,12 +17,15 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   onLogout,
 }) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const aiPageState = useAppSelector((state) => state.aiPage);
+  const projectName = aiPageState.projectName || "";
   const [shortDescription, setShortDescription] = useState("");
   const [longDescription, setLongDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [platform, setPlatform] = useState("Mobile");
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [platform, setPlatform] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState("");
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
   const [selectedPackages, setSelectedPackages] = useState<number[]>([1, 2, 3]);
@@ -34,6 +40,15 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   const [appIconFiles, setAppIconFiles] = useState<File[]>([]);
   const [featureImageFiles, setFeatureImageFiles] = useState<File[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({
+    projectName: false,
+    shortDescription: false,
+    longDescription: false,
+  });
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const availableTags = ["Puzzle", "RPG", "Hyper casual", "Casual"];
   const platforms = ["Mobile", "PC", "Console", "Web", "Smart TV"];
@@ -102,23 +117,26 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         if (!tags.includes(trimmedTag)) {
           setTags([...tags, trimmedTag]);
           setTagInput("");
+          setShowTagSuggestions(false);
         } else {
           // Tag đã tồn tại, chỉ clear input
           setTagInput("");
+          setShowTagSuggestions(false);
         }
       }
+    } else if (e.key === "Escape") {
+      setShowTagSuggestions(false);
     }
   };
 
-  const handleGenreToggle = (genre: string) => {
-    setSelectedGenres((prev) =>
-      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
-    );
+  const handleSelectSuggestion = (suggestion: string) => {
+    if (tags.length < 5 && !tags.includes(suggestion)) {
+      setTags([...tags, suggestion]);
+      setTagInput("");
+      setShowTagSuggestions(false);
+    }
   };
 
-  const handleGenreRemove = (genre: string) => {
-    setSelectedGenres((prev) => prev.filter((g) => g !== genre));
-  };
 
   const handlePackageToggle = (packageId: number) => {
     setSelectedPackages((prev) =>
@@ -140,6 +158,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   // Close dropdowns when clicking outside
   const platformRef = useRef<HTMLDivElement>(null);
   const genreRef = useRef<HTMLDivElement>(null);
+  const tagInputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -155,6 +174,12 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
       ) {
         setShowGenreDropdown(false);
       }
+      if (
+        tagInputRef.current &&
+        !tagInputRef.current.contains(event.target as Node)
+      ) {
+        setShowTagSuggestions(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -162,6 +187,81 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Debounced tag suggestions
+  useEffect(() => {
+    if (!tagInput.trim() || tags.length >= 5) {
+      setTagSuggestions([]);
+      setShowTagSuggestions(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        setLoadingSuggestions(true);
+        const suggestions = await suggestTags(tagInput, tags, {
+          shortDescription,
+          longDescription,
+        });
+        setTagSuggestions(suggestions);
+        setShowTagSuggestions(suggestions.length > 0);
+      } catch (error) {
+        console.error("Error fetching tag suggestions:", error);
+        setTagSuggestions([]);
+        setShowTagSuggestions(false);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [tagInput, tags, shortDescription, longDescription]);
+
+  const handlePublish = () => {
+    // Reset validation errors
+    const errors = {
+      projectName: false,
+      shortDescription: false,
+      longDescription: false,
+    };
+
+    // Check if project name is still "Unnamed" or "Project name" or empty
+    const trimmedProjectName = projectName.trim();
+    if (
+      trimmedProjectName === "" ||
+      trimmedProjectName === "Unnamed" ||
+      trimmedProjectName === "Project name"
+    ) {
+      errors.projectName = true;
+    }
+
+    // Check if short description is empty
+    if (!shortDescription.trim()) {
+      errors.shortDescription = true;
+    }
+
+    // Check if long description is empty
+    if (!longDescription.trim()) {
+      errors.longDescription = true;
+    }
+
+    // If there are any errors, show them
+    if (errors.projectName || errors.shortDescription || errors.longDescription) {
+      setValidationErrors(errors);
+      setShowWarningModal(true);
+      return;
+    }
+
+    // Clear validation errors if all valid
+    setValidationErrors({
+      projectName: false,
+      shortDescription: false,
+      longDescription: false,
+    });
+
+    // If all valid, proceed with navigation
+    navigate("/dashboard/creator/upload-success");
+  };
 
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden">
@@ -332,45 +432,111 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         {/* Left Section - Form */}
         <div className="flex-1 overflow-hidden pr-3 bg-white p-8 rounded-lg flex flex-col">
           <div className="flex-1 overflow-y-auto">
-            <h1 className="text-3xl font-bold text-gray-900 mb-6">Unnamed</h1>
+            {/* Project Name */}
+            <div className="mb-6 p-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Project name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Enter project name"
+                value={projectName}
+                onChange={(e) => {
+                  dispatch(setProjectNameAction(e.target.value));
+                  if (validationErrors.projectName && e.target.value.trim()) {
+                    setValidationErrors((prev) => ({ ...prev, projectName: false }));
+                  }
+                }}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-2xl font-bold ${
+                  validationErrors.projectName
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300"
+                }`}
+              />
+              {validationErrors.projectName && (
+                <p className="mt-1 text-sm text-red-500">
+                  Project name is required
+                </p>
+              )}
+            </div>
 
             {/* Short Description */}
             <div className="mb-6 p-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Short description
+                Short description <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 placeholder="Write a short description"
                 value={shortDescription}
-                onChange={(e) => setShortDescription(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                onChange={(e) => {
+                  setShortDescription(e.target.value);
+                  if (validationErrors.shortDescription && e.target.value.trim()) {
+                    setValidationErrors((prev) => ({ ...prev, shortDescription: false }));
+                  }
+                }}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black ${
+                  validationErrors.shortDescription
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300"
+                }`}
               />
+              {validationErrors.shortDescription && (
+                <p className="mt-1 text-sm text-red-500">
+                  Short description is required
+                </p>
+              )}
             </div>
 
             {/* Long Description */}
             <div className="mb-6 p-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Long description
+                Long description <span className="text-red-500">*</span>
               </label>
               <textarea
                 placeholder="Enter description"
                 value={longDescription}
-                onChange={(e) => setLongDescription(e.target.value)}
+                onChange={(e) => {
+                  setLongDescription(e.target.value);
+                  if (validationErrors.longDescription && e.target.value.trim()) {
+                    setValidationErrors((prev) => ({ ...prev, longDescription: false }));
+                  }
+                }}
                 rows={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-black"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-black ${
+                  validationErrors.longDescription
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300"
+                }`}
               />
+              {validationErrors.longDescription && (
+                <p className="mt-1 text-sm text-red-500">
+                  Long description is required
+                </p>
+              )}
             </div>
 
-            <div className="grid grid-cols-3 gap-4 p-2">
-              {/* Tags */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm font-semibold text-gray-900 relative flex-shrink-0">
-                    Tags
-                  </label>
+            <div className="p-2">
+              {/* Labels Row - Always on same line */}
+              <div className="grid grid-cols-3 gap-4 mb-2">
+                <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
+                  Tags
+                </label>
+                <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
+                  Platform
+                </label>
+                <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
+                  Genre
+                </label>
+              </div>
+
+              {/* Content Row - Can scale independently */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                {/* Tags */}
+                <div className="mb-6 flex flex-col min-h-[42px] relative" ref={tagInputRef}>
+                  {/* Tags display area - can wrap and scale */}
                   {tags.length > 0 && (
-                    <div className="flex gap-2 overflow-x-auto flex-1 min-w-0 px-4">
+                    <div className="flex flex-wrap gap-2 mb-2 min-h-[26px]">
                       {tags.map((tag) => (
                         <span
                           key={tag}
@@ -387,137 +553,71 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                       ))}
                     </div>
                   )}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Maximum 5 tags"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagInputKeyPress}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600"
-                />
-              </div>
-
-              {/* Platform */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Platform
-                </label>
-                <div className="relative" ref={platformRef}>
-                  <input
-                    type="text"
-                    value={platform}
-                    readOnly
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
-                    onClick={() =>
-                      setShowPlatformDropdown(!showPlatformDropdown)
-                    }
-                  />
-                  {platform && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPlatform("");
-                        setShowPlatformDropdown(false);
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Maximum 5 tags"
+                      value={tagInput}
+                      onChange={(e) => {
+                        setTagInput(e.target.value);
+                        if (e.target.value.trim()) {
+                          setShowTagSuggestions(true);
+                        }
                       }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
-                    >
-                      <svg
-                        className="w-3 h-3 text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
-                  {showPlatformDropdown && (
-                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-                      {platforms.map((p) => (
-                        <div
-                          key={p}
-                          onClick={() => {
-                            setPlatform(p);
-                            setShowPlatformDropdown(false);
-                          }}
-                          className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
-                            platform === p
-                              ? "bg-blue-50 text-blue-700"
-                              : "text-gray-700"
-                          }`}
+                      onKeyDown={handleTagInputKeyPress}
+                      onFocus={() => {
+                        if (tagSuggestions.length > 0) {
+                          setShowTagSuggestions(true);
+                        }
+                      }}
+                      className={`w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600 ${
+                        loadingSuggestions ? "px-4 pr-10" : "px-4"
+                      }`}
+                    />
+                    {/* Loading Indicator */}
+                    {loadingSuggestions && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <svg
+                          className="animate-spin h-5 w-5 text-blue-500"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
                         >
-                          {p}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Genre */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Genre
-                </label>
-                <div className="relative" ref={genreRef}>
-                  <div
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent bg-white text-gray-600 min-h-[42px] cursor-pointer flex items-center flex-wrap gap-2"
-                    onClick={() => setShowGenreDropdown(!showGenreDropdown)}
-                  >
-                    {selectedGenres.length > 0 ? (
-                      selectedGenres.map((g) => (
-                        <span
-                          key={g}
-                          className="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700 text-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenreRemove(g);
-                          }}
-                        >
-                          {g}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGenreRemove(g);
-                            }}
-                            className="ml-2 text-gray-500 hover:text-gray-700"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-gray-400">Select genres</span>
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                      </div>
                     )}
-                  </div>
-                  {showGenreDropdown && (
-                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-                      {genres.map((g) => (
-                        <div
-                          key={g}
-                          onClick={() => handleGenreToggle(g)}
-                          className={`px-4 py-2 cursor-pointer hover:bg-gray-100 flex items-center gap-2 ${
-                            selectedGenres.includes(g)
-                              ? "bg-blue-50 text-blue-700"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                              selectedGenres.includes(g)
-                                ? "bg-blue-600 border-blue-600"
-                                : "border-gray-300 bg-white"
-                            }`}
-                          >
-                            {selectedGenres.includes(g) && (
+                    {/* AI Suggestions Dropdown */}
+                    {showTagSuggestions && tagSuggestions.length > 0 && (
+                      <div className="absolute z-30 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                        <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-200 bg-gray-50">
+                          AI Suggestions
+                        </div>
+                        {loadingSuggestions ? (
+                          <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                            Loading suggestions...
+                          </div>
+                        ) : (
+                          tagSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              onClick={() => handleSelectSuggestion(suggestion)}
+                              className="px-4 py-2 cursor-pointer hover:bg-blue-50 text-gray-700 text-sm flex items-center gap-2"
+                            >
                               <svg
-                                className="w-3 h-3 text-white"
+                                className="w-4 h-4 text-blue-500"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -525,17 +625,137 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  strokeWidth={3}
-                                  d="M5 13l4 4L19 7"
+                                  strokeWidth={2}
+                                  d="M13 10V3L4 14h7v7l9-11h-7z"
                                 />
                               </svg>
-                            )}
+                              <span>{suggestion}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Platform */}
+                <div className="mb-6 flex flex-col">
+                  <div className="relative" ref={platformRef}>
+                    <input
+                      type="text"
+                      value={platform}
+                      readOnly
+                      placeholder="Select platform"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
+                      onClick={() =>
+                        setShowPlatformDropdown(!showPlatformDropdown)
+                      }
+                    />
+                    {platform && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPlatform("");
+                          setShowPlatformDropdown(false);
+                        }}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+                      >
+                        <svg
+                          className="w-3 h-3 text-gray-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {showPlatformDropdown && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                        {platforms.map((p) => (
+                          <div
+                            key={p}
+                            onClick={() => {
+                              setPlatform(p);
+                              setShowPlatformDropdown(false);
+                            }}
+                            className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
+                              platform === p
+                                ? "bg-blue-50 text-blue-700"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {p}
                           </div>
-                          <span>{g}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Genre */}
+                <div className="mb-6 flex flex-col">
+                  <div className="relative" ref={genreRef}>
+                    <input
+                      type="text"
+                      value={selectedGenre}
+                      readOnly
+                      placeholder="Select genre"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
+                      onClick={() =>
+                        setShowGenreDropdown(!showGenreDropdown)
+                      }
+                    />
+                    {selectedGenre && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedGenre("");
+                          setShowGenreDropdown(false);
+                        }}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+                      >
+                        <svg
+                          className="w-3 h-3 text-gray-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {showGenreDropdown && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                        {genres.map((g) => (
+                          <div
+                            key={g}
+                            onClick={() => {
+                              setSelectedGenre(g);
+                              setShowGenreDropdown(false);
+                            }}
+                            className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
+                              selectedGenre === g
+                                ? "bg-blue-50 text-blue-700"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {g}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -704,7 +924,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               Save as draft
             </button>
             <button
-              onClick={() => navigate("/dashboard/creator/upload-success")}
+              onClick={handlePublish}
               className="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
               style={{
                 fontFamily: "Istok Web",
@@ -720,6 +940,71 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Warning Modal */}
+      {showWarningModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl border border-gray-300 w-full max-w-md shadow-xl">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                  <svg
+                    className="w-6 h-6 text-yellow-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Warning</h3>
+              </div>
+              <div className="text-gray-700 mb-6">
+                <p className="mb-2">Please fill in all required information:</p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {validationErrors.projectName && (
+                    <li className="text-red-600">
+                      Project name has not been updated. Please update the project name.
+                    </li>
+                  )}
+                  {validationErrors.shortDescription && (
+                    <li className="text-red-600">Short description is required</li>
+                  )}
+                  {validationErrors.longDescription && (
+                    <li className="text-red-600">Long description is required</li>
+                  )}
+                </ul>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowWarningModal(false);
+                    // Scroll to first error field
+                    if (validationErrors.projectName) {
+                      // Project name is in the header, scroll to top
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    } else if (validationErrors.shortDescription) {
+                      const element = document.querySelector('input[placeholder="Write a short description"]');
+                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    } else if (validationErrors.longDescription) {
+                      const element = document.querySelector('textarea[placeholder="Enter description"]');
+                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }
+                  }}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

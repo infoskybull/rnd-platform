@@ -70,3 +70,58 @@ export const generateGameCodeStream = async (
     throw new Error("Failed to communicate with the Gemini API.");
   }
 };
+
+/**
+ * Suggest tags based on user input using AI
+ */
+export const suggestTags = async (
+  input: string,
+  existingTags: string[] = [],
+  projectContext?: { shortDescription?: string; longDescription?: string }
+): Promise<string[]> => {
+  try {
+    const apiKey = resolveApiKey();
+    if (!apiKey) {
+      // If no API key, return empty array
+      return [];
+    }
+
+    if (!input.trim()) {
+      return [];
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const contextPrompt = projectContext?.shortDescription || projectContext?.longDescription
+      ? `Project context: ${projectContext.shortDescription || ""} ${projectContext.longDescription || ""}`
+      : "";
+
+    const prompt = `Suggest 5-8 relevant game tags based on the user input: "${input}". 
+${contextPrompt}
+${existingTags.length > 0 ? `Already selected tags: ${existingTags.join(", ")}. Do not suggest duplicates.` : ""}
+Return only a comma-separated list of tags, no explanations, no markdown, just tags. Each tag should be 1-2 words, relevant to game development and gaming industry.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+      },
+    });
+
+    const text = response.text || "";
+    // Parse comma-separated tags
+    const suggestedTags = text
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0 && !existingTags.includes(tag.toLowerCase()))
+      .slice(0, 8); // Limit to 8 suggestions
+
+    return suggestedTags;
+  } catch (error) {
+    console.error("Error suggesting tags:", error);
+    return [];
+  }
+};
