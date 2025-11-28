@@ -96,8 +96,15 @@ const SignUp: React.FC<SignUpProps> = ({
   };
 
   const handleInputChange = (field: keyof SignUpData, value: string) => {
-    // Don't trim while typing, only on blur
-    setFormData((prev) => ({ ...prev, [field]: value as any }));
+    // Handle role field explicitly to ensure proper type
+    if (field === "role") {
+      const roleValue = value as "publisher" | "creator";
+      console.log("Role changed to:", roleValue);
+      setFormData((prev) => ({ ...prev, [field]: roleValue }));
+    } else {
+      // Don't trim while typing, only on blur
+      setFormData((prev) => ({ ...prev, [field]: value as any }));
+    }
 
     // Clear field error when user starts typing
     if (fieldErrors[field]) {
@@ -193,6 +200,10 @@ const SignUp: React.FC<SignUpProps> = ({
       confirmPassword: formData.confirmPassword.trim(),
       role: formData.role, // Don't trim role (radio button)
     };
+
+    // Log the role being submitted for debugging
+    console.log("Submitting signup with role:", trimmedFormData.role);
+    console.log("Full form data:", { ...trimmedFormData, password: "***", confirmPassword: "***" });
 
     // Validate all fields
     const errors: Record<string, string> = {};
