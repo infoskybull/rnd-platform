@@ -4,36 +4,19 @@ import { apiService } from "../services/api";
 interface ProjectData {
   title: string;
   shortDescription: string;
+  longDescription: string; // NEW - Required
   projectType: ("product_sale" | "dev_collaboration")[]; // Always an array
   repoFormat: "react" | "webgl" | "html"; // Required per API docs
   status?: "draft" | "published";
-  payToViewAmount: number; // Required - giá trị từ select package để creator set
-  productSaleData?: {
-    screenshots?: string[];
-    demoUrl?: string;
-    askingPrice: number;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
-    techStack?: string;
-    isPlayable?: boolean;
-  };
-  creatorCollaborationData?: {
-    proposal: string;
-    budget: number;
-    timeline: string;
-    prototypeImages?: string[];
-    videoUrl?: string;
-    gameGenre?: string;
-    targetPlatform?: string;
-    tags?: string[];
-    skills?: string[];
-  };
-  searchKeywords?: string[]; // Added per API docs
-  fileKeys?: string[]; // S3 keys from presigned-url response
-  fileUrls?: string[]; // Upload URLs from presigned-url response
-  attachments?: string[];
-  thumbnail?: string;
+  payToViewAmount: number; // Required - always present (can be 0 for free viewing)
+  productSalePrice?: number; // Required if 'product_sale' in projectType (min: 1)
+  creatorCollaborationBudget?: number; // Required if 'dev_collaboration' in projectType (min: 1)
+  gameGenre?: string; // Common field
+  attachments?: string[]; // Optional - fileKeys from S3
+  fileUrls?: string[]; // Optional - S3 URLs already uploaded
+  fileKeys?: string[]; // Optional - S3 keys to move from pending to created
+  thumbnail?: string; // Optional - thumbnail fileKey
+  appIcon?: string; // NEW - Optional - app icon fileKey
 }
 
 interface ProjectCreationResult {
@@ -57,6 +40,14 @@ export const useProjectCreation = () => {
       throw new Error("Short description is required");
     }
 
+    // NEW - Validate longDescription
+    if (
+      !projectData.longDescription ||
+      projectData.longDescription.trim().length === 0
+    ) {
+      throw new Error("Long description is required");
+    }
+
     if (projectData.title.length > 100) {
       throw new Error("Project title must be less than 100 characters");
     }
@@ -65,12 +56,9 @@ export const useProjectCreation = () => {
       throw new Error("Short description must be less than 500 characters");
     }
 
-    // Validate projectType is an array and not empty
-    if (
-      !Array.isArray(projectData.projectType) ||
-      projectData.projectType.length === 0
-    ) {
-      throw new Error("Project type must be a non-empty array");
+    // Validate projectType is an array (can be empty for PayToView only)
+    if (!Array.isArray(projectData.projectType)) {
+      throw new Error("Project type must be an array");
     }
 
     // Validate each project type in the array
@@ -85,7 +73,7 @@ export const useProjectCreation = () => {
       }
     }
 
-    // Validate payToViewAmount
+    // Validate payToViewAmount - always required (can be 0 for free viewing)
     if (
       typeof projectData.payToViewAmount !== "number" ||
       projectData.payToViewAmount < 0
@@ -93,38 +81,42 @@ export const useProjectCreation = () => {
       throw new Error("payToViewAmount must be a number >= 0");
     }
 
-    // Validate project type specific data based on what's in the array
+    // Validate project type specific pricing based on what's in the array
     if (projectData.projectType.includes("product_sale")) {
-      if (!projectData.productSaleData) {
+      if (
+        !projectData.productSalePrice ||
+        typeof projectData.productSalePrice !== "number" ||
+        projectData.productSalePrice < 1
+      ) {
         throw new Error(
-          "Product sale data is required when projectType includes 'product_sale'"
+          "Product sale price is required and must be at least 1 for product sale projects"
         );
       }
-      if (projectData.productSaleData.askingPrice <= 0) {
-        throw new Error("Asking price must be greater than 0");
+    } else {
+      // If projectType does not include product_sale, productSalePrice should not be provided
+      if (projectData.productSalePrice !== undefined) {
+        throw new Error(
+          "Product sale price should not be provided when project type does not include product sale"
+        );
       }
     }
 
     if (projectData.projectType.includes("dev_collaboration")) {
-      if (!projectData.creatorCollaborationData) {
+      if (
+        !projectData.creatorCollaborationBudget ||
+        typeof projectData.creatorCollaborationBudget !== "number" ||
+        projectData.creatorCollaborationBudget < 1
+      ) {
         throw new Error(
-          "Development collaboration data is required when projectType includes 'dev_collaboration'"
+          "Creator collaboration budget is required and must be at least 1 for collaboration projects"
         );
       }
-      if (
-        !projectData.creatorCollaborationData.proposal ||
-        projectData.creatorCollaborationData.proposal.trim().length === 0
-      ) {
-        throw new Error("Collaboration proposal is required");
-      }
-      if (projectData.creatorCollaborationData.budget <= 0) {
-        throw new Error("Budget must be greater than 0");
-      }
-      if (
-        !projectData.creatorCollaborationData.timeline ||
-        projectData.creatorCollaborationData.timeline.trim().length === 0
-      ) {
-        throw new Error("Timeline is required");
+    } else {
+      // If projectType does not include dev_collaboration, creatorCollaborationBudget should not be provided
+      if (projectData.creatorCollaborationBudget !== undefined) {
+        throw new Error(
+          "Creator collaboration budget should not be provided when project type does not include dev collaboration"
+        );
       }
     }
   };
@@ -144,32 +136,33 @@ export const useProjectCreation = () => {
         throw new Error("No authentication token found. Please login first.");
       }
 
-      // Prepare the request body according to API documentation
-      const requestBody = {
+      // Prepare the request body according to new flat structure API documentation
+      const requestBody: any = {
         title: projectData.title.trim(),
         shortDescription: projectData.shortDescription.trim(),
+        longDescription: projectData.longDescription.trim(), // NEW - Required
         projectType: projectData.projectType, // Already an array
         repoFormat: projectData.repoFormat,
         status: projectData.status || "draft", // Default to draft if not specified
-        payToViewAmount: projectData.payToViewAmount, // Required - giá trị từ select package
-        ...(projectData.productSaleData && {
-          productSaleData: {
-            ...projectData.productSaleData,
-          },
-        }),
-        ...(projectData.creatorCollaborationData && {
-          creatorCollaborationData: projectData.creatorCollaborationData,
-        }),
-        ...(projectData.searchKeywords && {
-          searchKeywords: projectData.searchKeywords,
-        }),
+        payToViewAmount: projectData.payToViewAmount, // Required - always present
+        ...(projectData.gameGenre && { gameGenre: projectData.gameGenre }),
         ...(projectData.fileKeys && { fileKeys: projectData.fileKeys }),
         ...(projectData.fileUrls && { fileUrls: projectData.fileUrls }),
         ...(projectData.attachments && {
           attachments: projectData.attachments,
         }),
         ...(projectData.thumbnail && { thumbnail: projectData.thumbnail }),
+        ...(projectData.appIcon && { appIcon: projectData.appIcon }), // NEW
       };
+
+      // Add flat pricing fields based on projectType
+      if (projectData.projectType.includes("product_sale")) {
+        requestBody.productSalePrice = projectData.productSalePrice;
+      }
+      if (projectData.projectType.includes("dev_collaboration")) {
+        requestBody.creatorCollaborationBudget =
+          projectData.creatorCollaborationBudget;
+      }
 
       console.log("Creating project with data:", requestBody);
 

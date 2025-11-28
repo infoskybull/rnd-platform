@@ -1,11 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { User } from "../types";
 import CustomCheckbox from "../components/CustomCheckbox";
 import FileUploadSection from "../components/FileUploadSection";
+import UploadErrorModal from "../components/UploadErrorModal";
 import { useAppSelector, useAppDispatch } from "../store/hooks";
 import { suggestTags } from "../services/geminiService";
 import { setProjectName as setProjectNameAction } from "../store/aiPageSlice";
+import {
+  setUploadPayload,
+  updateUploadPayload,
+  setUploadStatus,
+} from "../store/uploadSlice";
+import { useFileUpload } from "../hooks/useFileUpload";
+import { useProjectCreation } from "../hooks/useProjectCreation";
+import {
+  detectProjectFormat,
+  compressFilesToZip,
+} from "../utils/projectAnalyzer";
 
 interface CreatorUploadPageProps {
   user: User;
@@ -17,9 +29,21 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   onLogout,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const aiPageState = useAppSelector((state) => state.aiPage);
+  const uploadState = useAppSelector((state) => state.upload);
   const projectName = aiPageState.projectName || "";
+
+  // Get data from navigation state (from AI page)
+  const navigationState = location.state as {
+    generatedCode?: string;
+    projectName?: string;
+    source?: string;
+    uploadedFileKey?: string;
+    uploadedFileUrl?: string;
+    detectedFormat?: "react" | "webgl" | "html";
+  } | null;
   const [shortDescription, setShortDescription] = useState("");
   const [longDescription, setLongDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -28,18 +52,21 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   const [selectedGenre, setSelectedGenre] = useState("");
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
-  const [selectedPackages, setSelectedPackages] = useState<number[]>([1, 2, 3]);
+  const [selectedPackages, setSelectedPackages] = useState<number[]>([1]); // Package 1 (Pay to view) is always available
   const [packagePrices, setPackagePrices] = useState({
-    1: "100",
-    2: "500",
-    3: "5000",
+    1: "0", // Pay to view - default 0 for free viewing
+    2: "", // Pay per Prototype
+    3: "", // Collaboration
   });
-  const [videoUploadProgress, setVideoUploadProgress] = useState(30);
-  const [videoFileName, setVideoFileName] = useState("Name.mp4");
-  const [videoFileSize, setVideoFileSize] = useState("1.2MB/1.2MB");
+  const [repoFormat, setRepoFormat] = useState<"react" | "webgl" | "html">(
+    "html"
+  );
   const [appIconFiles, setAppIconFiles] = useState<File[]>([]);
+  const [appIconFileKey, setAppIconFileKey] = useState<string>("");
   const [featureImageFiles, setFeatureImageFiles] = useState<File[]>([]);
+  const [featureImageFileKey, setFeatureImageFileKey] = useState<string>("");
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [attachmentFileKeys, setAttachmentFileKeys] = useState<string[]>([]);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState({
     projectName: false,
@@ -49,6 +76,15 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error">("success");
+  const [showUploadErrorModal, setShowUploadErrorModal] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  const { uploadFile } = useFileUpload();
+  const { createProject, creating } = useProjectCreation();
 
   const availableTags = ["Puzzle", "RPG", "Hyper casual", "Casual"];
   const platforms = ["Mobile", "PC", "Console", "Web", "Smart TV"];
@@ -137,7 +173,6 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
     }
   };
 
-
   const handlePackageToggle = (packageId: number) => {
     setSelectedPackages((prev) =>
       prev.includes(packageId)
@@ -188,6 +223,23 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
     };
   }, []);
 
+  // Handle navigation state from AI page
+  useEffect(() => {
+    if (navigationState?.source === "ai-generator") {
+      // If coming from AI page with uploaded file
+      if (navigationState.uploadedFileUrl) {
+        // Set detected format if available
+        if (navigationState.detectedFormat) {
+          setRepoFormat(navigationState.detectedFormat);
+        }
+
+        // Show success toast
+        showToastMessage("Source code uploaded successfully!", "success");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Debounced tag suggestions
   useEffect(() => {
     if (!tagInput.trim() || tags.length >= 5) {
@@ -217,7 +269,14 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
     return () => clearTimeout(timeoutId);
   }, [tagInput, tags, shortDescription, longDescription]);
 
-  const handlePublish = () => {
+  const showToastMessage = (message: string, type: "success" | "error") => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 5000);
+  };
+
+  const handlePublish = async () => {
     // Reset validation errors
     const errors = {
       projectName: false,
@@ -246,7 +305,224 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
     }
 
     // If there are any errors, show them
-    if (errors.projectName || errors.shortDescription || errors.longDescription) {
+    if (
+      errors.projectName ||
+      errors.shortDescription ||
+      errors.longDescription
+    ) {
+      setValidationErrors(errors);
+      setShowWarningModal(true);
+      return;
+    }
+
+    // Note: Package 1 (Pay to view) is always available, so we don't need to validate it
+    // We only validate packages 2 and 3 if they are selected
+
+    // Validate package prices
+    if (selectedPackages.includes(2)) {
+      const price2 = parseFloat(packagePrices[2] || "0");
+      if (!price2 || price2 < 1) {
+        showToastMessage("Pay per Prototype price must be at least 1", "error");
+        return;
+      }
+    }
+
+    if (selectedPackages.includes(3)) {
+      const price3 = parseFloat(packagePrices[3] || "0");
+      if (!price3 || price3 < 1) {
+        showToastMessage("Collaboration budget must be at least 1", "error");
+        return;
+      }
+    }
+
+    // Clear validation errors if all valid
+    setValidationErrors({
+      projectName: false,
+      shortDescription: false,
+      longDescription: false,
+    });
+
+    // Upload files if needed
+    setUploadingFiles(true);
+    try {
+      // Use local variables to store fileKeys after upload (to avoid state update delay)
+      let finalAppIconFileKey = appIconFileKey;
+      let finalFeatureImageFileKey = featureImageFileKey;
+      let finalAttachmentFileKeys = [...attachmentFileKeys];
+
+      // Upload app icon if provided
+      if (appIconFiles.length > 0 && !finalAppIconFileKey) {
+        const uploadResult = await uploadFile(appIconFiles[0]);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        finalAppIconFileKey = uploadResult.fileKey;
+        setAppIconFileKey(finalAppIconFileKey);
+      }
+
+      // Upload feature image (thumbnail) if provided
+      if (featureImageFiles.length > 0 && !finalFeatureImageFileKey) {
+        const uploadResult = await uploadFile(featureImageFiles[0]);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        finalFeatureImageFileKey = uploadResult.fileKey;
+        setFeatureImageFileKey(finalFeatureImageFileKey);
+      }
+
+      // Upload attachments if provided
+      if (attachmentFiles.length > 0) {
+        const newAttachmentKeys: string[] = [];
+        for (let i = 0; i < attachmentFiles.length; i++) {
+          const file = attachmentFiles[i];
+          // Check if this file already has a key (by index)
+          if (
+            i < finalAttachmentFileKeys.length &&
+            finalAttachmentFileKeys[i]
+          ) {
+            // File already has a key, reuse it
+            newAttachmentKeys.push(finalAttachmentFileKeys[i]);
+          } else {
+            // Upload new file
+            const uploadResult = await uploadFile(file);
+            if (uploadResult.error) {
+              throw new Error(uploadResult.error);
+            }
+            newAttachmentKeys.push(uploadResult.fileKey);
+          }
+        }
+        finalAttachmentFileKeys = newAttachmentKeys;
+        setAttachmentFileKeys(finalAttachmentFileKeys);
+      }
+
+      // Map packages to project types
+      const projectTypes: ("product_sale" | "dev_collaboration")[] = [];
+      if (selectedPackages.includes(2)) {
+        projectTypes.push("product_sale");
+      }
+      if (selectedPackages.includes(3)) {
+        projectTypes.push("dev_collaboration");
+      }
+
+      // Get fileUrls from navigation state (from AI page) or Redux store
+      // Priority: navigationState > uploadState
+      const sourceFileUrls = navigationState?.uploadedFileUrl
+        ? [navigationState.uploadedFileUrl]
+        : uploadState.payload?.uploadUrl
+        ? [uploadState.payload.uploadUrl]
+        : undefined;
+
+      const sourceFileKey =
+        navigationState?.uploadedFileKey || uploadState.payload?.fileKey;
+      const detectedRepoFormat =
+        navigationState?.detectedFormat ||
+        uploadState.payload?.repoFormat ||
+        repoFormat;
+
+      // Log for debugging
+      console.log("Creating project with:", {
+        sourceFileUrls,
+        sourceFileKey,
+        detectedRepoFormat,
+        finalAppIconFileKey,
+        finalFeatureImageFileKey,
+        finalAttachmentFileKeys,
+      });
+
+      // Prepare project data
+      const projectData: any = {
+        title: trimmedProjectName,
+        shortDescription: shortDescription.trim(),
+        longDescription: longDescription.trim(),
+        projectType: projectTypes,
+        repoFormat: detectedRepoFormat,
+        status: "published",
+        payToViewAmount: parseFloat(packagePrices[1] || "0"),
+        gameGenre: selectedGenre || undefined,
+        ...(finalFeatureImageFileKey && {
+          thumbnail: finalFeatureImageFileKey,
+        }),
+        ...(finalAppIconFileKey && { appIcon: finalAppIconFileKey }),
+        ...(finalAttachmentFileKeys.length > 0 && {
+          attachments: finalAttachmentFileKeys,
+        }),
+        // Use fileUrls if available (S3 URL from AI page), otherwise use fileKeys
+        ...(sourceFileUrls &&
+          sourceFileUrls.length > 0 && {
+            fileUrls: sourceFileUrls,
+          }),
+        ...((!sourceFileUrls || sourceFileUrls.length === 0) &&
+          sourceFileKey && { fileKeys: [sourceFileKey] }),
+      };
+
+      // Add pricing fields based on selected packages
+      if (selectedPackages.includes(2)) {
+        projectData.productSalePrice = parseFloat(packagePrices[2] || "0");
+      }
+      if (selectedPackages.includes(3)) {
+        projectData.creatorCollaborationBudget = parseFloat(
+          packagePrices[3] || "0"
+        );
+      }
+
+      // Create project
+      const result = await createProject(projectData);
+
+      if (result.success) {
+        showToastMessage("Project published successfully!", "success");
+        setTimeout(() => {
+          navigate("/dashboard/creator/upload-success");
+        }, 2000);
+      } else {
+        showToastMessage(result.error || "Failed to publish project", "error");
+      }
+    } catch (error) {
+      console.error("Publish error:", error);
+      showToastMessage(
+        `Failed to publish project: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        "error"
+      );
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    // Reset validation errors
+    const errors = {
+      projectName: false,
+      shortDescription: false,
+      longDescription: false,
+    };
+
+    // Check if project name is still "Unnamed" or "Project name" or empty
+    const trimmedProjectName = projectName.trim();
+    if (
+      trimmedProjectName === "" ||
+      trimmedProjectName === "Unnamed" ||
+      trimmedProjectName === "Project name"
+    ) {
+      errors.projectName = true;
+    }
+
+    // Check if short description is empty
+    if (!shortDescription.trim()) {
+      errors.shortDescription = true;
+    }
+
+    // Check if long description is empty
+    if (!longDescription.trim()) {
+      errors.longDescription = true;
+    }
+
+    // If there are any errors, show them
+    if (
+      errors.projectName ||
+      errors.shortDescription ||
+      errors.longDescription
+    ) {
       setValidationErrors(errors);
       setShowWarningModal(true);
       return;
@@ -259,8 +535,154 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
       longDescription: false,
     });
 
-    // If all valid, proceed with navigation
-    navigate("/dashboard/creator/upload-success");
+    // Upload files if needed
+    setUploadingFiles(true);
+    try {
+      // Use local variables to store fileKeys after upload (to avoid state update delay)
+      let finalAppIconFileKey = appIconFileKey;
+      let finalFeatureImageFileKey = featureImageFileKey;
+      let finalAttachmentFileKeys = [...attachmentFileKeys];
+
+      // Upload app icon if provided
+      if (appIconFiles.length > 0 && !finalAppIconFileKey) {
+        const uploadResult = await uploadFile(appIconFiles[0]);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        finalAppIconFileKey = uploadResult.fileKey;
+        setAppIconFileKey(finalAppIconFileKey);
+      }
+
+      // Upload feature image (thumbnail) if provided
+      if (featureImageFiles.length > 0 && !finalFeatureImageFileKey) {
+        const uploadResult = await uploadFile(featureImageFiles[0]);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        finalFeatureImageFileKey = uploadResult.fileKey;
+        setFeatureImageFileKey(finalFeatureImageFileKey);
+      }
+
+      // Upload attachments if provided
+      if (attachmentFiles.length > 0) {
+        const newAttachmentKeys: string[] = [];
+        for (let i = 0; i < attachmentFiles.length; i++) {
+          const file = attachmentFiles[i];
+          // Check if this file already has a key (by index)
+          if (
+            i < finalAttachmentFileKeys.length &&
+            finalAttachmentFileKeys[i]
+          ) {
+            // File already has a key, reuse it
+            newAttachmentKeys.push(finalAttachmentFileKeys[i]);
+          } else {
+            // Upload new file
+            const uploadResult = await uploadFile(file);
+            if (uploadResult.error) {
+              throw new Error(uploadResult.error);
+            }
+            newAttachmentKeys.push(uploadResult.fileKey);
+          }
+        }
+        finalAttachmentFileKeys = newAttachmentKeys;
+        setAttachmentFileKeys(finalAttachmentFileKeys);
+      }
+
+      // Map packages to project types
+      const projectTypes: ("product_sale" | "dev_collaboration")[] = [];
+      if (selectedPackages.includes(2)) {
+        projectTypes.push("product_sale");
+      }
+      if (selectedPackages.includes(3)) {
+        projectTypes.push("dev_collaboration");
+      }
+
+      // Get fileUrls from navigation state (from AI page) or Redux store
+      // Priority: navigationState > uploadState
+      const sourceFileUrls = navigationState?.uploadedFileUrl
+        ? [navigationState.uploadedFileUrl]
+        : uploadState.payload?.uploadUrl
+        ? [uploadState.payload.uploadUrl]
+        : undefined;
+
+      const sourceFileKey =
+        navigationState?.uploadedFileKey || uploadState.payload?.fileKey;
+      const detectedRepoFormat =
+        navigationState?.detectedFormat ||
+        uploadState.payload?.repoFormat ||
+        repoFormat;
+
+      // Log for debugging
+      console.log("Saving draft with:", {
+        sourceFileUrls,
+        sourceFileKey,
+        detectedRepoFormat,
+        finalAppIconFileKey,
+        finalFeatureImageFileKey,
+        finalAttachmentFileKeys,
+      });
+
+      // Prepare project data
+      const projectData: any = {
+        title: trimmedProjectName,
+        shortDescription: shortDescription.trim(),
+        longDescription: longDescription.trim(),
+        projectType: projectTypes,
+        repoFormat: detectedRepoFormat,
+        status: "draft",
+        payToViewAmount: parseFloat(packagePrices[1] || "0"),
+        gameGenre: selectedGenre || undefined,
+        ...(finalFeatureImageFileKey && {
+          thumbnail: finalFeatureImageFileKey,
+        }),
+        ...(finalAppIconFileKey && { appIcon: finalAppIconFileKey }),
+        ...(finalAttachmentFileKeys.length > 0 && {
+          attachments: finalAttachmentFileKeys,
+        }),
+        // Use fileUrls if available (S3 URL from AI page), otherwise use fileKeys
+        ...(sourceFileUrls &&
+          sourceFileUrls.length > 0 && {
+            fileUrls: sourceFileUrls,
+          }),
+        ...((!sourceFileUrls || sourceFileUrls.length === 0) &&
+          sourceFileKey && { fileKeys: [sourceFileKey] }),
+      };
+
+      // Add pricing fields based on selected packages
+      if (selectedPackages.includes(2)) {
+        projectData.productSalePrice = parseFloat(packagePrices[2] || "0");
+      }
+      if (selectedPackages.includes(3)) {
+        projectData.creatorCollaborationBudget = parseFloat(
+          packagePrices[3] || "0"
+        );
+      }
+
+      // Create project
+      const result = await createProject(projectData);
+
+      if (result.success) {
+        showToastMessage("Project saved as draft successfully!", "success");
+        setTimeout(() => {
+          navigate("/dashboard/creator/dashboard");
+        }, 2000);
+      } else {
+        showToastMessage(
+          result.error || "Failed to save project as draft",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("Save draft error:", error);
+      showToastMessage(
+        `Failed to save project: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        "error"
+      );
+    } finally {
+      setUploadingFiles(false);
+    }
   };
 
   return (
@@ -444,7 +866,10 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 onChange={(e) => {
                   dispatch(setProjectNameAction(e.target.value));
                   if (validationErrors.projectName && e.target.value.trim()) {
-                    setValidationErrors((prev) => ({ ...prev, projectName: false }));
+                    setValidationErrors((prev) => ({
+                      ...prev,
+                      projectName: false,
+                    }));
                   }
                 }}
                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-2xl font-bold ${
@@ -471,8 +896,14 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 value={shortDescription}
                 onChange={(e) => {
                   setShortDescription(e.target.value);
-                  if (validationErrors.shortDescription && e.target.value.trim()) {
-                    setValidationErrors((prev) => ({ ...prev, shortDescription: false }));
+                  if (
+                    validationErrors.shortDescription &&
+                    e.target.value.trim()
+                  ) {
+                    setValidationErrors((prev) => ({
+                      ...prev,
+                      shortDescription: false,
+                    }));
                   }
                 }}
                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black ${
@@ -498,8 +929,14 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 value={longDescription}
                 onChange={(e) => {
                   setLongDescription(e.target.value);
-                  if (validationErrors.longDescription && e.target.value.trim()) {
-                    setValidationErrors((prev) => ({ ...prev, longDescription: false }));
+                  if (
+                    validationErrors.longDescription &&
+                    e.target.value.trim()
+                  ) {
+                    setValidationErrors((prev) => ({
+                      ...prev,
+                      longDescription: false,
+                    }));
                   }
                 }}
                 rows={6}
@@ -533,7 +970,10 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               {/* Content Row - Can scale independently */}
               <div className="grid grid-cols-3 gap-4 items-start">
                 {/* Tags */}
-                <div className="mb-6 flex flex-col min-h-[42px] relative" ref={tagInputRef}>
+                <div
+                  className="mb-6 flex flex-col min-h-[42px] relative"
+                  ref={tagInputRef}
+                >
                   {/* Tags display area - can wrap and scale */}
                   {tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 min-h-[26px]">
@@ -707,9 +1147,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                       readOnly
                       placeholder="Select genre"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
-                      onClick={() =>
-                        setShowGenreDropdown(!showGenreDropdown)
-                      }
+                      onClick={() => setShowGenreDropdown(!showGenreDropdown)}
                     />
                     {selectedGenre && (
                       <button
@@ -911,7 +1349,9 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               Cancel
             </button>
             <button
-              className="w-full px-4 py-3 bg-[#BEBEBE] text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              onClick={handleSaveDraft}
+              disabled={creating || uploadingFiles}
+              className="w-full px-4 py-3 bg-[#BEBEBE] text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 fontFamily: "Istok Web",
                 fontWeight: 400,
@@ -921,11 +1361,12 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 letterSpacing: "0%",
               }}
             >
-              Save as draft
+              {creating || uploadingFiles ? "Saving..." : "Save as draft"}
             </button>
             <button
               onClick={handlePublish}
-              className="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={creating || uploadingFiles}
+              className="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 fontFamily: "Istok Web",
                 fontWeight: 400,
@@ -935,7 +1376,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 letterSpacing: "0%",
               }}
             >
-              Publish
+              {creating || uploadingFiles ? "Publishing..." : "Publish"}
             </button>
           </div>
         </div>
@@ -969,14 +1410,19 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                 <ul className="list-disc list-inside space-y-1 text-sm">
                   {validationErrors.projectName && (
                     <li className="text-red-600">
-                      Project name has not been updated. Please update the project name.
+                      Project name has not been updated. Please update the
+                      project name.
                     </li>
                   )}
                   {validationErrors.shortDescription && (
-                    <li className="text-red-600">Short description is required</li>
+                    <li className="text-red-600">
+                      Short description is required
+                    </li>
                   )}
                   {validationErrors.longDescription && (
-                    <li className="text-red-600">Long description is required</li>
+                    <li className="text-red-600">
+                      Long description is required
+                    </li>
                   )}
                 </ul>
               </div>
@@ -989,11 +1435,21 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
                       // Project name is in the header, scroll to top
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     } else if (validationErrors.shortDescription) {
-                      const element = document.querySelector('input[placeholder="Write a short description"]');
-                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      const element = document.querySelector(
+                        'input[placeholder="Write a short description"]'
+                      );
+                      element?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
                     } else if (validationErrors.longDescription) {
-                      const element = document.querySelector('textarea[placeholder="Enter description"]');
-                      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      const element = document.querySelector(
+                        'textarea[placeholder="Enter description"]'
+                      );
+                      element?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
                     }
                   }}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
@@ -1005,6 +1461,26 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 ${
+            toastType === "success"
+              ? "bg-green-600 text-white"
+              : "bg-red-600 text-white"
+          }`}
+        >
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Upload Error Modal */}
+      <UploadErrorModal
+        isOpen={showUploadErrorModal}
+        onClose={() => setShowUploadErrorModal(false)}
+        errorMessage={uploadError}
+      />
     </div>
   );
 };

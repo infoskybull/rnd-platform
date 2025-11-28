@@ -13,6 +13,11 @@ import {
   setIsGenerationComplete as setIsGenerationCompleteAction,
   resetAIPageState as resetAIPageStateAction,
 } from "../store/aiPageSlice";
+import { useFileUpload } from "../hooks/useFileUpload";
+import { detectProjectFormat } from "../utils/projectAnalyzer";
+import { apiService } from "../services/api";
+
+declare const JSZip: any;
 
 interface CreatorUseAIPageProps {
   user: User;
@@ -89,12 +94,17 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
   const [editingText, setEditingText] = useState<string>("");
   const [originalText, setOriginalText] = useState<string>("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showUploadErrorModal, setShowUploadErrorModal] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [isAutoUploading, setIsAutoUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const isGeneratingRef = useRef<boolean>(false);
   const shouldCancelGenerationRef = useRef<boolean>(false);
   const justCancelledRef = useRef<boolean>(false);
+
+  const { uploadFile } = useFileUpload();
 
   // Initialize local state from Redux on mount only
   const hasInitialized = useRef(false);
@@ -599,10 +609,10 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     // Cancel any ongoing generation first
     shouldCancelGenerationRef.current = true;
     isGeneratingRef.current = false;
-    
+
     // Reset Redux state (messages, generated code, project name, isGenerationComplete)
     dispatch(resetAIPageStateAction());
-    
+
     // Clear local state
     setMessages([
       {
@@ -618,7 +628,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     setUploadedFiles([]);
     setActiveTab("preview");
     setIsLoading(false);
-    
+
     // Reset generation complete status in Redux
     dispatch(setIsGenerationCompleteAction(false));
   };
@@ -1321,19 +1331,120 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                     </div>
                     {isGenerationComplete && (
                       <button
-                        onClick={() => {
-                          // Navigate to upload page with generated code
-                          navigate("/dashboard/creator/upload", {
-                            state: {
-                              generatedCode,
-                              projectName,
-                              source: "ai-generator",
-                            },
-                          });
+                        onClick={async () => {
+                          if (
+                            !generatedCode ||
+                            generatedCode === INITIAL_HTML_PLACEHOLDER
+                          ) {
+                            setUploadError("No generated code to upload");
+                            setShowUploadErrorModal(true);
+                            return;
+                          }
+
+                          setIsAutoUploading(true);
+                          try {
+                            // Step 1: Create HTML file from generated code
+                            const htmlFile = new File(
+                              [generatedCode],
+                              "index.html",
+                              { type: "text/html" }
+                            );
+
+                            // Step 2: Detect project format
+                            const detectedFormat = await detectProjectFormat([
+                              htmlFile,
+                            ]);
+
+                            // Step 3: Compress to zip
+                            const JSZip = (window as any).JSZip;
+                            if (!JSZip) {
+                              throw new Error("JSZip library not loaded");
+                            }
+
+                            const zip = new JSZip();
+                            zip.file("index.html", generatedCode);
+                            const zipBlob = await zip.generateAsync({
+                              type: "blob",
+                            });
+                            const zipFile = new File(
+                              [zipBlob],
+                              "ai-generated-game.zip",
+                              { type: "application/zip" }
+                            );
+
+                            // Step 4: Upload to S3
+                            const uploadResult = await uploadFile(zipFile);
+
+                            if (uploadResult.error) {
+                              throw new Error(uploadResult.error);
+                            }
+
+                            // Step 5: Get S3 download URL from fileKey
+                            // This URL will be used in fileUrls field when creating project
+                            let fileS3Url: string | undefined;
+                            try {
+                              const downloadUrlResponse =
+                                await apiService.getDownloadUrl(
+                                  uploadResult.fileKey
+                                );
+                              // Handle different response formats
+                              fileS3Url =
+                                downloadUrlResponse.url ||
+                                downloadUrlResponse.data?.url ||
+                                (downloadUrlResponse as any).downloadUrl;
+
+                              if (fileS3Url) {
+                                console.log("S3 file URL obtained:", fileS3Url);
+                              } else {
+                                console.warn(
+                                  "Download URL response format unexpected:",
+                                  downloadUrlResponse
+                                );
+                              }
+                            } catch (error) {
+                              console.error(
+                                "Failed to get S3 download URL:",
+                                error
+                              );
+                              // If getting download URL fails, we'll still pass fileKey
+                              // Backend can handle fileKey and generate URL if needed
+                            }
+
+                            // Step 6: Navigate to upload page with uploaded file info
+                            // Store both fileKey and S3 URL for flexibility
+                            navigate("/dashboard/creator/upload", {
+                              state: {
+                                generatedCode,
+                                projectName,
+                                source: "ai-generator",
+                                uploadedFileKey: uploadResult.fileKey,
+                                uploadedFileUrl: fileS3Url, // S3 download URL
+                                detectedFormat,
+                              },
+                            });
+                          } catch (error) {
+                            console.error("Auto upload error:", error);
+                            setUploadError(
+                              error instanceof Error
+                                ? error.message
+                                : "Failed to upload source code. Please try again."
+                            );
+                            setShowUploadErrorModal(true);
+                          } finally {
+                            setIsAutoUploading(false);
+                          }
                         }}
-                        className="my-4 px-8 py-3 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                        disabled={isAutoUploading}
+                        className="my-4 px-8 py-3 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
                       >
-                        Submit
+                        {isAutoUploading ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          "Submit"
+                        )}
                       </button>
                     )}
                   </div>
@@ -1374,6 +1485,48 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Upload Error Modal */}
+      {showUploadErrorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  Upload Failed
+                </h2>
+                <button
+                  onClick={() => setShowUploadErrorModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-gray-700 mb-6">{uploadError}</p>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowUploadErrorModal(false)}
+                  className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

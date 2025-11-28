@@ -1286,35 +1286,19 @@ class ApiService {
   async createGameProject(projectData: {
     title: string;
     shortDescription: string;
+    longDescription: string; // NEW - Required
     projectType: string[]; // Array per API docs
     repoFormat: "react" | "webgl" | "html";
-    status?: string;
-    payToViewAmount: number;
-    productSaleData?: {
-      screenshots?: string[];
-      demoUrl?: string;
-      askingPrice: number;
-      gameGenre?: string;
-      targetPlatform?: string;
-      tags?: string[];
-      techStack?: string;
-      isPlayable?: boolean;
-    };
-    creatorCollaborationData?: {
-      proposal: string;
-      budget: number;
-      timeline: string;
-      prototypeImages?: string[];
-      videoUrl?: string;
-      gameGenre?: string;
-      targetPlatform?: string;
-      tags?: string[];
-      skills?: string[];
-    };
-    searchKeywords?: string[];
-    attachments?: string[];
-    fileKeys?: string[];
-    thumbnail?: string;
+    status?: "draft" | "published";
+    payToViewAmount: number; // Required - always present
+    productSalePrice?: number; // Required if 'product_sale' in projectType (min: 1)
+    creatorCollaborationBudget?: number; // Required if 'dev_collaboration' in projectType (min: 1)
+    gameGenre?: string; // Common field
+    attachments?: string[]; // Optional - fileKeys from S3
+    fileUrls?: string[]; // Optional - S3 URLs already uploaded
+    fileKeys?: string[]; // Optional - S3 keys to move from pending to created
+    thumbnail?: string; // Optional - thumbnail fileKey
+    appIcon?: string; // NEW - Optional - app icon fileKey
   }): Promise<any> {
     return this.makeRequest("/game-projects", {
       method: "POST",
@@ -1327,16 +1311,19 @@ class ApiService {
     projectData: {
       title?: string;
       shortDescription?: string;
+      longDescription?: string; // NEW
       projectType?: string[];
       repoFormat?: "react" | "webgl" | "html";
-      status?: string;
-      productSaleData?: any;
-      creatorCollaborationData?: any;
+      status?: "draft" | "published";
       payToViewAmount?: number;
-      searchKeywords?: string[];
+      productSalePrice?: number; // Flat structure
+      creatorCollaborationBudget?: number; // Flat structure
+      gameGenre?: string;
       attachments?: string[];
+      fileUrls?: string[];
       fileKeys?: string[];
       thumbnail?: string;
+      appIcon?: string; // NEW
       isFeatured?: boolean; // Only publisher role can set
     }
   ): Promise<any> {

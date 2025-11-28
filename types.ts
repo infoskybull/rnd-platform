@@ -162,9 +162,12 @@ export interface GameProjectResponse {
   attachments: string[]; // Array of URLs
   fileUrls: string[]; // Array of URLs
   thumbnail?: string; // URL (transformed from fileKey)
+  appIcon?: string; // Optional - app icon URL (transformed from fileKey)
   averageRating: number;
   reviewCount: number;
   payToViewAmount: number; // Added per API docs
+  productSalePrice?: number; // Optional - price for product sale (flat structure)
+  creatorCollaborationBudget?: number; // Optional - budget for collaboration (flat structure)
   viewerIds?: string[]; // Array of user IDs who have paid to view
   createdAt: string; // ISO 8601 date string
   updatedAt: string; // ISO 8601 date string
@@ -214,7 +217,10 @@ export interface GameProject {
   averageRating: number;
   reviewCount: number;
   thumbnail?: string;
+  appIcon?: string; // Optional - app icon URL (transformed from fileKey)
   payToViewAmount: number; // Required - giá trị từ select package
+  productSalePrice?: number; // Optional - price for product sale (flat structure)
+  creatorCollaborationBudget?: number; // Optional - budget for collaboration (flat structure)
   viewerIds?: string[]; // Array of user IDs who have paid to view
   createdAt: Date | string;
   updatedAt: Date | string;
