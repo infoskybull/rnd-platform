@@ -10,7 +10,7 @@ import CreatorHistoryPage from "../pages/CreatorHistoryPage";
 import CreatorSettingsPage from "../pages/CreatorSettingsPage";
 import CreatorMessagesPage from "../pages/CreatorMessagesPage";
 import CreatorUseAIPage from "../pages/CreatorUseAIPage";
-import CreatorUploadPage from "../pages/CreatorUploadPage";
+import UploadPage from "../pages/UploadPage";
 import CreatorUploadSuccessPage from "../pages/CreatorUploadSuccessPage";
 import {
   PlanAccessRequirement,
@@ -103,11 +103,9 @@ const CreatorRouteWrapper: React.FC<CreatorRouteWrapperProps> = ({ page }) => {
     case "use-ai":
       return <CreatorUseAIPage user={user} onLogout={handleLogout} />;
     case "upload":
-      return <CreatorUploadPage user={user} onLogout={handleLogout} />;
+      return <UploadPage user={user} onLogout={handleLogout} />;
     case "upload-success":
-      return (
-        <CreatorUploadSuccessPage user={user} onLogout={handleLogout} />
-      );
+      return <CreatorUploadSuccessPage user={user} onLogout={handleLogout} />;
     case "your-projects":
       return <CreatorYourProjectsPage user={user} onLogout={handleLogout} />;
     case "collaborations":

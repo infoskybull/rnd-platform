@@ -433,21 +433,11 @@ class AnalyticsService {
   }
 
   // Private method to make requests
+  // Use apiService.request() to ensure automatic token refresh
   private async makeRequest<T>(endpoint: string): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    // Use apiService.request() which handles token refresh automatically
+    // The endpoint should already include /analytics prefix
+    return apiService.request<T>(endpoint);
   }
 
   // Helper method to get role-specific dashboard

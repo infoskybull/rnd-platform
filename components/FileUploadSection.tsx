@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 
 interface FileUploadSectionProps {
   title: string;
@@ -10,6 +10,7 @@ interface FileUploadSectionProps {
   acceptedFileTypes?: string; // e.g., "image/*" or ".jpg,.png"
   onFilesChange?: (files: File[]) => void;
   maxFileSize?: number; // in bytes
+  initialFiles?: File[]; // Initial files to display (for edit mode)
 }
 
 interface UploadedFile {
@@ -27,13 +28,18 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   acceptedFileTypes = "image/*",
   onFilesChange,
   maxFileSize = 10 * 1024 * 1024, // 10MB default
+  initialFiles,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  const currentFiles = externalCurrentFiles !== undefined ? externalCurrentFiles : uploadedFiles.length;
+  const currentFiles =
+    externalCurrentFiles !== undefined
+      ? externalCurrentFiles
+      : uploadedFiles.length;
 
   const validateFile = (file: File): string | null => {
     // Check file size
@@ -70,7 +76,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     return null;
   };
 
-  const createPreview = (file: File): Promise<string> => {
+  const createPreview = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       if (file.type.startsWith("image/")) {
         const reader = new FileReader();
@@ -82,7 +88,24 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         resolve("");
       }
     });
-  };
+  }, []);
+
+  // Initialize with initialFiles if provided (for edit mode)
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0 && !hasInitialized) {
+      const initializeFiles = async () => {
+        const filePromises = initialFiles.map(async (file) => {
+          const preview = await createPreview(file);
+          return { file, preview };
+        });
+        const filesWithPreviews = await Promise.all(filePromises);
+        setUploadedFiles(filesWithPreviews);
+        onFilesChange?.(initialFiles);
+        setHasInitialized(true);
+      };
+      initializeFiles();
+    }
+  }, [initialFiles, hasInitialized, onFilesChange, createPreview]);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -124,7 +147,14 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         onFilesChange?.(newFiles.map((f) => f.file));
       }
     },
-    [uploadedFiles, maxFiles, acceptedFileTypes, format, maxFileSize, onFilesChange]
+    [
+      uploadedFiles,
+      maxFiles,
+      acceptedFileTypes,
+      format,
+      maxFileSize,
+      onFilesChange,
+    ]
   );
 
   const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -269,7 +299,11 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           isDragging
             ? "border-blue-500 bg-blue-50"
             : "border-gray-300 hover:border-blue-500"
-        } ${uploadedFiles.length >= maxFiles ? "opacity-50 cursor-not-allowed" : ""}`}
+        } ${
+          uploadedFiles.length >= maxFiles
+            ? "opacity-50 cursor-not-allowed"
+            : ""
+        }`}
       >
         {uploadedFiles.length === 0 ? (
           <>
@@ -304,14 +338,10 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               />
             </svg>
             {uploadedFiles.length < maxFiles && (
-              <p className="text-xs text-gray-500">
-                Click to add more files
-              </p>
+              <p className="text-xs text-gray-500">Click to add more files</p>
             )}
             {uploadedFiles.length >= maxFiles && (
-              <p className="text-xs text-gray-400">
-                Maximum files reached
-              </p>
+              <p className="text-xs text-gray-400">Maximum files reached</p>
             )}
           </div>
         )}
@@ -353,4 +383,3 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 };
 
 export default FileUploadSection;
-

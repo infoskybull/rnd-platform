@@ -19,11 +19,7 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
     3: "5000",
   });
 
-  const packages = [
-    { id: 1 },
-    { id: 2 },
-    { id: 3 },
-  ];
+  const packages = [{ id: 1 }, { id: 2 }, { id: 3 }];
 
   const handlePackageSelect = (packageId: number) => {
     setSelectedPackage(packageId);
@@ -110,7 +106,9 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
               <div className="flex justify-center mb-4">
                 <svg
                   className={`w-16 h-16 ${
-                    selectedPackage === pkg.id ? "text-blue-600" : "text-gray-400"
+                    selectedPackage === pkg.id
+                      ? "text-blue-600"
+                      : "text-gray-400"
                   }`}
                   fill="none"
                   stroke="currentColor"
@@ -136,9 +134,15 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
 
               {/* Package Description */}
               <div className="space-y-2 mb-6">
-                <div className="text-sm text-gray-500">Package description content</div>
-                <div className="text-sm text-gray-500">Package description content</div>
-                <div className="text-sm text-gray-500">Package description content</div>
+                <div className="text-sm text-gray-500">
+                  Package description content
+                </div>
+                <div className="text-sm text-gray-500">
+                  Package description content
+                </div>
+                <div className="text-sm text-gray-500">
+                  Package description content
+                </div>
               </div>
 
               {/* Set Selling Price */}
@@ -178,13 +182,13 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center justify-center gap-4 relative">
           <button
-            onClick={() => navigate("/dashboard/creator/upload")}
+            onClick={() => navigate("/prototype/upload")}
             className="absolute left-0 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Back
           </button>
           <button
-            onClick={() => navigate("/dashboard/creator/dashboard")}
+            onClick={() => navigate("/dashboard")}
             className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Done
@@ -196,4 +200,3 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
 };
 
 export default CreatorUploadSuccessPage;
-

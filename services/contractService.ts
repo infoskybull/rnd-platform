@@ -243,22 +243,32 @@ class ContractService {
     // For blob responses, we need to use fetch directly but with apiService to handle refreshToken
     // First, try to get fresh token if needed by making a lightweight request
     try {
-      // Use apiService to ensure token is refreshed if needed
-      // For blob responses, we'll need to use fetch but ensure token is fresh first
       const API_BASE_URL =
         (import.meta as any).env?.VITE_API_BASE_URL ||
         "http://localhost:8080/api";
 
       // Ensure we have a fresh token by making a request through apiService first
-      // This will trigger refresh if needed
-      await apiService
-        .request(`/contracts/${contractId}`, { method: "HEAD" })
-        .catch(() => {
-          // Ignore HEAD request errors, just ensure token is fresh
+      // This will trigger refresh if needed and wait for it to complete
+      try {
+        await apiService.request(`/contracts/${contractId}`, {
+          method: "HEAD",
         });
+      } catch (headError) {
+        // Ignore HEAD request errors, just ensure token refresh was attempted
+        // The apiService will have refreshed the token if needed
+        console.log(
+          "HEAD request completed (may have failed, but token refresh was attempted)"
+        );
+      }
 
-      const token = apiService.getAccessToken();
-      const response = await fetch(
+      // Get the latest token (may have been refreshed)
+      let token = apiService.getAccessToken();
+      if (!token) {
+        throw new Error("No access token available");
+      }
+
+      // Make the blob request
+      let response = await fetch(
         `${API_BASE_URL}/contracts/${contractId}/export?format=${format}`,
         {
           method: "GET",
@@ -268,13 +278,27 @@ class ContractService {
         }
       );
 
-      if (!response.ok) {
-        // If it's a 401/403, apiService.request would have handled refresh
-        // But for blob, we need to retry manually
-        if (response.status === 401 || response.status === 403) {
-          // Token might have been refreshed, try again
-          const newToken = apiService.getAccessToken();
-          const retryResponse = await fetch(
+      // If unauthorized, token might have expired between HEAD and this request
+      // Try refreshing and retrying once
+      if (response.status === 401 || response.status === 403) {
+        console.log(
+          "Blob request returned 401/403, attempting token refresh..."
+        );
+
+        // Try to refresh token by making another request
+        try {
+          await apiService.request(`/contracts/${contractId}`, {
+            method: "HEAD",
+          });
+        } catch (refreshError) {
+          // Ignore errors, just ensure refresh was attempted
+        }
+
+        // Get the potentially refreshed token
+        const newToken = apiService.getAccessToken();
+        if (newToken && newToken !== token) {
+          // Token was refreshed, retry the blob request
+          response = await fetch(
             `${API_BASE_URL}/contracts/${contractId}/export?format=${format}`,
             {
               method: "GET",
@@ -283,11 +307,11 @@ class ContractService {
               },
             }
           );
-          if (retryResponse.ok) {
-            return retryResponse.blob();
-          }
         }
-        throw new Error("Failed to export contract");
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to export contract: HTTP ${response.status}`);
       }
 
       return response.blob();

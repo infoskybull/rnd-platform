@@ -116,6 +116,11 @@ export const useAuth = () => {
     }
   }, [dispatch]);
 
+  // Compute isAuthenticated as a boolean
+  const isAuthenticated = useMemo(() => {
+    return Boolean(authState.user);
+  }, [authState.user]);
+
   // Memoize return object to prevent unnecessary re-renders
   // Only recreate when authState or callbacks actually change
   return useMemo(
@@ -129,10 +134,11 @@ export const useAuth = () => {
       clearError: clearErrorHandler,
       clearRequires2FA: clearRequires2FAHandler,
       refreshUser: refreshUserHandler,
-      isAuthenticated: !!authState.user,
+      isAuthenticated,
     }),
     [
       authState,
+      isAuthenticated,
       login,
       loginWith2FAHandler,
       web3WalletLoginHandler,

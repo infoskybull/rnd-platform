@@ -97,9 +97,9 @@ const LoginPage: React.FC = () => {
       if (user.role === "admin") {
         navigate("/admin/accounts");
       } else if (user.role === "publisher") {
-        navigate("/dashboard/publisher/dashboard");
+        navigate("/dashboard");
       } else if (user.role === "creator") {
-        navigate("/dashboard/creator/dashboard");
+        navigate("/dashboard");
       }
     }
   }, [isAuthenticated, user, navigate, isLoading, error]);

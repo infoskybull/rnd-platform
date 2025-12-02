@@ -7,125 +7,124 @@ export interface NavigationItem {
   active?: boolean;
 }
 
-// Creator navigation items
-export const getCreatorNavigationItems = (
+// Common navigation items
+const dashboardIcon = (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+    />
+  </svg>
+);
+
+const marketplaceIcon = (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+    />
+  </svg>
+);
+
+const useAIIcon = (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+    />
+  </svg>
+);
+
+const uploadIcon = (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+    />
+  </svg>
+);
+
+// Get navigation items based on role and active path
+export const getNavigationItems = (
+  role: "creator" | "publisher" | "admin" | undefined,
   activePath?: string
 ): NavigationItem[] => {
   const baseItems: NavigationItem[] = [
     {
       label: "Dashboard",
-      path: "/dashboard/creator/dashboard",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Use A.I",
-      path: "/dashboard/creator/use-ai",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Upload",
-      path: "/dashboard/creator/upload",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-          />
-        </svg>
-      ),
+      path: "/dashboard",
+      icon: dashboardIcon,
     },
   ];
 
+  // Add role-specific items
+  if (role === "publisher") {
+    baseItems.push({
+      label: "Marketplace",
+      path: "/marketplace",
+      icon: marketplaceIcon,
+    });
+  } else if (role === "creator") {
+    baseItems.push({
+      label: "Use A.I",
+      path: "/prototype/use-ai",
+      icon: useAIIcon,
+    });
+    baseItems.push({
+      label: "Upload",
+      path: "/prototype/upload",
+      icon: uploadIcon,
+    });
+  }
+
   return baseItems.map((item) => ({
     ...item,
-    active: activePath ? item.path === activePath : false,
+    active: activePath
+      ? activePath === item.path || activePath.startsWith(item.path + "/")
+      : false,
   }));
 };
 
-// Publisher navigation items
+// Creator navigation items (for backward compatibility)
+export const getCreatorNavigationItems = (
+  activePath?: string
+): NavigationItem[] => {
+  return getNavigationItems("creator", activePath);
+};
+
+// Publisher navigation items (for backward compatibility)
 export const getPublisherNavigationItems = (
   activePath?: string
 ): NavigationItem[] => {
-  const baseItems: NavigationItem[] = [
-    {
-      label: "Dashboard",
-      path: "/dashboard/publisher/dashboard",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Marketplace",
-      path: "/dashboard/publisher/marketplace",
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-          />
-        </svg>
-      ),
-    },
-  ];
-
-  return baseItems.map((item) => ({
-    ...item,
-    active: activePath ? item.path === activePath : false,
-  }));
+  return getNavigationItems("publisher", activePath);
 };
 
 // Default right icons (notifications, messages, cart)
@@ -185,4 +184,3 @@ export const getDefaultRightIcons = () => [
     badge: 150,
   },
 ];
-

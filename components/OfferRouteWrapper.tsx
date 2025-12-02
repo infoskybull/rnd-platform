@@ -1,10 +1,10 @@
 import React from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import OfferPage from "../pages/OfferPage";
 
-const DashboardRouter: React.FC = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const navigate = useNavigate();
+const OfferRouteWrapper: React.FC = () => {
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
 
   // Show loading while auth is being checked
   if (isLoading) {
@@ -21,7 +21,7 @@ const DashboardRouter: React.FC = () => {
   }
 
   // If still loading or no user data, show loading
-  if (!user || !user.role) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">Loading user data...</div>
@@ -29,14 +29,16 @@ const DashboardRouter: React.FC = () => {
     );
   }
 
-  // Redirect to appropriate dashboard based on user role
-  if (user.role === "admin") {
-    return <Navigate to="/admin/accounts" replace />;
-  } else if (user.role === "publisher" || user.role === "creator") {
-    return <Navigate to="/dashboard" replace />;
+  // Check if user is publisher (offers are typically made by publishers)
+  if (user.role !== "publisher") {
+    return <Navigate to="/403" replace />;
   }
 
-  return <Navigate to="/" replace />;
+  const handleLogout = () => {
+    logout();
+  };
+
+  return <OfferPage user={user} onLogout={handleLogout} />;
 };
 
-export default DashboardRouter;
+export default OfferRouteWrapper;

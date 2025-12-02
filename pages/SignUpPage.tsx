@@ -37,11 +37,14 @@ const SignUpPage: React.FC = () => {
         await signup(data);
         // Navigate to appropriate dashboard based on role after successful signup
         // Use the role from the submitted data, which should match the user's role
-        console.log("Signup successful, navigating to dashboard for role:", data.role);
+        console.log(
+          "Signup successful, navigating to dashboard for role:",
+          data.role
+        );
         if (data.role === "publisher") {
-          navigate("/dashboard/publisher/dashboard");
+          navigate("/dashboard");
         } else if (data.role === "creator") {
-          navigate("/dashboard/creator/dashboard");
+          navigate("/dashboard");
         }
       } catch (err) {
         // Error is handled by the useAuth hook
@@ -56,9 +59,9 @@ const SignUpPage: React.FC = () => {
     if (isAuthenticated && user && user.role) {
       // Navigate based on user role to the correct dashboard
       if (user.role === "publisher") {
-        navigate("/dashboard/publisher/dashboard");
+        navigate("/dashboard");
       } else if (user.role === "creator") {
-        navigate("/dashboard/creator/dashboard");
+        navigate("/dashboard");
       }
     }
   }, [isAuthenticated, user, navigate]);

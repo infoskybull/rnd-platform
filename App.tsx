@@ -33,6 +33,9 @@ import PaymentCancelPage from "./pages/PaymentCancelPage";
 import PublisherRouteWrapper from "./components/PublisherRouteWrapper";
 import CreatorRouteWrapper from "./components/CreatorRouteWrapper";
 import AdminRouteWrapper from "./components/AdminRouteWrapper";
+import PrototypeUploadRouteWrapper from "./components/PrototypeUploadRouteWrapper";
+import DashboardRouteWrapper from "./components/DashboardRouteWrapper";
+import OfferRouteWrapper from "./components/OfferRouteWrapper";
 
 // Context Providers
 import { SidebarProvider } from "./contexts/SidebarContext";
@@ -96,24 +99,25 @@ function App() {
 
                     {/* Protected routes */}
                     <Route path="/main" element={<MainPage />} />
-                    <Route path="/dashboard" element={<DashboardRouter />} />
+                    <Route
+                      path="/dashboard"
+                      element={<DashboardRouteWrapper />}
+                    />
 
                     {/* Publisher Dashboard Routes */}
-                    <Route
-                      path="/dashboard/publisher/dashboard"
-                      element={<PublisherRouteWrapper page="dashboard" />}
-                    />
                     <Route
                       path="/dashboard/publisher/browse-games"
                       element={<PublisherRouteWrapper page="browse-games" />}
                     />
                     <Route
-                      path="/dashboard/publisher/marketplace"
+                      path="/marketplace"
                       element={<PublisherRouteWrapper page="marketplace" />}
                     />
                     <Route
-                      path="/dashboard/publisher/prototype-detail/:id"
-                      element={<PublisherRouteWrapper page="prototype-detail" />}
+                      path="/prototype-detail/:id"
+                      element={
+                        <PublisherRouteWrapper page="prototype-detail" />
+                      }
                     />
                     <Route
                       path="/dashboard/publisher/portfolio/:id"
@@ -150,15 +154,15 @@ function App() {
 
                     {/* Creator Dashboard Routes */}
                     <Route
-                      path="/dashboard/creator/dashboard"
-                      element={<CreatorRouteWrapper page="dashboard" />}
-                    />
-                    <Route
-                      path="/dashboard/creator/use-ai"
+                      path="/prototype/use-ai"
                       element={<CreatorRouteWrapper page="use-ai" />}
                     />
                     <Route
-                      path="/dashboard/creator/upload"
+                      path="/prototype/upload/:id"
+                      element={<PrototypeUploadRouteWrapper />}
+                    />
+                    <Route
+                      path="/prototype/upload"
                       element={<CreatorRouteWrapper page="upload" />}
                     />
                     <Route
@@ -259,6 +263,9 @@ function App() {
                       path="/payment/cancel"
                       element={<PaymentCancelPage />}
                     />
+
+                    {/* Offer Route */}
+                    <Route path="/offer" element={<OfferRouteWrapper />} />
 
                     {/* Catch all route - redirect to /404 */}
                     <Route path="*" element={<Navigate to="/404" replace />} />

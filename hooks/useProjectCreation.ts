@@ -12,6 +12,8 @@ interface ProjectData {
   productSalePrice?: number; // Required if 'product_sale' in projectType (min: 1)
   creatorCollaborationBudget?: number; // Required if 'dev_collaboration' in projectType (min: 1)
   gameGenre?: string; // Common field
+  targetPlatform?: string; // Common field
+  tags?: string[]; // Common field
   attachments?: string[]; // Optional - fileKeys from S3
   fileUrls?: string[]; // Optional - S3 URLs already uploaded
   fileKeys?: string[]; // Optional - S3 keys to move from pending to created
@@ -146,6 +148,11 @@ export const useProjectCreation = () => {
         status: projectData.status || "draft", // Default to draft if not specified
         payToViewAmount: projectData.payToViewAmount, // Required - always present
         ...(projectData.gameGenre && { gameGenre: projectData.gameGenre }),
+        ...(projectData.targetPlatform && {
+          targetPlatform: projectData.targetPlatform,
+        }),
+        ...(projectData.tags &&
+          projectData.tags.length > 0 && { tags: projectData.tags }),
         ...(projectData.fileKeys && { fileKeys: projectData.fileKeys }),
         ...(projectData.fileUrls && { fileUrls: projectData.fileUrls }),
         ...(projectData.attachments && {

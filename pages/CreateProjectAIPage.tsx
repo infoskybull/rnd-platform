@@ -411,6 +411,16 @@ const CreateProjectAIPage: React.FC = () => {
 
     setCreating(true);
     try {
+      // Validate that fileKeys and fileUrls are both present when source code is uploaded
+      if (uploadedFileKey && !uploadedFileUrl) {
+        showToastMessage(
+          "Error: File URL is missing. Please re-upload your source code.",
+          "error"
+        );
+        setCreating(false);
+        return;
+      }
+
       const projectData: any = {
         title: formData.title.trim(),
         shortDescription: formData.shortDescription.trim(),
@@ -420,8 +430,12 @@ const CreateProjectAIPage: React.FC = () => {
           | "draft"
           | "published",
         payToViewAmount: payToViewAmount,
-        fileKeys: [uploadedFileKey],
-        fileUrls: uploadedFileUrl ? [uploadedFileUrl] : undefined,
+        // Always send both fileKeys and fileUrls together when source code is uploaded
+        ...(uploadedFileKey &&
+          uploadedFileUrl && {
+            fileKeys: [uploadedFileKey],
+            fileUrls: [uploadedFileUrl],
+          }),
         thumbnail: formData.bannerFileKey || undefined,
         attachments:
           formData.attachments

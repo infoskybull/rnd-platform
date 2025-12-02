@@ -565,8 +565,21 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
 
     try {
       // Automatically extract fileKeys and fileUrls from uploaded files
-      const fileKeys = uploadedFiles.map((file) => file.fileKey);
-      const fileUrls = uploadedFiles.map((file) => file.uploadUrl);
+      const fileKeys = uploadedFiles
+        .map((file) => file.fileKey)
+        .filter((key) => key);
+      const fileUrls = uploadedFiles
+        .map((file) => file.uploadUrl)
+        .filter((url) => url);
+
+      // Validate that fileKeys and fileUrls have the same length when source code is uploaded
+      if (fileKeys.length !== fileUrls.length) {
+        showToastMessage(
+          "Error: File keys and URLs mismatch. Please re-upload your source code.",
+          "error"
+        );
+        return;
+      }
 
       // Prepare banner for thumbnail field (store fileKey)
       const thumbnail = formData.bannerFileKey || undefined;
@@ -596,8 +609,12 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
           | "draft"
           | "published",
         payToViewAmount: payToViewAmount,
-        fileKeys: fileKeys.length > 0 ? fileKeys : undefined,
-        fileUrls: fileUrls.length > 0 ? fileUrls : undefined,
+        // Always send both fileKeys and fileUrls together when source code is uploaded
+        ...(fileKeys.length > 0 &&
+          fileUrls.length > 0 && {
+            fileKeys: fileKeys,
+            fileUrls: fileUrls,
+          }),
         thumbnail: thumbnail,
         attachments:
           attachmentFileKeys.length > 0 ? attachmentFileKeys : undefined,

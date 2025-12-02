@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { User } from "../types";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { User, GameProject } from "../types";
+import { apiService } from "../services/api";
 import DashboardNavbar from "../components/DashboardNavbar";
 import {
-  getCreatorNavigationItems,
+  getNavigationItems,
   getDefaultRightIcons,
 } from "../utils/navbarConfig";
 import CustomCheckbox from "../components/CustomCheckbox";
@@ -24,21 +25,24 @@ import {
   compressFilesToZip,
 } from "../utils/projectAnalyzer";
 
-interface CreatorUploadPageProps {
+interface UploadPageProps {
   user: User;
   onLogout: () => void;
 }
 
-const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
-  user,
-  onLogout,
-}) => {
+const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id } = useParams<{ id: string }>();
   const dispatch = useAppDispatch();
   const aiPageState = useAppSelector((state) => state.aiPage);
   const uploadState = useAppSelector((state) => state.upload);
   const projectName = aiPageState.projectName || "";
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [loadingProject, setLoadingProject] = useState(false);
+  const [editProject, setEditProject] = useState<GameProject | null>(null);
 
   // Get data from navigation state (from AI page)
   const navigationState = location.state as {
@@ -227,6 +231,155 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Load project data for edit mode
+  useEffect(() => {
+    const loadProjectForEdit = async () => {
+      if (!id) {
+        setIsEditMode(false);
+        return;
+      }
+
+      try {
+        setLoadingProject(true);
+        setIsEditMode(true);
+        const projectData = await apiService.getGameProjectById(id);
+        setEditProject(projectData);
+
+        // Map project data to form fields
+        if (projectData) {
+          // Set project name
+          if (projectData.title) {
+            dispatch(setProjectNameAction(projectData.title));
+          }
+
+          // Set descriptions
+          if (projectData.shortDescription) {
+            setShortDescription(projectData.shortDescription);
+          }
+          if (projectData.longDescription) {
+            setLongDescription(projectData.longDescription);
+          }
+
+          // Set tags
+          if (projectData.tags && projectData.tags.length > 0) {
+            setTags(projectData.tags);
+          }
+
+          // Set platform
+          if (projectData.targetPlatform) {
+            setPlatform(projectData.targetPlatform);
+          }
+
+          // Set genre
+          if (projectData.gameGenre) {
+            setSelectedGenre(projectData.gameGenre);
+          }
+
+          // Set repo format
+          if (projectData.repoFormat) {
+            setRepoFormat(projectData.repoFormat);
+          }
+
+          // Set package prices
+          const prices: { 1: string; 2: string; 3: string } = {
+            1: projectData.payToViewAmount?.toString() || "0",
+            2: projectData.productSalePrice?.toString() || "",
+            3: projectData.creatorCollaborationBudget?.toString() || "",
+          };
+          setPackagePrices(prices);
+
+          // Set selected packages based on what's set
+          const selected: number[] = [];
+          if (projectData.payToViewAmount !== undefined) {
+            selected.push(1);
+          }
+          if (
+            projectData.productSalePrice &&
+            projectData.productSalePrice > 0
+          ) {
+            selected.push(2);
+          }
+          if (
+            projectData.creatorCollaborationBudget &&
+            projectData.creatorCollaborationBudget > 0
+          ) {
+            selected.push(3);
+          }
+          if (selected.length > 0) {
+            setSelectedPackages(selected);
+          }
+
+          // Helper function to convert URL to File object
+          const urlToFile = async (
+            url: string,
+            filename: string
+          ): Promise<File> => {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            return new File([blob], filename, { type: blob.type });
+          };
+
+          // Set app icon if available
+          if (projectData.appIcon) {
+            setAppIconFileKey(projectData.appIcon);
+            try {
+              // Fetch and convert to File object for display
+              const appIconFile = await urlToFile(
+                projectData.appIcon,
+                "app-icon.jpg"
+              );
+              setAppIconFiles([appIconFile]);
+            } catch (error) {
+              console.error("Error loading app icon:", error);
+            }
+          }
+
+          // Set feature image (thumbnail) if available
+          if (projectData.thumbnail) {
+            setFeatureImageFileKey(projectData.thumbnail);
+            try {
+              // Fetch and convert to File object for display
+              const featureImageFile = await urlToFile(
+                projectData.thumbnail,
+                "feature-image.jpg"
+              );
+              setFeatureImageFiles([featureImageFile]);
+            } catch (error) {
+              console.error("Error loading feature image:", error);
+            }
+          }
+
+          // Set attachments if available
+          if (projectData.attachments && projectData.attachments.length > 0) {
+            setAttachmentFileKeys(projectData.attachments);
+            try {
+              // Fetch and convert all attachments to File objects for display
+              const attachmentFilePromises = projectData.attachments.map(
+                (url: string, index: number) =>
+                  urlToFile(url, `attachment-${index + 1}.jpg`)
+              );
+              const attachmentFiles = await Promise.all(attachmentFilePromises);
+              setAttachmentFiles(attachmentFiles);
+            } catch (error) {
+              console.error("Error loading attachments:", error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading project for edit:", error);
+        showToastMessage(
+          "Failed to load project data. Please try again.",
+          "error"
+        );
+      } finally {
+        setLoadingProject(false);
+      }
+    };
+
+    loadProjectForEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Handle navigation state from AI page
   useEffect(() => {
@@ -444,6 +597,8 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         status: "published",
         payToViewAmount: parseFloat(packagePrices[1] || "0"),
         gameGenre: selectedGenre || undefined,
+        ...(platform && { targetPlatform: platform }),
+        ...(tags.length > 0 && { tags: tags }),
         ...(finalFeatureImageFileKey && {
           thumbnail: finalFeatureImageFileKey,
         }),
@@ -451,12 +606,17 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         ...(finalAttachmentFileKeys.length > 0 && {
           attachments: finalAttachmentFileKeys,
         }),
-        // Use fileUrls if available (S3 URL from AI page), otherwise use fileKeys
-        ...(sourceFileUrls &&
+        // Always send both fileKeys and fileUrls together when source code is uploaded
+        ...(sourceFileKey &&
+          sourceFileUrls &&
           sourceFileUrls.length > 0 && {
+            fileKeys: [sourceFileKey],
             fileUrls: sourceFileUrls,
           }),
-        ...((!sourceFileUrls || sourceFileUrls.length === 0) &&
+        // Fallback: if only fileKey is available (shouldn't happen, but handle gracefully)
+        ...((!sourceFileKey ||
+          !sourceFileUrls ||
+          sourceFileUrls.length === 0) &&
           sourceFileKey && { fileKeys: [sourceFileKey] }),
       };
 
@@ -470,16 +630,45 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         );
       }
 
-      // Create project
-      const result = await createProject(projectData);
+      // Log project data for debugging
+      console.log("Project data before create/update (publish):", {
+        ...projectData,
+        tags: projectData.tags,
+        targetPlatform: projectData.targetPlatform,
+      });
 
-      if (result.success) {
-        showToastMessage("Project published successfully!", "success");
-        setTimeout(() => {
-          navigate("/dashboard/creator/upload-success");
-        }, 2000);
+      // Create or update project
+      if (isEditMode && id) {
+        // Update existing project
+        try {
+          await apiService.updateGameProject(id, projectData);
+          showToastMessage("Project updated successfully!", "success");
+          setTimeout(() => {
+            navigate(`/prototype-detail/${id}`);
+          }, 2000);
+        } catch (error) {
+          showToastMessage(
+            `Failed to update project: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+            "error"
+          );
+        }
       } else {
-        showToastMessage(result.error || "Failed to publish project", "error");
+        // Create new project
+        const result = await createProject(projectData);
+
+        if (result.success) {
+          showToastMessage("Project published successfully!", "success");
+          setTimeout(() => {
+            navigate("/dashboard");
+          }, 2000);
+        } else {
+          showToastMessage(
+            result.error || "Failed to publish project",
+            "error"
+          );
+        }
       }
     } catch (error) {
       console.error("Publish error:", error);
@@ -637,6 +826,8 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         status: "draft",
         payToViewAmount: parseFloat(packagePrices[1] || "0"),
         gameGenre: selectedGenre || undefined,
+        ...(platform && { targetPlatform: platform }),
+        ...(tags.length > 0 && { tags: tags }),
         ...(finalFeatureImageFileKey && {
           thumbnail: finalFeatureImageFileKey,
         }),
@@ -644,12 +835,17 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         ...(finalAttachmentFileKeys.length > 0 && {
           attachments: finalAttachmentFileKeys,
         }),
-        // Use fileUrls if available (S3 URL from AI page), otherwise use fileKeys
-        ...(sourceFileUrls &&
+        // Always send both fileKeys and fileUrls together when source code is uploaded
+        ...(sourceFileKey &&
+          sourceFileUrls &&
           sourceFileUrls.length > 0 && {
+            fileKeys: [sourceFileKey],
             fileUrls: sourceFileUrls,
           }),
-        ...((!sourceFileUrls || sourceFileUrls.length === 0) &&
+        // Fallback: if only fileKey is available (shouldn't happen, but handle gracefully)
+        ...((!sourceFileKey ||
+          !sourceFileUrls ||
+          sourceFileUrls.length === 0) &&
           sourceFileKey && { fileKeys: [sourceFileKey] }),
       };
 
@@ -663,13 +859,20 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
         );
       }
 
+      // Log project data for debugging
+      console.log("Project data before create (draft):", {
+        ...projectData,
+        tags: projectData.tags,
+        targetPlatform: projectData.targetPlatform,
+      });
+
       // Create project
       const result = await createProject(projectData);
 
       if (result.success) {
         showToastMessage("Project saved as draft successfully!", "success");
         setTimeout(() => {
-          navigate("/dashboard/creator/dashboard");
+          navigate("/dashboard");
         }, 2000);
       } else {
         showToastMessage(
@@ -690,8 +893,17 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
     }
   };
 
-  const navigationItems = getCreatorNavigationItems(location.pathname);
+  const navigationItems = getNavigationItems(user?.role, location.pathname);
   const rightIcons = getDefaultRightIcons();
+
+  // Show loading state while loading project for edit
+  if (loadingProject) {
+    return (
+      <div className="h-screen bg-white flex items-center justify-center">
+        <div className="text-gray-600">Loading project data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden">
@@ -1157,6 +1369,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               acceptedFileTypes="image/jpeg,image/jpg,image/png"
               onFilesChange={setAppIconFiles}
               maxFileSize={5 * 1024 * 1024} // 5MB
+              initialFiles={appIconFiles.length > 0 ? appIconFiles : undefined}
             />
 
             {/* Feature Image */}
@@ -1170,6 +1383,9 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               acceptedFileTypes="image/jpeg,image/jpg,image/png"
               onFilesChange={setFeatureImageFiles}
               maxFileSize={5 * 1024 * 1024} // 5MB
+              initialFiles={
+                featureImageFiles.length > 0 ? featureImageFiles : undefined
+              }
             />
 
             {/* Attachment */}
@@ -1183,6 +1399,9 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
               acceptedFileTypes="image/jpeg,image/jpg,image/png"
               onFilesChange={setAttachmentFiles}
               maxFileSize={10 * 1024 * 1024} // 10MB
+              initialFiles={
+                attachmentFiles.length > 0 ? attachmentFiles : undefined
+              }
             />
           </div>
 
@@ -1190,7 +1409,7 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
           <div className="space-y-3 pt-4 flex-shrink-0 border-t border-gray-200 mt-4 px-4">
             <button
               className="w-full px-4 py-3 bg-[#BEBEBE] text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-              onClick={() => navigate("/dashboard/creator/use-ai")}
+              onClick={() => navigate("/prototype/use-ai")}
               style={{
                 fontFamily: "Istok Web",
                 fontWeight: 400,
@@ -1339,4 +1558,4 @@ const CreatorUploadPage: React.FC<CreatorUploadPageProps> = ({
   );
 };
 
-export default CreatorUploadPage;
+export default UploadPage;

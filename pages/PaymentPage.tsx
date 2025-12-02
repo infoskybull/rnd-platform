@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import ResponsiveNavbar from "../components/ResponsiveNavbar";
+import DashboardNavbar from "../components/DashboardNavbar";
 import Web3WalletModal from "../components/Web3WalletModal";
+import RnDLogo from "../components/icons/RnDLogo";
+import {
+  getNavigationItems,
+  getDefaultRightIcons,
+} from "../utils/navbarConfig";
 import {
   Web3WalletCredentials,
   GameProject,
@@ -40,6 +45,7 @@ const PAYPAL_MODE =
 
 const PaymentPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const selectedPlanId = searchParams.get("plan") as PlanType | null;
@@ -93,7 +99,14 @@ const PaymentPage: React.FC = () => {
           return project.payToViewAmount || 0;
         }
         if (paymentTypeParam === "collaboration_budget") {
-          // Get price from collaboration budget (only for full GameProject)
+          // Get price from creatorCollaborationBudget (new flat structure)
+          if (
+            "creatorCollaborationBudget" in project &&
+            project.creatorCollaborationBudget
+          ) {
+            return project.creatorCollaborationBudget;
+          }
+          // Fallback to old structure for backward compatibility
           if (
             "creatorCollaborationData" in project &&
             project.creatorCollaborationData?.budget
@@ -103,7 +116,11 @@ const PaymentPage: React.FC = () => {
           return 0;
         }
         if (paymentTypeParam === "project_purchase") {
-          // Get price from product sale asking price (only for full GameProject)
+          // Get price from productSalePrice (new flat structure)
+          if ("productSalePrice" in project && project.productSalePrice) {
+            return project.productSalePrice;
+          }
+          // Fallback to old structure for backward compatibility
           if (
             "productSaleData" in project &&
             project.productSaleData?.askingPrice
@@ -120,6 +137,17 @@ const PaymentPage: React.FC = () => {
       }
 
       // Fallback: Get price from project based on type (only for full GameProject, not basic info)
+      // Try new flat structure first
+      if ("productSalePrice" in project && project.productSalePrice) {
+        return project.productSalePrice;
+      }
+      if (
+        "creatorCollaborationBudget" in project &&
+        project.creatorCollaborationBudget
+      ) {
+        return project.creatorCollaborationBudget;
+      }
+      // Fallback to old structure for backward compatibility
       if (
         "productSaleData" in project &&
         project.productSaleData?.askingPrice
@@ -189,14 +217,16 @@ const PaymentPage: React.FC = () => {
       if (projectId) {
         setLoadingProject(true);
         try {
-          // If payToView, use basic-info endpoint instead of full project detail
+          // Use preview endpoint instead of full project detail
           if (payToView) {
             const projectData = await apiService.getGameProjectBasicInfo(
               projectId
             );
             setProject(projectData);
           } else {
-            const projectData = await apiService.getGameProjectById(projectId);
+            const projectData = await apiService.getGameProjectPreview(
+              projectId
+            );
             setProject(projectData);
           }
         } catch (error) {
@@ -274,6 +304,9 @@ const PaymentPage: React.FC = () => {
           currency: "USD",
           description: getPaymentDescription(),
           paymentMethod: "visa",
+          ...(paymentType === "project_purchase" && {
+            projectType: "product_sale",
+          }),
         });
 
         if (paymentData.success) {
@@ -330,6 +363,9 @@ const PaymentPage: React.FC = () => {
         currency: "USD",
         description: getPaymentDescription(),
         paymentMethod: "paypal",
+        ...(paymentType === "project_purchase" && {
+          projectType: "product_sale",
+        }),
       });
 
       if (paymentData.success && paymentData.data.approvalUrl) {
@@ -415,6 +451,9 @@ const PaymentPage: React.FC = () => {
           currency: "USD",
           description: getPaymentDescription(),
           paymentMethod: "web3",
+          ...(paymentType === "project_purchase" && {
+            projectType: "product_sale",
+          }),
         });
 
         if (paymentData.success) {
@@ -465,12 +504,16 @@ const PaymentPage: React.FC = () => {
     }
   };
 
+  // Get navigation items for navbar (optional for payment page)
+  const navigationItems = getNavigationItems(user?.role, location.pathname);
+  const rightIcons = getDefaultRightIcons();
+
   if (loadingProject) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading project details...</p>
+          <p className="text-gray-600">Loading project details...</p>
         </div>
       </div>
     );
@@ -478,9 +521,9 @@ const PaymentPage: React.FC = () => {
 
   if (paymentAmount === 0) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">Invalid payment amount</p>
+          <p className="text-red-600 mb-4">Invalid payment amount</p>
           <button
             onClick={() => navigate(-1)}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
@@ -495,26 +538,24 @@ const PaymentPage: React.FC = () => {
   return (
     // PayPalScriptProvider removed - using server-side flow instead
     // <PayPalScriptProvider ...>
-    <div className="min-h-screen bg-gray-900 text-gray-200">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Navbar */}
-      <ResponsiveNavbar
-        title="Payment"
-        titleColor="text-indigo-400"
+      <DashboardNavbar
         user={user}
         onLogout={handleLogout}
-        backButton={{
-          text: "Back",
-          onClick: handleBack,
-        }}
+        navigationItems={navigationItems}
+        showSearch={false}
+        rightIcons={rightIcons}
+        logo={<RnDLogo size={40} />}
       />
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+      <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-12">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Complete Payment
           </h1>
-          <p className="text-gray-400">
+          <p className="text-gray-600">
             {project
               ? payToView
                 ? `Pay to View: ${project.title}`
@@ -528,25 +569,28 @@ const PaymentPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Order Summary */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-6 sticky top-4">
-              <h2 className="text-lg font-semibold text-white mb-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 sticky top-4 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Order Summary
               </h2>
               <div className="space-y-4">
                 {project ? (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Project</span>
-                      <span className="text-white font-medium truncate ml-2">
+                      <span className="text-gray-600">Project</span>
+                      <span className="text-gray-900 font-medium truncate ml-2">
                         {project.title}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Type</span>
-                      <span className="text-white font-medium">
+                      <span className="text-gray-600">Type</span>
+                      <span className="text-gray-900 font-medium">
                         {(() => {
                           // Use paymentType to determine which type to show
                           const currentPaymentType = getPaymentType();
+                          if (currentPaymentType === "pay_to_view") {
+                            return "Pay to View";
+                          }
                           if (currentPaymentType === "collaboration_budget") {
                             return "Dev Collaboration";
                           }
@@ -574,8 +618,8 @@ const PaymentPage: React.FC = () => {
                     </div>
                     {payToView && project.payToViewAmount > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Viewing Fee</span>
-                        <span className="text-white font-medium">
+                        <span className="text-gray-600">Viewing Fee</span>
+                        <span className="text-gray-900 font-medium">
                           ${project.payToViewAmount.toFixed(2)}
                         </span>
                       </div>
@@ -585,33 +629,71 @@ const PaymentPage: React.FC = () => {
                       // Only show asking price for project_purchase
                       if (
                         currentPaymentType === "project_purchase" &&
-                        !payToView &&
-                        "productSaleData" in project &&
-                        project.productSaleData?.askingPrice
+                        !payToView
                       ) {
-                        return (
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Asking Price</span>
-                            <span className="text-white font-medium">
-                              ${project.productSaleData.askingPrice}
-                            </span>
-                          </div>
-                        );
+                        // Try new flat structure first
+                        if (
+                          "productSalePrice" in project &&
+                          project.productSalePrice
+                        ) {
+                          return (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">
+                                Asking Price
+                              </span>
+                              <span className="text-gray-900 font-medium">
+                                ${project.productSalePrice}
+                              </span>
+                            </div>
+                          );
+                        }
+                        // Fallback to old structure
+                        if (
+                          "productSaleData" in project &&
+                          project.productSaleData?.askingPrice
+                        ) {
+                          return (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">
+                                Asking Price
+                              </span>
+                              <span className="text-gray-900 font-medium">
+                                ${project.productSaleData.askingPrice}
+                              </span>
+                            </div>
+                          );
+                        }
                       }
                       // Only show budget for collaboration_budget
-                      if (
-                        currentPaymentType === "collaboration_budget" &&
-                        "creatorCollaborationData" in project &&
-                        project.creatorCollaborationData?.budget
-                      ) {
-                        return (
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Budget</span>
-                            <span className="text-white font-medium">
-                              ${project.creatorCollaborationData.budget}
-                            </span>
-                          </div>
-                        );
+                      if (currentPaymentType === "collaboration_budget") {
+                        // Try new flat structure first
+                        if (
+                          "creatorCollaborationBudget" in project &&
+                          project.creatorCollaborationBudget
+                        ) {
+                          return (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Budget</span>
+                              <span className="text-gray-900 font-medium">
+                                ${project.creatorCollaborationBudget}
+                              </span>
+                            </div>
+                          );
+                        }
+                        // Fallback to old structure
+                        if (
+                          "creatorCollaborationData" in project &&
+                          project.creatorCollaborationData?.budget
+                        ) {
+                          return (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Budget</span>
+                              <span className="text-gray-900 font-medium">
+                                ${project.creatorCollaborationData.budget}
+                              </span>
+                            </div>
+                          );
+                        }
                       }
                       return null;
                     })()}
@@ -619,21 +701,21 @@ const PaymentPage: React.FC = () => {
                 ) : selectedPlan ? (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Plan</span>
-                      <span className="text-white font-medium">
+                      <span className="text-gray-600">Plan</span>
+                      <span className="text-gray-900 font-medium">
                         {selectedPlan.name}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Billing</span>
-                      <span className="text-white font-medium">Monthly</span>
+                      <span className="text-gray-600">Billing</span>
+                      <span className="text-gray-900 font-medium">Monthly</span>
                     </div>
                   </>
                 ) : null}
-                <div className="border-t border-gray-700 pt-4">
+                <div className="border-t border-gray-300 pt-4">
                   <div className="flex justify-between text-lg font-bold">
-                    <span className="text-white">Total</span>
-                    <span className="text-white">${paymentAmount}</span>
+                    <span className="text-gray-900">Total</span>
+                    <span className="text-gray-900">${paymentAmount}</span>
                   </div>
                 </div>
               </div>
@@ -642,8 +724,8 @@ const PaymentPage: React.FC = () => {
 
           {/* Payment Method Selection */}
           <div className="lg:col-span-2">
-            <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-6 mb-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Payment Method
               </h2>
 
@@ -653,8 +735,8 @@ const PaymentPage: React.FC = () => {
                   onClick={() => setPaymentMethod("paypal")}
                   className={`px-4 py-3 rounded-lg border transition-colors ${
                     paymentMethod === "paypal"
-                      ? "border-indigo-500 bg-indigo-900/20 text-white"
-                      : "border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300"
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
                   }`}
                 >
                   <div className="flex items-center justify-center space-x-2">
@@ -666,8 +748,8 @@ const PaymentPage: React.FC = () => {
                   onClick={() => setPaymentMethod("visa")}
                   className={`px-4 py-3 rounded-lg border transition-colors ${
                     paymentMethod === "visa"
-                      ? "border-indigo-500 bg-indigo-900/20 text-white"
-                      : "border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300"
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
                   }`}
                 >
                   <div className="flex items-center justify-center space-x-2">
@@ -692,8 +774,8 @@ const PaymentPage: React.FC = () => {
                   onClick={() => setPaymentMethod("web3")}
                   className={`px-4 py-3 rounded-lg border transition-colors ${
                     paymentMethod === "web3"
-                      ? "border-indigo-500 bg-indigo-900/20 text-white"
-                      : "border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300"
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
                   }`}
                 >
                   <div className="flex items-center justify-center space-x-2">
@@ -719,7 +801,7 @@ const PaymentPage: React.FC = () => {
               {paymentMethod === "paypal" && (
                 <div className="space-y-4">
                   {PAYPAL_MODE === "sandbox" && (
-                    <div className="bg-yellow-900/20 border border-yellow-500 text-yellow-300 px-4 py-3 rounded-lg">
+                    <div className="bg-yellow-50 border border-yellow-400 text-yellow-800 px-4 py-3 rounded-lg">
                       <p className="text-sm font-semibold mb-1">
                         🧪 Sandbox Mode Active
                       </p>
@@ -730,14 +812,14 @@ const PaymentPage: React.FC = () => {
                           href="https://developer.paypal.com/dashboard/accounts"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline hover:text-yellow-200"
+                          className="underline hover:text-yellow-900"
                         >
                           PayPal Developer Dashboard
                         </a>
                       </p>
                     </div>
                   )}
-                  <div className="bg-blue-900/20 border border-blue-500 text-blue-300 px-4 py-3 rounded-lg">
+                  <div className="bg-blue-50 border border-blue-400 text-blue-800 px-4 py-3 rounded-lg">
                     <p className="text-sm">
                       Pay securely with PayPal. You'll be redirected to PayPal
                       to complete your payment. After approval, you'll be
@@ -747,7 +829,7 @@ const PaymentPage: React.FC = () => {
                   <button
                     onClick={handlePayPalPayment}
                     disabled={processing || paymentAmount === 0}
-                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2"
                   >
                     {processing ? (
                       <>
@@ -774,7 +856,7 @@ const PaymentPage: React.FC = () => {
               {paymentMethod === "visa" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Card Number
                     </label>
                     <input
@@ -783,19 +865,19 @@ const PaymentPage: React.FC = () => {
                       onChange={handleCardNumberChange}
                       placeholder="1234 5678 9012 3456"
                       maxLength={19}
-                      className={`w-full px-4 py-3 bg-gray-700 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        errors.number ? "border-red-500" : "border-gray-600"
+                      className={`w-full px-4 py-3 bg-white border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        errors.number ? "border-red-500" : "border-gray-300"
                       }`}
                     />
                     {errors.number && (
-                      <p className="mt-1 text-sm text-red-400">
+                      <p className="mt-1 text-sm text-red-600">
                         {errors.number}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Cardholder Name
                     </label>
                     <input
@@ -808,18 +890,18 @@ const PaymentPage: React.FC = () => {
                         })
                       }
                       placeholder="John Doe"
-                      className={`w-full px-4 py-3 bg-gray-700 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        errors.name ? "border-red-500" : "border-gray-600"
+                      className={`w-full px-4 py-3 bg-white border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        errors.name ? "border-red-500" : "border-gray-300"
                       }`}
                     />
                     {errors.name && (
-                      <p className="mt-1 text-sm text-red-400">{errors.name}</p>
+                      <p className="mt-1 text-sm text-red-600">{errors.name}</p>
                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Expiry Date
                       </label>
                       <input
@@ -828,19 +910,19 @@ const PaymentPage: React.FC = () => {
                         onChange={handleExpiryChange}
                         placeholder="MM/YY"
                         maxLength={5}
-                        className={`w-full px-4 py-3 bg-gray-700 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                          errors.expiry ? "border-red-500" : "border-gray-600"
+                        className={`w-full px-4 py-3 bg-white border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                          errors.expiry ? "border-red-500" : "border-gray-300"
                         }`}
                       />
                       {errors.expiry && (
-                        <p className="mt-1 text-sm text-red-400">
+                        <p className="mt-1 text-sm text-red-600">
                           {errors.expiry}
                         </p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         CVV
                       </label>
                       <input
@@ -854,12 +936,12 @@ const PaymentPage: React.FC = () => {
                         }}
                         placeholder="123"
                         maxLength={4}
-                        className={`w-full px-4 py-3 bg-gray-700 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                          errors.cvv ? "border-red-500" : "border-gray-600"
+                        className={`w-full px-4 py-3 bg-white border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                          errors.cvv ? "border-red-500" : "border-gray-300"
                         }`}
                       />
                       {errors.cvv && (
-                        <p className="mt-1 text-sm text-red-400">
+                        <p className="mt-1 text-sm text-red-600">
                           {errors.cvv}
                         </p>
                       )}
@@ -869,7 +951,7 @@ const PaymentPage: React.FC = () => {
                   <button
                     onClick={handleVisaPayment}
                     disabled={processing}
-                    className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                    className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
                   >
                     {processing ? "Processing..." : `Pay $${paymentAmount}`}
                   </button>
@@ -879,7 +961,7 @@ const PaymentPage: React.FC = () => {
               {/* Web3 Payment */}
               {paymentMethod === "web3" && (
                 <div className="space-y-4">
-                  <div className="bg-blue-900/20 border border-blue-500 text-blue-300 px-4 py-3 rounded-lg">
+                  <div className="bg-blue-50 border border-blue-400 text-blue-800 px-4 py-3 rounded-lg">
                     <p className="text-sm">
                       Connect your Web3 wallet to complete the payment. You'll
                       be able to pay using TON, Ethereum, SUI, or Solana.
@@ -888,7 +970,7 @@ const PaymentPage: React.FC = () => {
 
                   {isWeb3WalletConnected ? (
                     <div className="space-y-4">
-                      <div className="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded-lg">
+                      <div className="bg-green-50 border border-green-400 text-green-800 px-4 py-3 rounded-lg">
                         <p className="text-sm font-medium">Wallet Connected</p>
                         {(tonAddress ||
                           ethAddress ||
@@ -924,7 +1006,7 @@ const PaymentPage: React.FC = () => {
                           handleWeb3Payment(credentials);
                         }}
                         disabled={processing}
-                        className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                        className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
                       >
                         {processing ? "Processing..." : `Pay $${paymentAmount}`}
                       </button>

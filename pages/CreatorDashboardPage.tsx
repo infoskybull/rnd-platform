@@ -4,7 +4,7 @@ import { User, GameProject, GameProjectFilters } from "../types";
 import { apiService } from "../services/api";
 import DashboardNavbar from "../components/DashboardNavbar";
 import {
-  getCreatorNavigationItems,
+  getNavigationItems,
   getDefaultRightIcons,
 } from "../utils/navbarConfig";
 
@@ -30,7 +30,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
   const filters = ["All", "Published", "Draft", "Collaboration"];
 
   // Get navigation items with active state based on current path
-  const navigationItems = getCreatorNavigationItems(location.pathname);
+  const navigationItems = getNavigationItems(user?.role, location.pathname);
   const rightIcons = getDefaultRightIcons();
 
   const loadProjects = useCallback(async () => {

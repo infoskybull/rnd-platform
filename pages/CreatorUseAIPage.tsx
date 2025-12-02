@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { User } from "../types";
 import DashboardNavbar from "../components/DashboardNavbar";
 import {
-  getCreatorNavigationItems,
+  getNavigationItems,
   getDefaultRightIcons,
 } from "../utils/navbarConfig";
 import { generateGameCodeStream } from "../services/geminiService";
@@ -103,6 +103,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
   const [showUploadErrorModal, setShowUploadErrorModal] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [isAutoUploading, setIsAutoUploading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -665,7 +666,83 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
     }
   };
 
-  const navigationItems = getCreatorNavigationItems(location.pathname);
+  const handleDownload = async () => {
+    if (
+      !generatedCode ||
+      generatedCode === INITIAL_HTML_PLACEHOLDER ||
+      !isGenerationComplete
+    ) {
+      setUploadError("No generated code available to download");
+      setShowUploadErrorModal(true);
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // Check if JSZip is available
+      if (typeof (window as any).JSZip === "undefined") {
+        throw new Error(
+          "JSZip library is not loaded. Please refresh the page and try again."
+        );
+      }
+
+      const JSZip = (window as any).JSZip;
+      const zip = new JSZip();
+
+      // Add the HTML file to the zip
+      zip.file("index.html", generatedCode);
+
+      // Extract and add any external resources referenced in the HTML
+      // This includes CSS, JS files, images, etc. that are referenced with relative paths
+      const htmlDoc = new DOMParser().parseFromString(
+        generatedCode,
+        "text/html"
+      );
+
+      // Extract inline styles and scripts are already in the HTML
+      // For external resources, we would need to fetch them, but for simplicity,
+      // we'll just include the HTML file since most AI-generated games are self-contained
+
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: {
+          level: 6,
+        },
+      });
+
+      // Create download link
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      // Use project name if available, otherwise use default name
+      const fileName = projectName
+        ? `${projectName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.zip`
+        : `ai-generated-game-${Date.now()}.zip`;
+
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the URL object
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Failed to download project. Please try again."
+      );
+      setShowUploadErrorModal(true);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const navigationItems = getNavigationItems(user?.role, location.pathname);
   const rightIcons = getDefaultRightIcons();
 
   return (
@@ -701,19 +778,33 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
               />
             </svg>
           </button>
-          <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-            <svg
-              width="31"
-              height="31"
-              viewBox="0 0 31 31"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M15.4998 20.1178C15.3276 20.1178 15.1662 20.0911 15.0155 20.0377C14.8648 19.9843 14.7248 19.8926 14.5957 19.7626L9.94567 15.1126C9.68734 14.8543 9.56334 14.5529 9.57367 14.2084C9.584 13.864 9.708 13.5626 9.94567 13.3043C10.204 13.0459 10.511 12.9116 10.8666 12.9013C11.2223 12.8909 11.5288 13.0145 11.7863 13.272L14.2082 15.6938V6.45842C14.2082 6.09245 14.3322 5.78589 14.5802 5.53875C14.8282 5.29161 15.1347 5.16761 15.4998 5.16675C15.8649 5.16589 16.1719 5.28989 16.4208 5.53875C16.6697 5.78761 16.7932 6.09417 16.7915 6.45842V15.6938L19.2134 13.272C19.4717 13.0136 19.7787 12.8896 20.1343 12.9C20.49 12.9103 20.7965 13.0451 21.054 13.3043C21.2908 13.5626 21.4148 13.864 21.426 14.2084C21.4372 14.5529 21.3132 14.8543 21.054 15.1126L16.404 19.7626C16.2748 19.8918 16.1349 19.9835 15.9842 20.0377C15.8335 20.092 15.6721 20.1187 15.4998 20.1178ZM7.74984 25.8334C7.03942 25.8334 6.43148 25.5807 5.926 25.0752C5.42053 24.5697 5.16737 23.9614 5.1665 23.2501V20.6668C5.1665 20.3008 5.2905 19.9942 5.5385 19.7471C5.7865 19.4999 6.09306 19.3759 6.45817 19.3751C6.82328 19.3742 7.13027 19.4982 7.37913 19.7471C7.62799 19.9959 7.75156 20.3025 7.74984 20.6668V23.2501H23.2498V20.6668C23.2498 20.3008 23.3738 19.9942 23.6218 19.7471C23.8698 19.4999 24.1764 19.3759 24.5415 19.3751C24.9066 19.3742 25.2136 19.4982 25.4625 19.7471C25.7113 19.9959 25.8349 20.3025 25.8332 20.6668V23.2501C25.8332 23.9605 25.5804 24.5689 25.075 25.0752C24.5695 25.5815 23.9611 25.8343 23.2498 25.8334H7.74984Z"
-                fill="#757575"
-              />
-            </svg>
+          <button
+            onClick={handleDownload}
+            disabled={
+              isDownloading ||
+              !isGenerationComplete ||
+              !generatedCode ||
+              generatedCode === INITIAL_HTML_PLACEHOLDER
+            }
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={isDownloading ? "Downloading..." : "Download project as ZIP"}
+          >
+            {isDownloading ? (
+              <div className="w-7 h-7 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <svg
+                width="31"
+                height="31"
+                viewBox="0 0 31 31"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M15.4998 20.1178C15.3276 20.1178 15.1662 20.0911 15.0155 20.0377C14.8648 19.9843 14.7248 19.8926 14.5957 19.7626L9.94567 15.1126C9.68734 14.8543 9.56334 14.5529 9.57367 14.2084C9.584 13.864 9.708 13.5626 9.94567 13.3043C10.204 13.0459 10.511 12.9116 10.8666 12.9013C11.2223 12.8909 11.5288 13.0145 11.7863 13.272L14.2082 15.6938V6.45842C14.2082 6.09245 14.3322 5.78589 14.5802 5.53875C14.8282 5.29161 15.1347 5.16761 15.4998 5.16675C15.8649 5.16589 16.1719 5.28989 16.4208 5.53875C16.6697 5.78761 16.7932 6.09417 16.7915 6.45842V15.6938L19.2134 13.272C19.4717 13.0136 19.7787 12.8896 20.1343 12.9C20.49 12.9103 20.7965 13.0451 21.054 13.3043C21.2908 13.5626 21.4148 13.864 21.426 14.2084C21.4372 14.5529 21.3132 14.8543 21.054 15.1126L16.404 19.7626C16.2748 19.8918 16.1349 19.9835 15.9842 20.0377C15.8335 20.092 15.6721 20.1187 15.4998 20.1178ZM7.74984 25.8334C7.03942 25.8334 6.43148 25.5807 5.926 25.0752C5.42053 24.5697 5.16737 23.9614 5.1665 23.2501V20.6668C5.1665 20.3008 5.2905 19.9942 5.5385 19.7471C5.7865 19.4999 6.09306 19.3759 6.45817 19.3751C6.82328 19.3742 7.13027 19.4982 7.37913 19.7471C7.62799 19.9959 7.75156 20.3025 7.74984 20.6668V23.2501H23.2498V20.6668C23.2498 20.3008 23.3738 19.9942 23.6218 19.7471C23.8698 19.4999 24.1764 19.3759 24.5415 19.3751C24.9066 19.3742 25.2136 19.4982 25.4625 19.7471C25.7113 19.9959 25.8349 20.3025 25.8332 20.6668V23.2501C25.8332 23.9605 25.5804 24.5689 25.075 25.0752C24.5695 25.5815 23.9611 25.8343 23.2498 25.8334H7.74984Z"
+                  fill="#757575"
+                />
+              </svg>
+            )}
           </button>
         </div>
       </div>
@@ -1245,7 +1336,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                               // Handle different response formats
                               fileS3Url =
                                 downloadUrlResponse.url ||
-                                downloadUrlResponse.data?.url ||
+                                // downloadUrlResponse?.data?.url ||
                                 (downloadUrlResponse as any).downloadUrl;
 
                               if (fileS3Url) {
@@ -1267,7 +1358,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
 
                             // Step 6: Navigate to upload page with uploaded file info
                             // Store both fileKey and S3 URL for flexibility
-                            navigate("/dashboard/creator/upload", {
+                            navigate("/prototype/upload", {
                               state: {
                                 generatedCode,
                                 projectName,

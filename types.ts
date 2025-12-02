@@ -168,6 +168,9 @@ export interface GameProjectResponse {
   payToViewAmount: number; // Added per API docs
   productSalePrice?: number; // Optional - price for product sale (flat structure)
   creatorCollaborationBudget?: number; // Optional - budget for collaboration (flat structure)
+  gameGenre?: string; // Common field at top level
+  targetPlatform?: string; // Common field at top level
+  tags?: string[]; // Common field at top level
   viewerIds?: string[]; // Array of user IDs who have paid to view
   createdAt: string; // ISO 8601 date string
   updatedAt: string; // ISO 8601 date string
@@ -221,6 +224,9 @@ export interface GameProject {
   payToViewAmount: number; // Required - giá trị từ select package
   productSalePrice?: number; // Optional - price for product sale (flat structure)
   creatorCollaborationBudget?: number; // Optional - budget for collaboration (flat structure)
+  gameGenre?: string; // Common field at top level
+  targetPlatform?: string; // Common field at top level
+  tags?: string[]; // Common field at top level
   viewerIds?: string[]; // Array of user IDs who have paid to view
   createdAt: Date | string;
   updatedAt: Date | string;

@@ -33,7 +33,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => navigate("/dashboard/publisher/dashboard")}
+                onClick={() => navigate("/dashboard")}
                 className="px-4 py-2 rounded-lg bg-gray-100 text-gray-900 font-medium flex items-center gap-2"
               >
                 <svg
@@ -52,7 +52,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                 Dashboard
               </button>
               <button
-                onClick={() => navigate("/dashboard/publisher/marketplace")}
+                onClick={() => navigate("/marketplace")}
                 className="px-4 py-2 rounded-lg bg-gray-200 text-gray-900 font-medium flex items-center gap-2"
               >
                 <svg
@@ -68,7 +68,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                     d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
                   />
                 </svg>
-                Market place
+                Marketplace
               </button>
             </div>
           </div>
@@ -341,4 +341,3 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
 };
 
 export default PublisherPortfolioPage;
-

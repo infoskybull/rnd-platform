@@ -1240,6 +1240,10 @@ class ApiService {
     return this.makeRequest(`/game-projects/${id}`);
   }
 
+  async getGameProjectPreview(id: string): Promise<any> {
+    return this.makeRequest(`/game-projects/${id}/preview`);
+  }
+
   async getGameProjectBasicInfo(id: string): Promise<any> {
     return this.makeRequest(`/game-projects/${id}/basic-info`);
   }
@@ -1389,6 +1393,7 @@ class ApiService {
     collaborationId?: string;
     contractId?: string;
     planType?: string; // For subscription payments
+    projectType?: string; // For project purchase type (e.g., "product_sale")
     amount: number;
     currency?: string;
     description?: string;
@@ -1409,6 +1414,7 @@ class ApiService {
         collaborationId: data.collaborationId,
         contractId: data.contractId,
         planType: data.planType,
+        projectType: data.projectType,
         amount: data.amount,
         currency: data.currency || "USD",
         description: data.description,
@@ -2174,7 +2180,7 @@ class ApiService {
       repoFormat: projectData.repoFormat || "react", // Default to react
       payToViewAmount: projectData.payToViewAmount, // Required
     };
-    return this.createGameProject(normalizedData);
+    return this.createGameProject(normalizedData as any);
   }
 
   // Get download URL for a file from S3
@@ -2596,6 +2602,21 @@ class ApiService {
     const queryString = queryParams.toString();
     const endpoint = `/users${queryString ? `?${queryString}` : ""}`;
     return this.makeRequest(endpoint, { method: "GET" });
+  }
+
+  // Send offer to creator
+  async sendOffer(data: {
+    creatorId: string;
+    subject: string;
+    content: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.makeRequest("/game-projects/send-offer", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 }
 
