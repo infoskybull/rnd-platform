@@ -18,7 +18,11 @@ import {
   clearAllLocalStorage,
   resetAllWeb3Wallets,
 } from "../utils/storageUtils";
-import type { CurrentPlanDetails } from "../types";
+import type {
+  CurrentPlanDetails,
+  GameProjectFilters,
+  GameProjectListResponse,
+} from "../types";
 
 export interface LoginRequest {
   email: string;
@@ -368,7 +372,9 @@ class ApiService {
         // Works for both protected endpoints and public endpoints that require auth (e.g., /game-projects/:id)
         if (hasToken && hasRefreshToken) {
           console.log(
-            `[API Interceptor] Error ${response.status} on ${isPublicEndpoint ? "public" : "protected"} endpoint ${endpoint}, attempting token refresh...`,
+            `[API Interceptor] Error ${response.status} on ${
+              isPublicEndpoint ? "public" : "protected"
+            } endpoint ${endpoint}, attempting token refresh...`,
             {
               status: response.status,
               isTokenError,
@@ -1226,7 +1232,9 @@ class ApiService {
   }
 
   // Follow Creator APIs
-  async followCreator(creatorId: string): Promise<{ success: boolean; message: string }> {
+  async followCreator(
+    creatorId: string
+  ): Promise<{ success: boolean; message: string }> {
     return this.makeRequest(`/users/${creatorId}/follow`, {
       method: "POST",
       headers: {
@@ -1235,22 +1243,31 @@ class ApiService {
     });
   }
 
-  async unfollowCreator(creatorId: string): Promise<{ success: boolean; message: string }> {
+  async unfollowCreator(
+    creatorId: string
+  ): Promise<{ success: boolean; message: string }> {
     return this.makeRequest(`/users/${creatorId}/follow`, {
       method: "DELETE",
     });
   }
 
-  async checkFollowingStatus(creatorId: string): Promise<{ success: boolean; data: { isFollowing: boolean } }> {
+  async checkFollowingStatus(
+    creatorId: string
+  ): Promise<{ success: boolean; data: { isFollowing: boolean } }> {
     return this.makeRequest(`/users/${creatorId}/is-following`);
   }
 
-  async getFollowingCreators(): Promise<{ success: boolean; data: UserProfile[] }> {
+  async getFollowingCreators(): Promise<{
+    success: boolean;
+    data: UserProfile[];
+  }> {
     return this.makeRequest("/users/me/following");
   }
 
   // Get projects from followed creators
-  async getFollowingProjects(filters: GameProjectFilters = {}): Promise<GameProjectListResponse> {
+  async getFollowingProjects(
+    filters: GameProjectFilters = {}
+  ): Promise<GameProjectListResponse> {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -1258,7 +1275,9 @@ class ApiService {
       }
     });
     const queryString = params.toString();
-    return this.makeRequest(`/game-projects/following${queryString ? `?${queryString}` : ""}`);
+    return this.makeRequest(
+      `/game-projects/following${queryString ? `?${queryString}` : ""}`
+    );
   }
 
   // Logout (clear tokens and all localStorage, reset Web3 wallets)
@@ -2687,7 +2706,9 @@ class ApiService {
   }
 
   // Get projects that publisher has offered
-  async getOfferedProjects(filters: GameProjectFilters = {}): Promise<GameProjectListResponse> {
+  async getOfferedProjects(
+    filters: GameProjectFilters = {}
+  ): Promise<GameProjectListResponse> {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -2695,7 +2716,9 @@ class ApiService {
       }
     });
     const queryString = params.toString();
-    return this.makeRequest(`/game-projects/offered${queryString ? `?${queryString}` : ""}`);
+    return this.makeRequest(
+      `/game-projects/offered${queryString ? `?${queryString}` : ""}`
+    );
   }
 }
 

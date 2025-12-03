@@ -36,6 +36,7 @@ import AdminRouteWrapper from "./components/AdminRouteWrapper";
 import PrototypeUploadRouteWrapper from "./components/PrototypeUploadRouteWrapper";
 import DashboardRouteWrapper from "./components/DashboardRouteWrapper";
 import OfferRouteWrapper from "./components/OfferRouteWrapper";
+import PayPalRedirectHandler from "./components/PayPalRedirectHandler";
 
 // Context Providers
 import { SidebarProvider } from "./contexts/SidebarContext";
@@ -87,6 +88,7 @@ function App() {
               <SidebarProvider>
                 <Router>
                   <GlobalScrollbarStyles />
+                  <PayPalRedirectHandler />
                   <Routes>
                     {/* Public routes */}
                     <Route path="/" element={<LandingPage />} />
