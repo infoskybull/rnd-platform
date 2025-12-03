@@ -68,7 +68,7 @@ const YourProjectsTab: React.FC<YourProjectsTabProps> = ({
   const cardsRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [showFilters, setShowFilters] = useState(true);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Calculate like percentage based on viewCount
   const getLikePercentage = (project: GameProject) => {

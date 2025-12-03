@@ -247,7 +247,7 @@ const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   };
 
   const handleViewProject = (projectId: string) => {
-    navigate(`/project-detail/${projectId}`);
+    navigate(`/prototype-detail/${projectId}`);
   };
 
   const handleDelete = async (projectId: string) => {

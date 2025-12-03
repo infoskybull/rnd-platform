@@ -36,6 +36,7 @@ import AdminRouteWrapper from "./components/AdminRouteWrapper";
 import PrototypeUploadRouteWrapper from "./components/PrototypeUploadRouteWrapper";
 import DashboardRouteWrapper from "./components/DashboardRouteWrapper";
 import OfferRouteWrapper from "./components/OfferRouteWrapper";
+import PrototypeDetailRouteWrapper from "./components/PrototypeDetailRouteWrapper";
 import PayPalRedirectHandler from "./components/PayPalRedirectHandler";
 
 // Context Providers
@@ -117,9 +118,7 @@ function App() {
                     />
                     <Route
                       path="/prototype-detail/:id"
-                      element={
-                        <PublisherRouteWrapper page="prototype-detail" />
-                      }
+                      element={<PrototypeDetailRouteWrapper />}
                     />
                     <Route
                       path="/dashboard/publisher/portfolio/:id"

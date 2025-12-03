@@ -24,7 +24,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
   const [failedAppIcons, setFailedAppIcons] = useState<Set<string>>(new Set());
 
   const filters = ["All", "Published", "Draft", "Collaboration"];
@@ -249,7 +249,13 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                     projects.map((project) => {
                       const monetization = getMonetizationStatus(project);
                       return (
-                        <tr key={project._id} className="hover:bg-gray-50">
+                        <tr
+                          key={project._id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() =>
+                            navigate(`/prototype-detail/${project._id}`)
+                          }
+                        >
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <div className="w-12 h-12 bg-gray-200 rounded flex-shrink-0 flex items-center justify-center">
@@ -342,6 +348,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                   <div
                     key={project._id}
                     className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group relative aspect-square flex flex-col"
+                    onClick={() => navigate(`/prototype-detail/${project._id}`)}
                   >
                     {/* Thumbnail Section */}
                     <div className="relative w-full flex-[0.6] bg-gray-200 overflow-hidden min-h-0 flex-shrink-0">

@@ -71,6 +71,39 @@ const PublisherPrototypeDetailPage: React.FC<
       setLoading(true);
       setError(null);
 
+      // If user is creator, check if they are the owner first
+      if (user?.role === "creator") {
+        // Get preview data to check ownership
+        const previewData = await apiService.getGameProjectPreview(id);
+
+        // Check if user is owner (creatorId, owner.id, or originalDeveloper.id)
+        const isCreatorOwner =
+          previewData.creatorId === user.id ||
+          previewData.owner?.id === user.id ||
+          previewData.originalDeveloper?.id === user.id;
+
+        if (isCreatorOwner) {
+          // If creator is owner, call full API directly to get all data for running prototype
+          const projectData = await apiService.getGameProjectById(id);
+          setProject(projectData);
+          setIsPaid(true); // Owner can always view
+
+          // Load following status if user is authenticated
+          if (user?.id && projectData.creatorId && isAuthenticated) {
+            try {
+              const followingStatus = await apiService.checkFollowingStatus(
+                projectData.creatorId
+              );
+              setIsFollowing(followingStatus.data.isFollowing);
+            } catch (err) {
+              console.error("Failed to load following status:", err);
+            }
+          }
+          return;
+        }
+      }
+
+      // For non-owner users, use the existing flow
       // Step 1: Get preview data first
       const previewData = await apiService.getGameProjectPreview(id);
 
@@ -159,17 +192,34 @@ const PublisherPrototypeDetailPage: React.FC<
   }, [project?.publisherId, project?.soldAt, project?.collaborationStartDate]);
 
   // Check if current user is the owner of the project
-  // If publisherId exists, owner is the publisherId
-  // Otherwise, owner is the creatorId
+  // For creator: check if user is creatorId, owner.id, or originalDeveloper.id
+  // For publisher: check if user is publisherId (when purchased)
   const isOwner = useMemo(() => {
     if (!project || !user?.id) return false;
-    // Nếu có publisherId thì owner là publisherId đó
-    if (project.publisherId) {
+
+    // If user is creator, check if they are the creator/owner/originalDeveloper
+    if (user.role === "creator") {
+      return (
+        project.creatorId === user.id ||
+        project.owner?.id === user.id ||
+        project.originalDeveloper?.id === user.id
+      );
+    }
+
+    // If user is publisher, check if they are the publisherId (when purchased)
+    if (user.role === "publisher" && project.publisherId) {
       return project.publisherId === user.id;
     }
-    // Nếu không có publisherId thì owner là creatorId
-    return project.creatorId === user.id;
-  }, [project?.publisherId, project?.creatorId, user?.id]);
+
+    return false;
+  }, [
+    project?.publisherId,
+    project?.creatorId,
+    project?.owner?.id,
+    project?.originalDeveloper?.id,
+    user?.id,
+    user?.role,
+  ]);
 
   // Get current owner (publisher if purchased, creator otherwise)
   // When not purchased, project.owner contains creator info
@@ -198,7 +248,7 @@ const PublisherPrototypeDetailPage: React.FC<
       if (
         !project?.fileUrls ||
         project.fileUrls.length === 0 ||
-        (!hasPaidToView && !isPaid && !isFreeToView)
+        (!isOwner && !hasPaidToView && !isPaid && !isFreeToView)
       ) {
         setHtmlContent("");
         setProjectFiles({});
@@ -277,7 +327,7 @@ const PublisherPrototypeDetailPage: React.FC<
     };
 
     loadProjectPreview();
-  }, [project?.fileUrls, isPaid, hasPaidToView, isFreeToView]);
+  }, [project?.fileUrls, isPaid, hasPaidToView, isFreeToView, isOwner]);
 
   // Listen for file requests from the preview iframe
   useEffect(() => {
@@ -527,7 +577,7 @@ const PublisherPrototypeDetailPage: React.FC<
                     className="relative w-full h-full bg-white rounded-[2rem] overflow-hidden transition-all duration-300"
                     style={{
                       filter:
-                        hasPaidToView || isPaid || isFreeToView
+                        isOwner || hasPaidToView || isPaid || isFreeToView
                           ? "blur(0px)"
                           : "blur(10px)",
                     }}
@@ -538,7 +588,7 @@ const PublisherPrototypeDetailPage: React.FC<
                     {/* Project Preview from fileUrls */}
                     {project?.fileUrls &&
                     project.fileUrls.length > 0 &&
-                    (hasPaidToView || isPaid || isFreeToView) ? (
+                    (isOwner || hasPaidToView || isPaid || isFreeToView) ? (
                       <>
                         {previewLoading && (
                           <div className="absolute inset-0 bg-gray-100 bg-opacity-95 flex flex-col justify-center items-center z-10">
@@ -640,22 +690,101 @@ const PublisherPrototypeDetailPage: React.FC<
                                     }
                                 };
                               `;
+
+                              // Mobile viewport CSS for proper fit in mobile preview - full screen
+                              const mobileViewportCSS = `
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                                <style>
+                                  /* Mobile viewport rules for game preview - full screen */
+                                  html, body {
+                                    width: 100% !important;
+                                    height: 100% !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    overflow: hidden !important;
+                                    position: fixed !important;
+                                    top: 0 !important;
+                                    left: 0 !important;
+                                    right: 0 !important;
+                                    bottom: 0 !important;
+                                    box-sizing: border-box !important;
+                                  }
+                                  
+                                  * {
+                                    box-sizing: border-box !important;
+                                  }
+                                  
+                                  /* Ensure canvas fills full screen */
+                                  canvas {
+                                    width: 100vw !important;
+                                    height: 100vh !important;
+                                    max-width: 100vw !important;
+                                    max-height: 100vh !important;
+                                    display: block !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    position: absolute !important;
+                                    top: 0 !important;
+                                    left: 0 !important;
+                                  }
+                                  
+                                  /* Container elements should fill full screen */
+                                  #game-container, #app, #root, .game-container, .app-container, 
+                                  #canvas-container, .canvas-container, [id*="game"], [class*="game"],
+                                  main, .main, #main, .container, #container {
+                                    width: 100vw !important;
+                                    height: 100vh !important;
+                                    max-width: 100vw !important;
+                                    max-height: 100vh !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    overflow: hidden !important;
+                                    position: fixed !important;
+                                    top: 0 !important;
+                                    left: 0 !important;
+                                    right: 0 !important;
+                                    bottom: 0 !important;
+                                  }
+                                  
+                                  /* Responsive images and media */
+                                  img, video {
+                                    max-width: 100vw !important;
+                                    max-height: 100vh !important;
+                                    width: auto !important;
+                                    height: auto !important;
+                                  }
+                                  
+                                  /* Prevent any scroll */
+                                  body, html {
+                                    overflow: hidden !important;
+                                    overscroll-behavior: none !important;
+                                  }
+                                  
+                                  /* Ensure full viewport coverage - remove any margins/padding */
+                                  * {
+                                    margin: 0;
+                                    padding: 0;
+                                  }
+                                </style>
+                              `;
+
                               const headEndIndex = htmlContent
                                 .toLowerCase()
                                 .indexOf("</head>");
                               return headEndIndex !== -1
                                 ? htmlContent.slice(0, headEndIndex) +
+                                    mobileViewportCSS +
                                     `<script>${interceptorScript}</script>` +
                                     htmlContent.slice(headEndIndex)
-                                : `<head><script>${interceptorScript}</script></head>` +
+                                : `<head>${mobileViewportCSS}<script>${interceptorScript}</script></head>` +
                                     htmlContent;
                             })()}
                             className="w-full h-full border-0"
                             style={{
-                              transform: "scale(0.5)",
+                              transform: "scale(1)",
                               transformOrigin: "top left",
-                              width: "200%",
-                              height: "200%",
+                              width: "100%",
+                              height: "100%",
                             }}
                             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                             title={`Preview of ${project.title}`}
@@ -681,27 +810,30 @@ const PublisherPrototypeDetailPage: React.FC<
                         )}
 
                         {/* Blurred Preview Content */}
-                        {!hasPaidToView && !isPaid && !isFreeToView && (
-                          <>
-                            <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-br from-gray-400/60 to-gray-500/60">
-                              {/* Simulated mobile content pattern */}
-                              <div className="absolute inset-0 opacity-30">
-                                <div className="h-full w-full bg-gradient-to-b from-blue-200 via-purple-200 to-pink-200"></div>
+                        {!isOwner &&
+                          !hasPaidToView &&
+                          !isPaid &&
+                          !isFreeToView && (
+                            <>
+                              <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-br from-gray-400/60 to-gray-500/60">
+                                {/* Simulated mobile content pattern */}
+                                <div className="absolute inset-0 opacity-30">
+                                  <div className="h-full w-full bg-gradient-to-b from-blue-200 via-purple-200 to-pink-200"></div>
+                                </div>
                               </div>
-                            </div>
 
-                            {/* Overlay to enhance blur effect */}
-                            <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-2xl"></div>
-                          </>
-                        )}
+                              {/* Overlay to enhance blur effect */}
+                              <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-2xl"></div>
+                            </>
+                          )}
                       </>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Edit Button - Top left (only for owner) - Same level as Pay to View */}
-              {isOwner && (
+              {/* Edit Button - Top left (only for creator owner) - Same level as Pay to View */}
+              {isOwner && user?.role === "creator" && (
                 <div className="absolute top-0 left-10 flex flex-col gap-3">
                   <button
                     onClick={() => {

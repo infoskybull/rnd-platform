@@ -26,7 +26,8 @@ You MUST follow these rules strictly:
 5.  The generated HTML should be well-structured and the JavaScript code should be clean and commented where necessary.
 6.  The game should have a clear win/lose condition or objective.
 7.  Provide basic styling to make the game visually appealing. Center the game canvas or container on the page. Use a pleasant, modern color scheme.
-8.  Do NOT wrap your response in markdown backticks (like \`\`\`html) or any other explanatory text. Your entire output should be ONLY the raw HTML code for the game.
+8.  CRITICAL: The game MUST fit perfectly within a viewport of 446x794 pixels. Set the viewport meta tag to "width=446, initial-scale=1.0, maximum-scale=1.0, user-scalable=no". Ensure the body, html, and all game containers (canvas, div containers, etc.) have width: 446px and height: 794px. The game should not overflow or require scrolling. All game elements must be sized to fit within these dimensions.
+9.  Do NOT wrap your response in markdown backticks (like \`\`\`html) or any other explanatory text. Your entire output should be ONLY the raw HTML code for the game.
 `;
 
 export const generateGameCodeStream = async (

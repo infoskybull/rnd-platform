@@ -126,6 +126,9 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(
     new Set()
   );
+  const [failedAppIcons, setFailedAppIcons] = useState<Set<string>>(
+    new Set()
+  );
 
   const filters = ["Featured", "Free to view", "Liked", "Following"];
 
@@ -185,8 +188,9 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
       }
 
       setProjects(projectsData);
-      // Reset failed thumbnails when projects change
+      // Reset failed thumbnails and app icons when projects change
       setFailedThumbnails(new Set());
+      setFailedAppIcons(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
@@ -451,7 +455,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                   onClick={() => handleProjectClick(project)}
                   className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all duration-300 group relative aspect-square"
                 >
-                  {/* Image Section - Takes 100% initially, 50% on hover */}
+                  {/* Thumbnail Section - Takes 100% initially, 50% on hover */}
                   <div className="relative w-full h-full bg-gray-200 overflow-hidden transition-all duration-300 group-hover:h-1/2">
                     {project.thumbnail && !failedThumbnails.has(project._id) ? (
                       <img
@@ -490,68 +494,132 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                       )}
                     </div>
                   </div>
-
-                  {/* Details Section - Slides up from bottom on hover */}
+                  {/* Content Section - Slides up from bottom on hover */}
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 h-1/2 flex flex-col justify-between">
-                    <div className="w-full flex-1 min-h-0 flex flex-col">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-1 min-h-[1.25rem] line-clamp-1 overflow-hidden text-ellipsis">
-                        {project.title || "Untitled Project"}
-                      </h3>
-                      <p className="text-xs text-gray-500 line-clamp-2 mb-2 overflow-hidden text-ellipsis">
-                        {project.shortDescription || "No description"}
-                      </p>
-                    </div>
-
-                    {/* Views, Likes and Tags */}
-                    <div className="border-t border-gray-200 pt-2 mt-auto flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                          <svg
-                            className="w-4 h-4 text-gray-600"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    <div className="w-full flex-1 min-h-0">
+                      {/* Title and Avatar - Horizontal Layout */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate flex-1 min-h-[1.25rem]">
+                          {project.title || "Untitled Project"}
+                        </h3>
+                        {/* User Profile Icon - Next to title */}
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-blue-500 flex-shrink-0">
+                          {project.appIcon &&
+                          !failedAppIcons.has(project._id) ? (
+                            <img
+                              src={project.appIcon}
+                              alt={project.title}
+                              className="w-full h-full object-cover rounded-full"
+                              onError={() => {
+                                // If image fails to load, mark it as failed
+                                setFailedAppIcons((prev) => {
+                                  const newSet = new Set(prev);
+                                  newSet.add(project._id);
+                                  return newSet;
+                                });
+                              }}
                             />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                            />
-                          </svg>
-                          <span className="text-sm text-gray-600">
-                            {project.viewCount || 0}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <svg
-                            className="w-4 h-4 text-gray-600"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                            />
-                          </svg>
-                          <span className="text-sm text-gray-600">
-                            {project.likeCount || 0}
-                          </span>
+                          ) : (
+                            <svg
+                              className="w-4 h-4 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                              />
+                            </svg>
+                          )}
                         </div>
                       </div>
-                      {/* Tags with GSAP Animation */}
-                      {project.tags && project.tags.length > 0 && (
-                        <TagsList tags={project.tags} projectId={project._id} />
-                      )}
+                      {/* Categories/Tags */}
+                      <p className="text-xs text-gray-500 mb-2">
+                        {[
+                          project.gameGenre,
+                          project.targetPlatform,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "N/A"}
+                      </p>
+                      {/* Package Sale Features */}
+                      <div className="space-y-1">
+                        {/* Free to view */}
+                        {(project.payToViewAmount === 0 ||
+                          !project.payToViewAmount) && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center flex-shrink-0">
+                              <svg
+                                className="w-2.5 h-2.5 text-blue-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={3}
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            </div>
+                            <span className="text-xs text-gray-600">
+                              Free to view
+                            </span>
+                          </div>
+                        )}
+                        {/* You can buy it */}
+                        {(project.productSalePrice ||
+                          project.productSaleData?.askingPrice) && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center flex-shrink-0">
+                              <svg
+                                className="w-2.5 h-2.5 text-blue-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={3}
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            </div>
+                            <span className="text-xs text-gray-600">
+                              You can buy it
+                            </span>
+                          </div>
+                        )}
+                        {/* Open to collab */}
+                        {(project.creatorCollaborationBudget ||
+                          project.creatorCollaborationData?.budget) && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center flex-shrink-0">
+                              <svg
+                                className="w-2.5 h-2.5 text-blue-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={3}
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            </div>
+                            <span className="text-xs text-gray-600">
+                              Open to collab
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
