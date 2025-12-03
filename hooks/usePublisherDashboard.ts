@@ -31,9 +31,9 @@ export const usePublisherDashboard = (user: User | null) => {
       // Fetch purchased projects (which already includes inCollaboration projects)
       const [purchasedResponse, inventoryResponse] = await Promise.all([
         // Get purchased projects - this already includes inCollaboration projects
-        apiService.getPurchasedProjects({ limit: 100 }),
-        // Get inventory (which includes purchased projects)
-        apiService.getInventory({ limit: 100 }),
+        apiService.getPurchasedProjects({ limit: 10000 }),
+        // Get inventory (which includes purchased projects and viewed projects)
+        apiService.getInventory({ limit: 10000 }),
       ]);
 
       // Process all purchased projects (includes both purchased and inCollaboration)
@@ -93,34 +93,65 @@ export const usePublisherDashboard = (user: User | null) => {
         });
 
         // Also try fetching from game-projects endpoint to get more payToView projects
-        // Note: This might need backend support to filter by viewerIds
+        // Fetch multiple pages to ensure we get all viewed projects
         try {
-          const allProjectsResponse = await apiService.getGameProjects({
-            limit: 200,
-            status: "published",
-          });
-          const allProjects: GameProject[] =
-            allProjectsResponse?.projects ||
-            allProjectsResponse?.data?.projects ||
-            [];
-
-          // Filter for payToView projects that we haven't already found
+          const allProjects: GameProject[] = [];
+          let page = 1;
+          let hasMore = true;
           const existingIds = new Set([
             ...payToViewProjects.map((p) => p._id),
             ...allPurchasedProjects.map((p) => p._id),
           ]);
 
-          const payToViewFromAll = allProjects.filter((project) => {
-            if (existingIds.has(project._id)) return false;
+          // Fetch multiple pages to get all projects
+          while (hasMore && page <= 10) { // Limit to 10 pages to avoid infinite loops
+            try {
+              const response = await apiService.getGameProjects({
+                page,
+                limit: 100,
+                status: "published",
+              });
+              
+              const projects: GameProject[] =
+                response?.projects || response?.data?.projects || [];
+              
+              if (projects.length === 0) {
+                hasMore = false;
+                break;
+              }
 
-            return (
-              project.viewerIds &&
-              Array.isArray(project.viewerIds) &&
-              project.viewerIds.includes(user.id)
-            );
-          });
+              // Filter for payToView projects that we haven't already found
+              const payToViewFromPage = projects.filter((project) => {
+                if (existingIds.has(project._id)) return false;
 
-          payToViewProjects = [...payToViewProjects, ...payToViewFromAll];
+                const hasPaidToView =
+                  project.viewerIds &&
+                  Array.isArray(project.viewerIds) &&
+                  project.viewerIds.includes(user.id);
+
+                if (hasPaidToView) {
+                  existingIds.add(project._id);
+                }
+
+                return hasPaidToView;
+              });
+
+              allProjects.push(...payToViewFromPage);
+
+              // Check if there are more pages
+              const totalPages = response?.data?.totalPages || response?.totalPages || 1;
+              if (page >= totalPages || projects.length < 100) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            } catch (pageError) {
+              console.warn(`Error fetching page ${page} for payToView:`, pageError);
+              hasMore = false;
+            }
+          }
+
+          payToViewProjects = [...payToViewProjects, ...allProjects];
         } catch (err) {
           console.warn("Could not fetch all projects for payToView:", err);
         }
