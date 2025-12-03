@@ -44,12 +44,18 @@ const PublisherPrototypeDetailPage: React.FC<
   const navigationItems = getNavigationItems(user?.role, location.pathname);
   const rightIcons = getDefaultRightIcons();
 
-  // Helper function to check if project is free (payToViewAmount is 0, null, or undefined)
+  // Helper function to check if project is free (payToViewAmount is 0, null, undefined, or missing)
   const isFreeToView = useMemo(() => {
     if (!project) return false;
+    // If payToViewAmount field doesn't exist or is falsy (0, null, undefined), treat as free
     const amount = project.payToViewAmount;
-    return amount === 0 || amount === null || amount === undefined;
-  }, [project?.payToViewAmount]);
+    return (
+      amount === 0 ||
+      amount === null ||
+      amount === undefined ||
+      !("payToViewAmount" in project)
+    );
+  }, [project]);
 
   // Load project data
   useEffect(() => {
@@ -69,11 +75,12 @@ const PublisherPrototypeDetailPage: React.FC<
       const previewData = await apiService.getGameProjectPreview(id);
 
       // Step 2: Check if we can load full detail
-      // Project is free if payToViewAmount is 0, null, or undefined
+      // Project is free if payToViewAmount is 0, null, undefined, or missing from response
       const isFree =
         previewData.payToViewAmount === 0 ||
         previewData.payToViewAmount === null ||
-        previewData.payToViewAmount === undefined;
+        previewData.payToViewAmount === undefined ||
+        !("payToViewAmount" in previewData);
       const canViewDetail =
         isFree || previewData.viewerIds?.includes(user?.id || "");
 
@@ -90,7 +97,9 @@ const PublisherPrototypeDetailPage: React.FC<
         // Load following status if user is authenticated
         if (user?.id && projectData.creatorId && isAuthenticated) {
           try {
-            const followingStatus = await apiService.checkFollowingStatus(projectData.creatorId);
+            const followingStatus = await apiService.checkFollowingStatus(
+              projectData.creatorId
+            );
             setIsFollowing(followingStatus.data.isFollowing);
           } catch (err) {
             console.error("Failed to load following status:", err);
@@ -99,11 +108,13 @@ const PublisherPrototypeDetailPage: React.FC<
       } else {
         // Only use preview data
         setProject(previewData);
-        
+
         // Load following status if user is authenticated
         if (user?.id && previewData.creatorId && isAuthenticated) {
           try {
-            const followingStatus = await apiService.checkFollowingStatus(previewData.creatorId);
+            const followingStatus = await apiService.checkFollowingStatus(
+              previewData.creatorId
+            );
             setIsFollowing(followingStatus.data.isFollowing);
           } catch (err) {
             console.error("Failed to load following status:", err);
@@ -418,7 +429,9 @@ const PublisherPrototypeDetailPage: React.FC<
       // Revert on error
       setIsFollowing(!isFollowing);
       console.error("Failed to toggle follow:", err);
-      alert(err instanceof Error ? err.message : "Failed to update follow status");
+      alert(
+        err instanceof Error ? err.message : "Failed to update follow status"
+      );
     }
   }, [project, isAuthenticated, user?.id, isFollowing, isOwner]);
 
