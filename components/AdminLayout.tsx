@@ -3,7 +3,15 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { User } from "../types";
 import RnDLogo from "./icons/RnDLogo";
 import RoleBadge from "./RoleBadge";
-import { Menu, X, Users, MessageCircle, BarChart3, Shield } from "lucide-react";
+import {
+  Menu,
+  X,
+  Users,
+  MessageCircle,
+  BarChart3,
+  Shield,
+  FolderOpen,
+} from "lucide-react";
 
 interface AdminLayoutProps {
   user: User;
@@ -11,7 +19,7 @@ interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-type TabType = "accounts" | "messages" | "reports";
+type TabType = "accounts" | "messages" | "reports" | "projects";
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({
   user,
@@ -27,6 +35,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const getActiveTab = (): TabType => {
     if (location.pathname.includes("/admin/messages")) return "messages";
     if (location.pathname.includes("/admin/reports")) return "reports";
+    if (location.pathname.includes("/admin/projects")) return "projects";
     return "accounts";
   };
 
@@ -39,8 +48,24 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
       icon: Users,
       path: "/admin/accounts",
     },
-    { id: "messages" as TabType, label: "Messages", icon: MessageCircle, path: "/admin/messages" },
-    { id: "reports" as TabType, label: "Reports", icon: BarChart3, path: "/admin/reports" },
+    {
+      id: "messages" as TabType,
+      label: "Messages",
+      icon: MessageCircle,
+      path: "/admin/messages",
+    },
+    {
+      id: "reports" as TabType,
+      label: "Reports",
+      icon: BarChart3,
+      path: "/admin/reports",
+    },
+    {
+      id: "projects" as TabType,
+      label: "Projects",
+      icon: FolderOpen,
+      path: "/admin/projects",
+    },
   ];
 
   const handleTabClick = (path: string) => {
@@ -207,9 +232,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         >
           <main
             className={
-              activeTab === "messages"
-                ? "h-full p-4 sm:p-6"
-                : "p-4 sm:p-6"
+              activeTab === "messages" ? "h-full p-4 sm:p-6" : "p-4 sm:p-6"
             }
           >
             {children}
@@ -221,4 +244,3 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 };
 
 export default AdminLayout;
-

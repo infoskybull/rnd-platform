@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAdminReports } from "../hooks/useAdminReports";
+import ConfirmModal from "../components/ConfirmModal";
 
 const AdminReportsPage: React.FC = () => {
   const {
@@ -12,6 +13,32 @@ const AdminReportsPage: React.FC = () => {
     updateReport,
     deleteReport,
   } = useAdminReports({ page: 1, limit: 20 });
+
+  const [confirmDelete, setConfirmDelete] = useState<{
+    isOpen: boolean;
+    reportId: string | null;
+  }>({
+    isOpen: false,
+    reportId: null,
+  });
+
+  const handleDeleteClick = (reportId: string) => {
+    setConfirmDelete({
+      isOpen: true,
+      reportId,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (confirmDelete.reportId) {
+      await deleteReport(confirmDelete.reportId);
+      setConfirmDelete({ isOpen: false, reportId: null });
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmDelete({ isOpen: false, reportId: null });
+  };
 
   return (
     <div className="space-y-6">
@@ -189,7 +216,7 @@ const AdminReportsPage: React.FC = () => {
                   <ReportActions
                     report={r}
                     onUpdate={updateReport}
-                    onDelete={deleteReport}
+                    onDelete={handleDeleteClick}
                   />
                 </div>
               </div>
@@ -231,6 +258,18 @@ const AdminReportsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        title="Delete Report"
+        message="Are you sure you want to delete this report? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonStyle="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 };
@@ -281,7 +320,7 @@ const ReportActions: React.FC<{
       priority: any;
     }>
   ) => Promise<any>;
-  onDelete: (id: string) => Promise<boolean>;
+  onDelete: (id: string) => void;
 }> = ({ report, onUpdate, onDelete }) => {
   return (
     <div className="flex items-center justify-end space-x-2">
@@ -321,11 +360,7 @@ const ReportActions: React.FC<{
         Notes
       </button>
       <button
-        onClick={async () => {
-          if (window.confirm("Delete this report?")) {
-            await onDelete(report._id);
-          }
-        }}
+        onClick={() => onDelete(report._id)}
         className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded border border-red-600 text-xs"
       >
         Delete

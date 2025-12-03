@@ -4,10 +4,11 @@ import { useAuth } from "../hooks/useAuth";
 import AdminLayout from "./AdminLayout";
 import AdminAccountsPage from "../pages/AdminAccountsPage";
 import AdminReportsPage from "../pages/AdminReportsPage";
+import AdminProjectsPage from "../pages/AdminProjectsPage";
 import MessagesTab from "./dashboard/MessagesTab";
 
 interface AdminRouteWrapperProps {
-  page: "accounts" | "messages" | "reports";
+  page: "accounts" | "messages" | "reports" | "projects";
 }
 
 const AdminRouteWrapper: React.FC<AdminRouteWrapperProps> = ({ page }) => {
@@ -54,6 +55,8 @@ const AdminRouteWrapper: React.FC<AdminRouteWrapperProps> = ({ page }) => {
         return <MessagesTab useFullHeight />;
       case "reports":
         return <AdminReportsPage />;
+      case "projects":
+        return <AdminProjectsPage />;
       default:
         return <Navigate to="/404" replace />;
     }

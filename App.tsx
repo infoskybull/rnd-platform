@@ -213,6 +213,10 @@ function App() {
                       path="/admin/reports"
                       element={<AdminRouteWrapper page="reports" />}
                     />
+                    <Route
+                      path="/admin/projects"
+                      element={<AdminRouteWrapper page="projects" />}
+                    />
                     {/* Redirect old /admin/management to /admin/accounts */}
                     <Route
                       path="/admin/management"

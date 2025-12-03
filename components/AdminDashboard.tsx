@@ -10,18 +10,21 @@ import {
   BarChart3,
   Shield,
   Loader2,
+  FolderOpen,
 } from "lucide-react";
 import { useAdminUsers } from "../hooks/useAdminUsers";
 import { useAdminAnalytics } from "../hooks/useAdminAnalytics";
 import { useAdminReports } from "../hooks/useAdminReports";
 import MessagesTab from "./dashboard/MessagesTab";
+import ProjectsTab from "./dashboard/ProjectsTab";
+import ConfirmModal from "./ConfirmModal";
 
 interface AdminDashboardProps {
   user: User;
   onLogout: () => void;
 }
 
-type TabType = "account-management" | "messages" | "reports";
+type TabType = "account-management" | "messages" | "reports" | "projects";
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<TabType>("account-management");
@@ -65,6 +68,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
     },
     { id: "chat" as TabType, label: "Messages", icon: MessageCircle },
     { id: "reports" as TabType, label: "Reports", icon: BarChart3 },
+    { id: "projects" as TabType, label: "Projects", icon: FolderOpen },
   ];
 
   const renderTabContent = () => {
@@ -368,6 +372,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
       case "reports":
         // Reports management UI for Admin
         return <ReportsManagement />;
+      case "projects":
+        return <ProjectsTab />;
       default:
         return null;
     }
@@ -695,6 +701,32 @@ const ReportsManagement: React.FC = () => {
     deleteReport,
   } = useAdminReports({ page: 1, limit: 20 });
 
+  const [confirmDelete, setConfirmDelete] = useState<{
+    isOpen: boolean;
+    reportId: string | null;
+  }>({
+    isOpen: false,
+    reportId: null,
+  });
+
+  const handleDeleteClick = (reportId: string) => {
+    setConfirmDelete({
+      isOpen: true,
+      reportId,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (confirmDelete.reportId) {
+      await deleteReport(confirmDelete.reportId);
+      setConfirmDelete({ isOpen: false, reportId: null });
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmDelete({ isOpen: false, reportId: null });
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
@@ -816,7 +848,7 @@ const ReportsManagement: React.FC = () => {
                     <ReportActions
                       report={r}
                       onUpdate={updateReport}
-                      onDelete={deleteReport}
+                      onDelete={handleDeleteClick}
                     />
                   </td>
                 </tr>
@@ -913,6 +945,18 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        title="Delete Report"
+        message="Are you sure you want to delete this report? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonStyle="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 };
@@ -963,7 +1007,7 @@ const ReportActions: React.FC<{
       priority: any;
     }>
   ) => Promise<any>;
-  onDelete: (id: string) => Promise<boolean>;
+  onDelete: (id: string) => void;
 }> = ({ report, onUpdate, onDelete }) => {
   return (
     <div className="flex items-center justify-end space-x-2">
@@ -1003,11 +1047,7 @@ const ReportActions: React.FC<{
         Notes
       </button>
       <button
-        onClick={async () => {
-          if (window.confirm("Delete this report?")) {
-            await onDelete(report._id);
-          }
-        }}
+        onClick={() => onDelete(report._id)}
         className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded border border-red-600 text-xs"
       >
         Delete

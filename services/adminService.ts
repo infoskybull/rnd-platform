@@ -287,6 +287,30 @@ export interface AdminChatsResponse {
   };
 }
 
+// ========== ADMIN PROJECTS TYPES ==========
+export interface AdminProjectsFilters {
+  status?: "draft" | "published" | "sold";
+  projectType?: string;
+  search?: string;
+  creatorId?: string;
+  publisherId?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface AdminProjectsResponse {
+  success: boolean;
+  data: any[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 class AdminService {
   private buildQueryParams(filters: Record<string, any> = {}): string {
     const params = new URLSearchParams();
@@ -597,6 +621,32 @@ class AdminService {
         body: JSON.stringify(payload),
       }
     );
+  }
+
+  // ========== ADMIN PROJECTS MANAGEMENT ==========
+
+  /**
+   * Get all projects with filters and pagination
+   */
+  async getProjects(
+    filters: AdminProjectsFilters = {}
+  ): Promise<AdminProjectsResponse> {
+    const queryParams = this.buildQueryParams(filters);
+    const endpoint = `/game-projects/for-sale${
+      queryParams ? `?${queryParams}` : ""
+    }`;
+    return this.makeRequest<AdminProjectsResponse>(endpoint, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Delete a project
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    await this.makeRequest<void>(`/game-projects/${projectId}`, {
+      method: "DELETE",
+    });
   }
 }
 
