@@ -180,7 +180,7 @@ const PaymentCompletePage: React.FC = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md w-full">
             {/* Success Icon */}
             <div className="flex justify-center mb-6">
-              <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center">
                 <svg
                   className="w-12 h-12 text-white"
                   fill="none"
@@ -274,7 +274,7 @@ const PaymentCompletePage: React.FC = () => {
             {/* Done Button */}
             <button
               onClick={handleDone}
-              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
             >
               Done
             </button>

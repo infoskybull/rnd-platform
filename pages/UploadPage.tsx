@@ -1439,7 +1439,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             <button
               onClick={handlePublish}
               disabled={creating || uploadingFiles}
-              className="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 fontFamily: "Istok Web",
                 fontWeight: 400,
@@ -1525,7 +1525,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       });
                     }
                   }}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                  className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
                 >
                   OK
                 </button>

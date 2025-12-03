@@ -541,7 +541,7 @@ const ProjectDetailPage: React.FC = () => {
                             (skill, index) => (
                               <span
                                 key={index}
-                                className="px-3 py-1 bg-blue-600/20 text-blue-300 rounded-full text-sm"
+                                className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm"
                               >
                                 {skill}
                               </span>
@@ -853,7 +853,7 @@ const ProjectDetailPage: React.FC = () => {
                 {isAuthenticated &&
                   user?.id !== project.originalDeveloper.id && (
                     <div className="space-y-2">
-                      <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center">
+                      <button className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center">
                         <Mail className="w-4 h-4 mr-2" />
                         Contact Creator
                       </button>
@@ -870,7 +870,7 @@ const ProjectDetailPage: React.FC = () => {
               project.owner.id === project.originalDeveloper.id && (
                 <div className="bg-blue-900/20 border border-blue-700 rounded-xl p-4">
                   <div className="flex items-center">
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center mr-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
                       <User className="w-4 h-4 text-white" />
                     </div>
                     <div>

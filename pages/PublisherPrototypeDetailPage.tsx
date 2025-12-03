@@ -44,6 +44,13 @@ const PublisherPrototypeDetailPage: React.FC<
   const navigationItems = getNavigationItems(user?.role, location.pathname);
   const rightIcons = getDefaultRightIcons();
 
+  // Helper function to check if project is free (payToViewAmount is 0, null, or undefined)
+  const isFreeToView = useMemo(() => {
+    if (!project) return false;
+    const amount = project.payToViewAmount;
+    return amount === 0 || amount === null || amount === undefined;
+  }, [project?.payToViewAmount]);
+
   // Load project data
   useEffect(() => {
     if (id && !authLoading) {
@@ -62,9 +69,13 @@ const PublisherPrototypeDetailPage: React.FC<
       const previewData = await apiService.getGameProjectPreview(id);
 
       // Step 2: Check if we can load full detail
-      const canViewDetail =
+      // Project is free if payToViewAmount is 0, null, or undefined
+      const isFree =
         previewData.payToViewAmount === 0 ||
-        previewData.viewerIds?.includes(user?.id || "");
+        previewData.payToViewAmount === null ||
+        previewData.payToViewAmount === undefined;
+      const canViewDetail =
+        isFree || previewData.viewerIds?.includes(user?.id || "");
 
       if (canViewDetail) {
         // Load full project detail
@@ -75,9 +86,29 @@ const PublisherPrototypeDetailPage: React.FC<
         if (projectData.viewerIds?.includes(user?.id || "")) {
           setIsPaid(true);
         }
+
+        // Load following status if user is authenticated
+        if (user?.id && projectData.creatorId && isAuthenticated) {
+          try {
+            const followingStatus = await apiService.checkFollowingStatus(projectData.creatorId);
+            setIsFollowing(followingStatus.data.isFollowing);
+          } catch (err) {
+            console.error("Failed to load following status:", err);
+          }
+        }
       } else {
         // Only use preview data
         setProject(previewData);
+        
+        // Load following status if user is authenticated
+        if (user?.id && previewData.creatorId && isAuthenticated) {
+          try {
+            const followingStatus = await apiService.checkFollowingStatus(previewData.creatorId);
+            setIsFollowing(followingStatus.data.isFollowing);
+          } catch (err) {
+            console.error("Failed to load following status:", err);
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project");
@@ -97,6 +128,25 @@ const PublisherPrototypeDetailPage: React.FC<
     if (!project || !user?.id) return false;
     return project.viewerIds?.includes(user.id) || false;
   }, [project?.viewerIds, user?.id]);
+
+  // Auto-set isPaid if user has paid to view or project is free
+  useEffect(() => {
+    if (hasPaidToView) {
+      setIsPaid(true);
+    } else if (isFreeToView) {
+      setIsPaid(true);
+    }
+  }, [hasPaidToView, isFreeToView]);
+  // Check if project has been purchased or collaboration is active
+  const isPurchasedOrCollaboration = useMemo(() => {
+    if (!project) return false;
+    // Check if project has been purchased (has publisherId or soldAt)
+    const isPurchased = !!project.publisherId || !!project.soldAt;
+    // Check if collaboration is active (has collaborationStartDate)
+    const isCollaboration = !!project.collaborationStartDate;
+    return isPurchased || isCollaboration;
+  }, [project?.publisherId, project?.soldAt, project?.collaborationStartDate]);
+
   // Check if current user is the owner of the project
   // If publisherId exists, owner is the publisherId
   // Otherwise, owner is the creatorId
@@ -111,10 +161,17 @@ const PublisherPrototypeDetailPage: React.FC<
   }, [project?.publisherId, project?.creatorId, user?.id]);
 
   // Get current owner (publisher if purchased, creator otherwise)
+  // When not purchased, project.owner contains creator info
+  // When purchased, project.owner contains publisher info
   const currentOwner = useMemo(() => {
     if (!project) return null;
-    return project.publisherId ? project.owner : project.originalDeveloper;
-  }, [project?.publisherId, project?.owner, project?.originalDeveloper]);
+    // Always use project.owner if available (it contains creator info when not purchased, publisher info when purchased)
+    if (project.owner) {
+      return project.owner;
+    }
+    // Fallback to originalDeveloper if owner is not available
+    return project.originalDeveloper || null;
+  }, [project?.owner, project?.originalDeveloper]);
 
   // Get images from project attachments
   const images = useMemo(() => {
@@ -127,7 +184,11 @@ const PublisherPrototypeDetailPage: React.FC<
   // Load and extract project preview
   useEffect(() => {
     const loadProjectPreview = async () => {
-      if (!project?.fileUrls || project.fileUrls.length === 0 || !isPaid) {
+      if (
+        !project?.fileUrls ||
+        project.fileUrls.length === 0 ||
+        (!hasPaidToView && !isPaid && !isFreeToView)
+      ) {
         setHtmlContent("");
         setProjectFiles({});
         return;
@@ -205,7 +266,7 @@ const PublisherPrototypeDetailPage: React.FC<
     };
 
     loadProjectPreview();
-  }, [project?.fileUrls, isPaid]);
+  }, [project?.fileUrls, isPaid, hasPaidToView, isFreeToView]);
 
   // Listen for file requests from the preview iframe
   useEffect(() => {
@@ -339,6 +400,28 @@ const PublisherPrototypeDetailPage: React.FC<
     }
   }, [project, isAuthenticated, user?.id, isLikedByUser]);
 
+  // Handle follow/unfollow
+  const handleFollow = useCallback(async () => {
+    if (!project || !isAuthenticated || !user?.id || !project.creatorId) return;
+    if (isOwner) return; // Can't follow yourself
+
+    try {
+      const wasFollowing = isFollowing;
+      setIsFollowing(!wasFollowing);
+
+      if (wasFollowing) {
+        await apiService.unfollowCreator(project.creatorId);
+      } else {
+        await apiService.followCreator(project.creatorId);
+      }
+    } catch (err) {
+      // Revert on error
+      setIsFollowing(!isFollowing);
+      console.error("Failed to toggle follow:", err);
+      alert(err instanceof Error ? err.message : "Failed to update follow status");
+    }
+  }, [project, isAuthenticated, user?.id, isFollowing, isOwner]);
+
   // Handle purchase
   const handlePurchase = useCallback(
     (pkg: any) => {
@@ -405,43 +488,36 @@ const PublisherPrototypeDetailPage: React.FC<
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex gap-6 p-6 overflow-hidden">
+      <div className="flex-1 flex gap-6 p-6 overflow-hidden bg-[#EFEFEF]">
         {/* Left/Main Content Area - Fixed, no scroll */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Container with Preview and Packages */}
           <div className="flex-1 flex flex-col justify-between overflow-hidden">
             {/* Preview Area with Navigation and Action Buttons */}
-            <div className="flex flex-col items-center flex-shrink-0 relative mt-10">
+            <div
+              className={`flex flex-col items-center flex-shrink-0 relative ${
+                isPurchasedOrCollaboration
+                  ? "mt-10 flex-1 justify-center"
+                  : "mt-10"
+              }`}
+            >
               {/* Preview Area - Mobile Screen Preview */}
-              <div className="relative flex items-center justify-center mb-4 px-80">
-                {/* Left Navigation Arrow */}
-                {images.length > 1 && (
-                  <button
-                    onClick={handlePrevious}
-                    className="absolute left-0 top-1/2 transform -translate-y-1/2 w-10 h-10 bg-gray-200/80 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors z-10"
-                  >
-                    <svg
-                      className="w-6 h-6 text-gray-700"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                )}
-
-                {/* Mobile Preview */}
-                <div className="relative w-[280px] aspect-[9/16] bg-gray-800 rounded-[2.5rem] p-2 shadow-2xl">
+              <div className="relative flex items-center justify-center mb-4">
+                {/* Mobile Preview - Larger when purchased/collaboration */}
+                <div
+                  className={`relative ${
+                    isPurchasedOrCollaboration ? "w-[420px]" : "w-[280px]"
+                  } aspect-[9/16] bg-gray-800 rounded-[2.5rem] p-2 shadow-2xl`}
+                >
                   {/* Phone Frame */}
                   <div
                     className="relative w-full h-full bg-white rounded-[2rem] overflow-hidden transition-all duration-300"
-                    style={{ filter: isPaid ? "blur(0px)" : "blur(10px)" }}
+                    style={{
+                      filter:
+                        hasPaidToView || isPaid || isFreeToView
+                          ? "blur(0px)"
+                          : "blur(10px)",
+                    }}
                   >
                     {/* Notch */}
                     <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-gray-800 rounded-b-2xl z-20"></div>
@@ -449,7 +525,7 @@ const PublisherPrototypeDetailPage: React.FC<
                     {/* Project Preview from fileUrls */}
                     {project?.fileUrls &&
                     project.fileUrls.length > 0 &&
-                    isPaid ? (
+                    (hasPaidToView || isPaid || isFreeToView) ? (
                       <>
                         {previewLoading && (
                           <div className="absolute inset-0 bg-gray-100 bg-opacity-95 flex flex-col justify-center items-center z-10">
@@ -592,7 +668,7 @@ const PublisherPrototypeDetailPage: React.FC<
                         )}
 
                         {/* Blurred Preview Content */}
-                        {!isPaid && (
+                        {!hasPaidToView && !isPaid && !isFreeToView && (
                           <>
                             <div className="absolute inset-0 backdrop-blur-xl bg-gradient-to-br from-gray-400/60 to-gray-500/60">
                               {/* Simulated mobile content pattern */}
@@ -609,28 +685,6 @@ const PublisherPrototypeDetailPage: React.FC<
                     )}
                   </div>
                 </div>
-
-                {/* Right Navigation Arrow */}
-                {images.length > 1 && (
-                  <button
-                    onClick={handleNext}
-                    className="absolute right-0 top-1/2 transform -translate-y-1/2 w-10 h-10 bg-gray-200/80 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors z-10"
-                  >
-                    <svg
-                      className="w-6 h-6 text-gray-700"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                )}
               </div>
 
               {/* Edit Button - Top left (only for owner) - Same level as Pay to View */}
@@ -642,113 +696,115 @@ const PublisherPrototypeDetailPage: React.FC<
                         navigate(`/prototype/upload/${id}`);
                       }
                     }}
-                    className="w-32 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap flex items-center justify-center gap-2"
+                    className="w-32 px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap flex items-center justify-center gap-2"
                     title="Edit this prototype"
                   >
                     Edit
                   </button>
                 </div>
               )}
-
-              {/* Action Buttons - Bottom right */}
-              <div className="absolute bottom-0 right-0 flex flex-col gap-3">
-                <button
-                  onClick={() => {
-                    if (!project) return;
-
-                    // If user has already paid to view, just enable preview
-                    if (hasPaidToView) {
-                      setIsPaid(true);
-                      return;
-                    }
-
-                    if (project.payToViewAmount === 0) {
-                      // Free to view, just enable preview
-                      setIsPaid(true);
-                      return;
-                    }
-
-                    // Navigate to payment page with projectId and paymentType
-                    navigate(
-                      `/payment?projectId=${project._id}&paymentType=pay_to_view`
-                    );
-                  }}
-                  className="w-32 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-                >
-                  {hasPaidToView || project.payToViewAmount === 0
-                    ? "View"
-                    : "Pay to view"}
-                </button>
-                <button className="w-32 px-6 py-3 bg-white text-gray-700 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap">
-                  Skip
-                </button>
-              </div>
             </div>
 
-            {/* Pricing Packages */}
-            <div className="grid grid-cols-3 gap-4 flex-shrink-0 items-stretch">
-              {packages.map((pkg) => (
-                <div
-                  key={pkg.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-lg font-semibold text-gray-900">
-                      {pkg.name}
-                    </div>
-                    <div className="text-lg font-bold text-gray-900">
-                      {pkg.price === 0 || !pkg.isSet
-                        ? pkg.type === "pay_to_view"
-                          ? "Free"
-                          : "Not set"
-                        : `$${pkg.price.toLocaleString()}`}
-                    </div>
-                  </div>
-                  <div className="space-y-2 mb-4 flex-1">
-                    {pkg.contents.map((content, idx) => (
-                      <div
-                        key={idx}
-                        className="text-sm text-gray-600 flex items-start"
-                      >
-                        <span className="text-blue-600 mr-2">•</span>
-                        <span>{content}</span>
+            {/* Pricing Packages - Hide if purchased or collaboration */}
+            {!isPurchasedOrCollaboration && (
+              <div className="grid grid-cols-3 gap-4 flex-shrink-0 items-stretch">
+                {packages.map((pkg) => (
+                  <div key={pkg.id} className="flex flex-col gap-3 h-full">
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col shadow-sm hover:shadow-md transition-shadow flex-1 h-full">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="text-lg font-semibold text-gray-900">
+                          {pkg.name}
+                        </div>
+                        <div className="text-xl font-bold text-gray-900">
+                          {pkg.price === 0 || !pkg.isSet
+                            ? pkg.type === "pay_to_view"
+                              ? "Free"
+                              : "Not set"
+                            : `$${pkg.price.toLocaleString()}`}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  {/* Hide Buy buttons if owner */}
-                  {!isOwner &&
-                    pkg.isSet &&
-                    !(pkg.type === "pay_to_view" && hasPaidToView) && (
-                      <div className="flex gap-2 mt-auto">
-                        <button
-                          onClick={() => handlePurchase(pkg)}
-                          className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Buy
-                        </button>
-                        <button
-                          onClick={() => handlePurchase(pkg)}
-                          className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                      <div className="space-y-2.5 mb-5 flex-1 min-h-0">
+                        {pkg.contents.map((content, idx) => (
+                          <div
+                            key={idx}
+                            className="text-sm text-gray-600 flex items-start leading-relaxed"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                            />
-                          </svg>
-                        </button>
+                            <span className="text-blue-600 mr-2 mt-0.5">•</span>
+                            <span>{content}</span>
+                          </div>
+                        ))}
                       </div>
+                    </div>
+                    {/* Hide Buy buttons if owner */}
+                    {!isOwner && pkg.isSet && (
+                      <>
+                        {/* Show Paid button if pay_to_view and user has paid */}
+                        {pkg.type === "pay_to_view" &&
+                        pkg.price > 0 &&
+                        hasPaidToView ? (
+                          <div className="flex gap-2 mt-auto">
+                            <button
+                              disabled
+                              className="flex-[2] px-4 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed text-sm"
+                            >
+                              Paid
+                            </button>
+                            <button
+                              disabled
+                              className="flex-[1] px-3 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed flex items-center justify-center"
+                            >
+                              <svg
+                                className="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : (
+                          /* Show Pay buttons for other cases */
+                          !(pkg.type === "pay_to_view" && hasPaidToView) && (
+                            <div className="flex gap-2 mt-auto">
+                              <button
+                                onClick={() => handlePurchase(pkg)}
+                                className="flex-[2] px-4 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                              >
+                                Pay
+                              </button>
+                              <button
+                                onClick={() => handlePurchase(pkg)}
+                                className="flex-[1] px-3 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center"
+                              >
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </>
                     )}
-                </div>
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -756,18 +812,18 @@ const PublisherPrototypeDetailPage: React.FC<
         <div className="w-80 flex flex-col overflow-hidden">
           {/* Fixed Content - Profile, Details, Tags */}
           <div className="flex-shrink-0 space-y-6 pr-2">
-            {/* Creator Profile */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center mb-3">
+            {/* Creator/Owner Profile */}
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
+              <div className="flex gap-4 items-start mb-4">
+                <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center mb-3 shadow-md">
                   {currentOwner?.firstName && currentOwner?.lastName ? (
-                    <span className="text-white text-3xl font-medium">
+                    <span className="text-white text-2xl font-semibold">
                       {currentOwner.firstName.charAt(0).toUpperCase()}
                       {currentOwner.lastName.charAt(0).toUpperCase()}
                     </span>
                   ) : (
                     <svg
-                      className="w-14 h-14 text-white"
+                      className="w-12 h-12 text-white"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -781,68 +837,58 @@ const PublisherPrototypeDetailPage: React.FC<
                     </svg>
                   )}
                 </div>
-                <div className="text-lg font-bold text-gray-900 mb-1">
-                  {currentOwner?.firstName || "Name"}{" "}
-                  {currentOwner?.lastName || ""}
-                </div>
-                <div className="text-sm text-gray-600 text-center">
-                  {currentOwner?.email || "Developer, designer"}
+                <div>
+                  <div className="text-lg font-bold text-gray-900 mb-1">
+                    {currentOwner?.firstName || "DEV"}{" "}
+                    {currentOwner?.lastName || "name"}
+                  </div>
+                  <div className="text-sm text-gray-600 text-center">
+                    {currentOwner?.role
+                      ? `${
+                          currentOwner.role === "creator"
+                            ? "Developer"
+                            : "Publisher"
+                        }, designer`
+                      : currentOwner?.email
+                      ? currentOwner.email
+                      : "Developer, designer"}
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => setIsFollowing(!isFollowing)}
-                className={`w-full px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mb-3 ${
-                  isFollowing
-                    ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-                {isFollowing ? "Following" : "Follow"}
-              </button>
 
-              {/* Interaction Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleLike}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
-                    isLikedByUser
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
-                  }`}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill={isLikedByUser ? "currentColor" : "none"}
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              {/* Action Buttons */}
+              <div className="flex gap-2 mb-3">
+                {!isOwner && (
+                  <button
+                    onClick={handleFollow}
+                    disabled={!isAuthenticated || !user?.id}
+                    className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                      isFollowing
+                        ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"
-                    />
-                  </svg>
-                  Like
-                </button>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    {isFollowing ? "Following" : "Follow"}
+                  </button>
+                )}
                 <button
                   onClick={() =>
                     navigate(`/dashboard/publisher/portfolio/${id || "1"}`)
                   }
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <svg
                     className="w-4 h-4"
@@ -863,12 +909,35 @@ const PublisherPrototypeDetailPage: React.FC<
             </div>
 
             {/* Project Details */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
               <div className="text-lg font-bold text-gray-900 mb-2">
-                {project.title}
+                {project.title || "Project name"}
+              </div>
+              <div className="text-sm text-gray-600 mb-3">
+                {project.gameGenre
+                  ? `${project.gameGenre}${
+                      project.repoFormat
+                        ? `, ${
+                            project.repoFormat === "webgl"
+                              ? "WebGL"
+                              : project.repoFormat === "react"
+                              ? "React"
+                              : "HTML"
+                          }`
+                        : ""
+                    }`
+                  : project.repoFormat
+                  ? `${
+                      project.repoFormat === "webgl"
+                        ? "WebGL"
+                        : project.repoFormat === "react"
+                        ? "React"
+                        : "HTML"
+                    }`
+                  : "Puzzle, Mobile"}
               </div>
               <div className="text-sm text-gray-600 mb-2">
-                {project.shortDescription}
+                {project.shortDescription || "Short description"}
                 {project.shortDescription &&
                   project.shortDescription.length > 100 &&
                   !showMore && (
@@ -888,10 +957,16 @@ const PublisherPrototypeDetailPage: React.FC<
 
               {/* Stats */}
               <div className="flex gap-4 mt-4 pt-4 border-t border-gray-200">
-                <div className="flex items-center gap-1">
+                <button
+                  onClick={handleLike}
+                  disabled={!isAuthenticated || !user?.id}
+                  className="flex items-center gap-1 hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <svg
-                    className="w-4 h-4 text-gray-600"
-                    fill="none"
+                    className={`w-4 h-4 ${
+                      isLikedByUser ? "text-blue-600" : "text-gray-600"
+                    }`}
+                    fill={isLikedByUser ? "currentColor" : "none"}
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
@@ -902,10 +977,16 @@ const PublisherPrototypeDetailPage: React.FC<
                       d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"
                     />
                   </svg>
-                  <span className="text-sm text-gray-600">
+                  <span
+                    className={`text-sm ${
+                      isLikedByUser
+                        ? "text-blue-600 font-medium"
+                        : "text-gray-600"
+                    }`}
+                  >
                     {project.likeCount || 0}
                   </span>
-                </div>
+                </button>
                 <div className="flex items-center gap-1">
                   <svg
                     className="w-4 h-4 text-gray-600"

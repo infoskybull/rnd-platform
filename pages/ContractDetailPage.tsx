@@ -223,7 +223,7 @@ const ContractDetailPage: React.FC = () => {
             </button>
             <button
               onClick={loadContract}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               Try Again
             </button>
@@ -248,7 +248,7 @@ const ContractDetailPage: React.FC = () => {
           </p>
           <button
             onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
             Go Back
           </button>

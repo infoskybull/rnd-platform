@@ -44,7 +44,7 @@ const UploadErrorModal: React.FC<UploadErrorModalProps> = ({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
         >
           Close
         </button>
@@ -54,4 +54,3 @@ const UploadErrorModal: React.FC<UploadErrorModalProps> = ({
 };
 
 export default UploadErrorModal;
-

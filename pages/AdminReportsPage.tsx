@@ -242,7 +242,7 @@ const StatusChip: React.FC<{
     status === "open"
       ? "bg-gray-600/30 text-gray-300"
       : status === "in_review"
-      ? "bg-blue-600/30 text-blue-300"
+      ? "bg-blue-500/30 text-blue-300"
       : status === "resolved"
       ? "bg-green-600/30 text-green-300"
       : "bg-red-600/30 text-red-300";

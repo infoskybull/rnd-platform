@@ -1555,7 +1555,7 @@ const ProjectUploadForm: React.FC<ProjectUploadFormProps> = ({
                         className={`w-16 h-16 rounded-lg flex items-center justify-center mb-3 ${
                           selectedPackages.collaboration?.selected
                             ? "bg-indigo-600"
-                            : "bg-blue-600"
+                            : "bg-blue-500"
                         }`}
                       >
                         <Globe className="w-8 h-8 text-white" />

@@ -326,7 +326,7 @@ const ContractsTab: React.FC<ContractsTabProps> = ({ user }) => {
           {user?.role === "publisher" && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto"
+              className="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto"
             >
               Create Contract
             </button>

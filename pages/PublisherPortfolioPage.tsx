@@ -115,7 +115,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -135,7 +135,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -155,7 +155,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
@@ -186,7 +186,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                     onClick={() => setActiveFilter(filter)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       activeFilter === filter
-                        ? "bg-blue-600 text-white"
+                        ? "bg-blue-500 text-white"
                         : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
                     }`}
                   >
@@ -212,7 +212,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
             <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-6">
               {/* Avatar */}
               <div className="flex flex-col items-center mb-6">
-                <div className="w-24 h-24 rounded-full bg-blue-600 flex items-center justify-center mb-4">
+                <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center mb-4">
                   <svg
                     className="w-16 h-16 text-white"
                     fill="none"
@@ -240,7 +240,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                   className={`w-full px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
                     isFollowing
                       ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-blue-500 text-white hover:bg-blue-700"
                   }`}
                 >
                   {isFollowing && (
@@ -260,7 +260,7 @@ const PublisherPortfolioPage: React.FC<PublisherPortfolioPageProps> = ({
                   )}
                   {isFollowing ? "Following" : "Follow"}
                 </button>
-                <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
                   <svg
                     className="w-4 h-4"
                     fill="none"

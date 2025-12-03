@@ -203,7 +203,11 @@ const SignUp: React.FC<SignUpProps> = ({
 
     // Log the role being submitted for debugging
     console.log("Submitting signup with role:", trimmedFormData.role);
-    console.log("Full form data:", { ...trimmedFormData, password: "***", confirmPassword: "***" });
+    console.log("Full form data:", {
+      ...trimmedFormData,
+      password: "***",
+      confirmPassword: "***",
+    });
 
     // Validate all fields
     const errors: Record<string, string> = {};
@@ -531,7 +535,7 @@ const SignUp: React.FC<SignUpProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? "Creating account..." : "Create account"}
               </button>

@@ -222,7 +222,7 @@ const CollaborationDetailPage: React.FC = () => {
       setUpdatingMilestone(true);
 
       const currentStatus = milestoneUpdateModal.currentStatus;
-      
+
       await apiService.updateMilestoneStatus(id, {
         milestoneIndex: milestoneUpdateModal.milestoneIndex,
         isCompleted: !currentStatus,
@@ -280,7 +280,7 @@ const CollaborationDetailPage: React.FC = () => {
       case "active":
         return "bg-green-600/20 text-green-300 border-green-500/30";
       case "completed":
-        return "bg-blue-600/20 text-blue-300 border-blue-500/30";
+        return "bg-blue-500/20 text-blue-300 border-blue-500/30";
       case "cancelled":
         return "bg-red-600/20 text-red-300 border-red-500/30";
       default:
@@ -293,7 +293,7 @@ const CollaborationDetailPage: React.FC = () => {
       case "planning":
         return "bg-purple-600/20 text-purple-300 border-purple-500/30";
       case "development":
-        return "bg-blue-600/20 text-blue-300 border-blue-500/30";
+        return "bg-blue-500/20 text-blue-300 border-blue-500/30";
       case "testing":
         return "bg-orange-600/20 text-orange-300 border-orange-500/30";
       case "deployment":
@@ -425,7 +425,9 @@ const CollaborationDetailPage: React.FC = () => {
                   {(collaboration.currentPhase ?? "planning").toUpperCase()}
                 </span>
                 <span className="sm:hidden">
-                  {(collaboration.currentPhase ?? "planning").charAt(0).toUpperCase()}
+                  {(collaboration.currentPhase ?? "planning")
+                    .charAt(0)
+                    .toUpperCase()}
                 </span>
               </span>
             </div>
@@ -459,7 +461,12 @@ const CollaborationDetailPage: React.FC = () => {
                 <div className="w-full bg-gray-700 rounded-full h-2 sm:h-3">
                   <div
                     className="bg-indigo-500 h-2 sm:h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.max(0, Math.min(100, collaboration.progressPercentage ?? 0))}%` }}
+                    style={{
+                      width: `${Math.max(
+                        0,
+                        Math.min(100, collaboration.progressPercentage ?? 0)
+                      )}%`,
+                    }}
                   />
                 </div>
               </div>
@@ -528,44 +535,77 @@ const CollaborationDetailPage: React.FC = () => {
                 Milestones
               </h3>
               <div className="space-y-3">
-                {collaboration.milestones && Array.isArray(collaboration.milestones) && collaboration.milestones.length > 0 ? (
+                {collaboration.milestones &&
+                Array.isArray(collaboration.milestones) &&
+                collaboration.milestones.length > 0 ? (
                   collaboration.milestones.map((milestone, index) => {
                     // Handle both string and object milestones
                     let milestoneText: string;
                     let milestoneId: string | undefined;
-                    
+
                     if (typeof milestone === "string") {
                       milestoneText = milestone;
                       milestoneId = milestone;
                     } else if (milestone && typeof milestone === "object") {
                       // If milestone is an object, extract title or use a fallback
-                      milestoneText = (milestone as any).title || (milestone as any).milestoneTitle || (milestone as any).name || JSON.stringify(milestone).substring(0, 50) || "Unknown Milestone";
-                      milestoneId = (milestone as any)._id || (milestone as any).id || String(index);
+                      milestoneText =
+                        (milestone as any).title ||
+                        (milestone as any).milestoneTitle ||
+                        (milestone as any).name ||
+                        JSON.stringify(milestone).substring(0, 50) ||
+                        "Unknown Milestone";
+                      milestoneId =
+                        (milestone as any)._id ||
+                        (milestone as any).id ||
+                        String(index);
                     } else {
                       milestoneText = "Unknown Milestone";
                       milestoneId = String(index);
                     }
-                    
+
                     // Check if milestone is completed
                     // First check if milestone object has isCompleted property (from merged milestoneStatuses)
                     let isCompleted = false;
-                    if (milestone && typeof milestone === "object" && (milestone as any).isCompleted !== undefined) {
+                    if (
+                      milestone &&
+                      typeof milestone === "object" &&
+                      (milestone as any).isCompleted !== undefined
+                    ) {
                       isCompleted = (milestone as any).isCompleted === true;
-                    } else if (collaboration.completedMilestones && Array.isArray(collaboration.completedMilestones)) {
+                    } else if (
+                      collaboration.completedMilestones &&
+                      Array.isArray(collaboration.completedMilestones)
+                    ) {
                       // Fallback to checking completedMilestones array
-                      isCompleted = typeof milestone === "string" 
-                        ? collaboration.completedMilestones.includes(milestone)
-                        : collaboration.completedMilestones.some((cm: any) => {
-                            if (typeof cm === "string") {
-                              return cm === milestoneId || (milestone as any)?._id === cm || (milestone as any)?.id === cm;
-                            }
-                            return cm?._id === milestoneId || cm?.id === milestoneId || JSON.stringify(cm) === JSON.stringify(milestone);
-                          });
+                      isCompleted =
+                        typeof milestone === "string"
+                          ? collaboration.completedMilestones.includes(
+                              milestone
+                            )
+                          : collaboration.completedMilestones.some(
+                              (cm: any) => {
+                                if (typeof cm === "string") {
+                                  return (
+                                    cm === milestoneId ||
+                                    (milestone as any)?._id === cm ||
+                                    (milestone as any)?.id === cm
+                                  );
+                                }
+                                return (
+                                  cm?._id === milestoneId ||
+                                  cm?.id === milestoneId ||
+                                  JSON.stringify(cm) ===
+                                    JSON.stringify(milestone)
+                                );
+                              }
+                            );
                     }
-                    
+
                     // Check if user can update milestones (publisher or creator)
-                    const canUpdate = user && (user.role === "publisher" || user.role === "creator");
-                    
+                    const canUpdate =
+                      user &&
+                      (user.role === "publisher" || user.role === "creator");
+
                     return (
                       <div
                         key={milestoneId || index}
@@ -582,7 +622,9 @@ const CollaborationDetailPage: React.FC = () => {
                               : "bg-gray-300"
                           }`}
                         >
-                          {isCompleted && <CheckCircle className="w-2 h-2 sm:w-3 sm:h-3" />}
+                          {isCompleted && (
+                            <CheckCircle className="w-2 h-2 sm:w-3 sm:h-3" />
+                          )}
                         </div>
                         <span
                           className={`text-sm sm:text-base flex-1 ${
@@ -595,7 +637,13 @@ const CollaborationDetailPage: React.FC = () => {
                         </span>
                         {canUpdate && (
                           <button
-                            onClick={() => openMilestoneUpdateModal(index, milestoneText, isCompleted)}
+                            onClick={() =>
+                              openMilestoneUpdateModal(
+                                index,
+                                milestoneText,
+                                isCompleted
+                              )
+                            }
                             disabled={updatingMilestone}
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
                               isCompleted
@@ -605,7 +653,9 @@ const CollaborationDetailPage: React.FC = () => {
                           >
                             <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
                             <span className="hidden sm:inline">
-                              {isCompleted ? "Mark Incomplete" : "Mark Complete"}
+                              {isCompleted
+                                ? "Mark Incomplete"
+                                : "Mark Complete"}
                             </span>
                             <span className="sm:hidden">
                               {isCompleted ? "Incomplete" : "Complete"}

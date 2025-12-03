@@ -101,11 +101,17 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
     setIsSubmitting(true);
     setError(null);
 
+    if (!projectId) {
+      setError("Project ID is missing. Please try again.");
+      return;
+    }
+
     try {
       const content = generateOfferContent();
 
       await apiService.sendOffer({
         creatorId,
+        projectId,
         subject: "Collaboration Offer",
         content,
       });
@@ -183,7 +189,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
             {/* Button */}
             <button
               onClick={handleBackToPrototypeDetail}
-              className="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="w-full px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               Back to Prototype Detail
             </button>
@@ -505,7 +511,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
             <button
               onClick={handleMakeOffer}
               disabled={isSubmitting || !creatorId}
-              className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {isSubmitting ? "Sending..." : "Make offer"}
             </button>

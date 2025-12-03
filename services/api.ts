@@ -301,13 +301,6 @@ class ApiService {
           );
         }
 
-        // Check if we have token and this is a protected endpoint
-        const hasToken =
-          !isPublicEndpoint &&
-          (this.accessToken || localStorage.getItem("accessToken"));
-        const hasRefreshToken =
-          this.refreshToken || localStorage.getItem("refreshToken");
-
         // Check if this is a token-related error that should trigger refresh
         // Ensure errorMessage is string before calling toLowerCase
         const errorMessageLower =
@@ -338,14 +331,48 @@ class ApiService {
           errorMessageLower.includes("expired") ||
           errorMessageLower.includes("unauthorized");
 
-        // For ANY error on protected endpoints with token, try refreshing token once
+        // Check if we have token - allow refreshToken logic even for public endpoints
+        // if a token is present and there's an error (e.g., /game-projects/:id might be public but user has token)
+        const accessTokenAvailable =
+          this.accessToken || localStorage.getItem("accessToken");
+        const hasRefreshToken =
+          this.refreshToken || localStorage.getItem("refreshToken");
+
+        // Determine if we should attempt token refresh
+        // For public endpoints, only enable refreshToken if:
+        // 1. It's a token-related error (401/403/isTokenError), OR
+        // 2. It's a specific project ID endpoint like /game-projects/:id (not just listing endpoints)
+        const shouldAttemptRefresh =
+          accessTokenAvailable &&
+          hasRefreshToken &&
+          (!isPublicEndpoint ||
+            isTokenError ||
+            response.status === 401 ||
+            response.status === 403 ||
+            // Check if it's a specific project ID endpoint (not just listing)
+            (endpointPath.startsWith("/game-projects/") &&
+              endpointPath !== "/game-projects" &&
+              !endpointPath.startsWith("/game-projects/stats") &&
+              !endpointPath.startsWith("/game-projects/featured") &&
+              !endpointPath.startsWith("/game-projects/search") &&
+              !endpointPath.startsWith("/game-projects/for-sale") &&
+              !endpointPath.startsWith("/game-projects/my-projects") &&
+              !endpointPath.startsWith("/game-projects/inventory") &&
+              !endpointPath.startsWith("/game-projects/purchase-history") &&
+              !endpointPath.startsWith("/game-projects/publisher-stats")));
+
+        const hasToken = shouldAttemptRefresh;
+
+        // For ANY error on endpoints with token, try refreshing token once
         // This ensures we catch token expiration even if server doesn't return proper error codes
+        // Works for both protected endpoints and public endpoints that require auth (e.g., /game-projects/:id)
         if (hasToken && hasRefreshToken) {
           console.log(
-            `[API Interceptor] Error ${response.status} on protected endpoint ${endpoint}, attempting token refresh...`,
+            `[API Interceptor] Error ${response.status} on ${isPublicEndpoint ? "public" : "protected"} endpoint ${endpoint}, attempting token refresh...`,
             {
               status: response.status,
               isTokenError,
+              isPublicEndpoint,
               hasToken: true,
               hasRefreshToken: true,
               errorMessage,
@@ -1196,6 +1223,42 @@ class ApiService {
     return this.makeRequest(`/users/${userId}`, {
       method: "DELETE",
     });
+  }
+
+  // Follow Creator APIs
+  async followCreator(creatorId: string): Promise<{ success: boolean; message: string }> {
+    return this.makeRequest(`/users/${creatorId}/follow`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
+  async unfollowCreator(creatorId: string): Promise<{ success: boolean; message: string }> {
+    return this.makeRequest(`/users/${creatorId}/follow`, {
+      method: "DELETE",
+    });
+  }
+
+  async checkFollowingStatus(creatorId: string): Promise<{ success: boolean; data: { isFollowing: boolean } }> {
+    return this.makeRequest(`/users/${creatorId}/is-following`);
+  }
+
+  async getFollowingCreators(): Promise<{ success: boolean; data: UserProfile[] }> {
+    return this.makeRequest("/users/me/following");
+  }
+
+  // Get projects from followed creators
+  async getFollowingProjects(filters: GameProjectFilters = {}): Promise<GameProjectListResponse> {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    });
+    const queryString = params.toString();
+    return this.makeRequest(`/game-projects/following${queryString ? `?${queryString}` : ""}`);
   }
 
   // Logout (clear tokens and all localStorage, reset Web3 wallets)
@@ -2607,6 +2670,7 @@ class ApiService {
   // Send offer to creator
   async sendOffer(data: {
     creatorId: string;
+    projectId: string;
     subject: string;
     content: string;
   }): Promise<{
@@ -2615,8 +2679,23 @@ class ApiService {
   }> {
     return this.makeRequest("/game-projects/send-offer", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(data),
     });
+  }
+
+  // Get projects that publisher has offered
+  async getOfferedProjects(filters: GameProjectFilters = {}): Promise<GameProjectListResponse> {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    });
+    const queryString = params.toString();
+    return this.makeRequest(`/game-projects/offered${queryString ? `?${queryString}` : ""}`);
   }
 }
 

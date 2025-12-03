@@ -55,11 +55,11 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
                   />
                 </svg>
               </button>
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
                 150
               </span>
             </div>
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer">
+            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center cursor-pointer">
               <svg
                 className="w-6 h-6 text-white"
                 fill="none"
@@ -149,7 +149,7 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
               <div
                 className={`mb-4 ${
                   selectedPackage === pkg.id
-                    ? "bg-blue-600 text-white rounded-lg p-3"
+                    ? "bg-blue-500 text-white rounded-lg p-3"
                     : ""
                 }`}
               >
@@ -183,13 +183,13 @@ const CreatorUploadSuccessPage: React.FC<CreatorUploadSuccessPageProps> = ({
         <div className="flex items-center justify-center gap-4 relative">
           <button
             onClick={() => navigate("/prototype/upload")}
-            className="absolute left-0 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="absolute left-0 px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Back
           </button>
           <button
             onClick={() => navigate("/dashboard")}
-            className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-8 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Done
           </button>

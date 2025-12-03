@@ -36,7 +36,7 @@ const AdminAccountsPage: React.FC = () => {
 
     checkScrollbar();
     window.addEventListener("resize", checkScrollbar);
-    
+
     // Also check after a short delay to ensure DOM is fully rendered
     const timeoutId = setTimeout(checkScrollbar, 100);
 
@@ -56,9 +56,7 @@ const AdminAccountsPage: React.FC = () => {
             onClick={() => setEditingUserId(null)}
           />
           <div className="relative z-50 w-full max-w-md bg-gray-800 border border-gray-700 rounded-xl p-6">
-            <h4 className="text-lg font-semibold text-white mb-4">
-              Edit User
-            </h4>
+            <h4 className="text-lg font-semibold text-white mb-4">Edit User</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">
@@ -240,7 +238,9 @@ const AdminAccountsPage: React.FC = () => {
               <div
                 ref={tableContainerRef}
                 className={`hidden sm:block w-full xs:max-w-full sm:max-w-[calc(100vw-306px)] ${
-                  hideHorizontalScrollbar ? "overflow-x-hidden" : "overflow-x-scroll"
+                  hideHorizontalScrollbar
+                    ? "overflow-x-hidden"
+                    : "overflow-x-scroll"
                 } overflow-y-auto`}
               >
                 <table className="min-w-full table-fixed divide-y divide-gray-700">
@@ -318,7 +318,7 @@ const AdminAccountsPage: React.FC = () => {
                             <span
                               className={`px-2 py-1 rounded text-xs font-medium ${
                                 u.is2FAEnabled
-                                  ? "bg-blue-600/30 text-blue-300"
+                                  ? "bg-blue-500/30 text-blue-300"
                                   : "bg-gray-600/30 text-gray-300"
                               }`}
                             >
@@ -413,7 +413,7 @@ const AdminAccountsPage: React.FC = () => {
                         <span
                           className={`px-2 py-1 rounded ${
                             u.is2FAEnabled
-                              ? "bg-blue-600/30 text-blue-300"
+                              ? "bg-blue-500/30 text-blue-300"
                               : "bg-gray-600/30 text-gray-300"
                           }`}
                         >
@@ -474,4 +474,3 @@ const AdminAccountsPage: React.FC = () => {
 };
 
 export default AdminAccountsPage;
-

@@ -50,7 +50,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             </button>
             <button
               onClick={onConfirm}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
             >
               {confirmText}
             </button>
@@ -73,7 +73,7 @@ export const MilestoneManagementModal: React.FC<
   const [updatingMilestone, setUpdatingMilestone] = useState<string | null>(
     null
   );
-  
+
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -88,7 +88,7 @@ export const MilestoneManagementModal: React.FC<
     confirmText: "Confirm",
     onConfirm: () => {},
   });
-  
+
   // Success message state
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -141,26 +141,33 @@ export const MilestoneManagementModal: React.FC<
 
       // Notify parent component
       onMilestoneUpdated(updatedContract);
-      
+
       // Show success message
       if (updateData.isCompleted) {
         setSuccessMessage("Milestone marked as completed successfully!");
       } else {
         setSuccessMessage("Milestone updated successfully!");
       }
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error("Failed to update milestone:", err);
-      const errorMessage = err instanceof Error ? err.message : "Failed to update milestone";
-      
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to update milestone";
+
       // Handle specific error cases
       if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
         setError("You don't have permission to update this milestone.");
-      } else if (errorMessage.includes("404") || errorMessage.includes("Not Found")) {
+      } else if (
+        errorMessage.includes("404") ||
+        errorMessage.includes("Not Found")
+      ) {
         setError("Contract or milestone not found. Please refresh the page.");
-      } else if (errorMessage.includes("400") || errorMessage.includes("Bad Request")) {
+      } else if (
+        errorMessage.includes("400") ||
+        errorMessage.includes("Bad Request")
+      ) {
         setError("Invalid milestone data. Please check your input.");
       } else {
         setError(errorMessage);
@@ -171,7 +178,9 @@ export const MilestoneManagementModal: React.FC<
   };
 
   const markMilestoneComplete = (milestoneId: string) => {
-    const milestone = localContract.milestones.find((m) => m.id === milestoneId);
+    const milestone = localContract.milestones.find(
+      (m) => m.id === milestoneId
+    );
     setConfirmModal({
       isOpen: true,
       title: "Mark Milestone as Complete",
@@ -187,7 +196,9 @@ export const MilestoneManagementModal: React.FC<
   };
 
   const updateProgress = (milestoneId: string, progress: number) => {
-    const milestone = localContract.milestones.find((m) => m.id === milestoneId);
+    const milestone = localContract.milestones.find(
+      (m) => m.id === milestoneId
+    );
     setConfirmModal({
       isOpen: true,
       title: `Update Progress to ${progress}%`,
@@ -246,11 +257,13 @@ export const MilestoneManagementModal: React.FC<
     if (milestone.isCompleted) {
       return 100;
     }
-    
+
     // Use paymentPercentage as progress indicator (updated via updateProgress)
     // Ensure it's between 0 and 100
     const progress = milestone.paymentPercentage ?? 0;
-    const validProgress = isNaN(progress) ? 0 : Math.min(Math.max(progress, 0), 100);
+    const validProgress = isNaN(progress)
+      ? 0
+      : Math.min(Math.max(progress, 0), 100);
     return validProgress;
   };
 
@@ -333,7 +346,10 @@ export const MilestoneManagementModal: React.FC<
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-gray-700/50 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-blue-400">
-                  {milestoneProgress.progressPercentage ?? milestoneProgress.totalProgress ?? 0}%
+                  {milestoneProgress.progressPercentage ??
+                    milestoneProgress.totalProgress ??
+                    0}
+                  %
                 </div>
                 <div className="text-sm text-gray-400">Overall Progress</div>
               </div>
@@ -345,13 +361,18 @@ export const MilestoneManagementModal: React.FC<
               </div>
               <div className="bg-gray-700/50 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-yellow-400">
-                  {(milestoneProgress.totalMilestones ?? 0) - (milestoneProgress.completedMilestones ?? 0)}
+                  {(milestoneProgress.totalMilestones ?? 0) -
+                    (milestoneProgress.completedMilestones ?? 0)}
                 </div>
                 <div className="text-sm text-gray-400">Remaining</div>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-purple-400">
-                  {formatCurrency(milestoneProgress.paidAmount ?? milestoneProgress.totalPaid ?? 0)}
+                  {formatCurrency(
+                    milestoneProgress.paidAmount ??
+                      milestoneProgress.totalPaid ??
+                      0
+                  )}
                 </div>
                 <div className="text-sm text-gray-400">Total Paid</div>
               </div>
@@ -361,35 +382,55 @@ export const MilestoneManagementModal: React.FC<
           {/* Upcoming and Overdue Milestones */}
           {milestoneProgress && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {milestoneProgress.upcomingMilestones && milestoneProgress.upcomingMilestones.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-yellow-400 mb-2">
-                    Upcoming Milestones ({milestoneProgress.upcomingMilestones?.length ?? 0})
-                  </h4>
-                  <div className="space-y-2">
-                    {milestoneProgress.upcomingMilestones?.slice(0, 3).map((milestone) => (
-                      <div key={milestone.id} className="text-sm text-gray-300">
-                        • {milestone.title} - Due: {milestone.dueDate ? formatDate(milestone.dueDate) : "N/A"}
-                      </div>
-                    ))}
+              {milestoneProgress.upcomingMilestones &&
+                milestoneProgress.upcomingMilestones.length > 0 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-yellow-400 mb-2">
+                      Upcoming Milestones (
+                      {milestoneProgress.upcomingMilestones?.length ?? 0})
+                    </h4>
+                    <div className="space-y-2">
+                      {milestoneProgress.upcomingMilestones
+                        ?.slice(0, 3)
+                        .map((milestone) => (
+                          <div
+                            key={milestone.id}
+                            className="text-sm text-gray-300"
+                          >
+                            • {milestone.title} - Due:{" "}
+                            {milestone.dueDate
+                              ? formatDate(milestone.dueDate)
+                              : "N/A"}
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              
-              {milestoneProgress.overdueMilestones && milestoneProgress.overdueMilestones.length > 0 && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-red-400 mb-2">
-                    Overdue Milestones ({milestoneProgress.overdueMilestones?.length ?? 0})
-                  </h4>
-                  <div className="space-y-2">
-                    {milestoneProgress.overdueMilestones?.slice(0, 3).map((milestone) => (
-                      <div key={milestone.id} className="text-sm text-gray-300">
-                        • {milestone.title} - Due: {milestone.dueDate ? formatDate(milestone.dueDate) : "N/A"}
-                      </div>
-                    ))}
+                )}
+
+              {milestoneProgress.overdueMilestones &&
+                milestoneProgress.overdueMilestones.length > 0 && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-red-400 mb-2">
+                      Overdue Milestones (
+                      {milestoneProgress.overdueMilestones?.length ?? 0})
+                    </h4>
+                    <div className="space-y-2">
+                      {milestoneProgress.overdueMilestones
+                        ?.slice(0, 3)
+                        .map((milestone) => (
+                          <div
+                            key={milestone.id}
+                            className="text-sm text-gray-300"
+                          >
+                            • {milestone.title} - Due:{" "}
+                            {milestone.dueDate
+                              ? formatDate(milestone.dueDate)
+                              : "N/A"}
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           )}
 
@@ -448,7 +489,9 @@ export const MilestoneManagementModal: React.FC<
                         <div>
                           <span className="text-gray-400">Due Date:</span>
                           <span className="text-white ml-1">
-                            {milestone.dueDate ? formatDate(milestone.dueDate) : "N/A"}
+                            {milestone.dueDate
+                              ? formatDate(milestone.dueDate)
+                              : "N/A"}
                           </span>
                         </div>
                         <div>
@@ -472,54 +515,59 @@ export const MilestoneManagementModal: React.FC<
                     <div className="w-full bg-gray-600 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${Math.max(0, Math.min(100, getMilestoneProgress(milestone)))}%` 
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(100, getMilestoneProgress(milestone))
+                          )}%`,
                         }}
                       ></div>
                     </div>
                   </div>
 
                   {/* Deliverables */}
-                  {milestone.deliverables && milestone.deliverables.length > 0 && (
-                    <div className="mb-4">
-                      <h5 className="text-sm font-medium text-gray-300 mb-2">
-                        Deliverables:
-                      </h5>
-                      <ul className="list-disc list-inside text-sm text-gray-400">
-                        {milestone.deliverables.map((deliverable, idx) => (
-                          <li key={idx}>{deliverable}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {milestone.deliverables &&
+                    milestone.deliverables.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-medium text-gray-300 mb-2">
+                          Deliverables:
+                        </h5>
+                        <ul className="list-disc list-inside text-sm text-gray-400">
+                          {milestone.deliverables.map((deliverable, idx) => (
+                            <li key={idx}>{deliverable}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                   {/* Action Buttons */}
-                  {localContract.status === "active" && !milestone.isCompleted && (
-                    <div className="flex gap-2">
-                      {/* Only show "50% Complete" button if progress is not already 50% */}
-                      {getMilestoneProgress(milestone) < 50 && (
+                  {localContract.status === "active" &&
+                    !milestone.isCompleted && (
+                      <div className="flex gap-2">
+                        {/* Only show "50% Complete" button if progress is not already 50% */}
+                        {getMilestoneProgress(milestone) < 50 && (
+                          <button
+                            onClick={() => updateProgress(milestone.id, 50)}
+                            disabled={updatingMilestone === milestone.id}
+                            className="bg-blue-500 hover:bg-blue-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                          >
+                            {updatingMilestone === milestone.id
+                              ? "Updating..."
+                              : "50% Complete"}
+                          </button>
+                        )}
+                        {/* Always show "Mark Complete" button */}
                         <button
-                          onClick={() => updateProgress(milestone.id, 50)}
+                          onClick={() => markMilestoneComplete(milestone.id)}
                           disabled={updatingMilestone === milestone.id}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
                         >
                           {updatingMilestone === milestone.id
                             ? "Updating..."
-                            : "50% Complete"}
+                            : "Mark Complete"}
                         </button>
-                      )}
-                      {/* Always show "Mark Complete" button */}
-                      <button
-                        onClick={() => markMilestoneComplete(milestone.id)}
-                        disabled={updatingMilestone === milestone.id}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                      >
-                        {updatingMilestone === milestone.id
-                          ? "Updating..."
-                          : "Mark Complete"}
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    )}
 
                   {/* Completion Info */}
                   {milestone.isCompleted && milestone.completedAt && (

@@ -157,7 +157,7 @@ const WalletStateDebug: React.FC = () => {
         <div className="flex space-x-2">
           <button
             onClick={handleApiTest}
-            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+            className="px-2 py-1 bg-blue-500 hover:bg-blue-700 rounded text-xs"
           >
             Test API
           </button>
