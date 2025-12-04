@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { User, GameProject } from "../types";
 import { apiService } from "../services/api";
 import DashboardNavbar from "../components/DashboardNavbar";
@@ -9,6 +14,8 @@ import {
 } from "../utils/navbarConfig";
 import CustomCheckbox from "../components/CustomCheckbox";
 import FileUploadSection from "../components/FileUploadSection";
+import PrototypeUploadSection from "../components/PrototypeUploadSection";
+import ResizableDivider from "../components/ResizableDivider";
 import UploadErrorModal from "../components/UploadErrorModal";
 import { useAppSelector, useAppDispatch } from "../store/hooks";
 import { suggestTags } from "../services/geminiService";
@@ -34,16 +41,31 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const aiPageState = useAppSelector((state) => state.aiPage);
   const uploadState = useAppSelector((state) => state.upload);
-  
+
+  // Check if type=file query parameter exists
+  const isFileUploadType = searchParams.get("type") === "file";
+  // Check if scale=devider query parameter exists (for showing resizable divider)
+  const isDividerEnabled = searchParams.get("scale") === "devider";
+
+  // Reset prototype files when type=file is not present
+  useEffect(() => {
+    if (!isFileUploadType) {
+      setPrototypeFiles([]);
+      setPrototypeFileKey("");
+    }
+  }, [isFileUploadType]);
+
   // Use local state for project name to avoid cache issues
   const [localProjectName, setLocalProjectName] = useState<string>("");
-  
+
   // Get project name: use local state if set, otherwise from Redux store (for AI page navigation)
   const projectNameFromStore = aiPageState.projectName || "";
-  const projectName = localProjectName || 
+  const projectName =
+    localProjectName ||
     (projectNameFromStore === "Project name" ||
     projectNameFromStore === "Unnamed"
       ? ""
@@ -86,7 +108,104 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const [featureImageFileKey, setFeatureImageFileKey] = useState<string>("");
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [attachmentFileKeys, setAttachmentFileKeys] = useState<string[]>([]);
+  const [prototypeFiles, setPrototypeFiles] = useState<File[]>([]);
+  const [prototypeFileKey, setPrototypeFileKey] = useState<string>("");
+  const [leftSectionWidth, setLeftSectionWidth] = useState<number | null>(null);
+  const [rightSectionWidth, setRightSectionWidth] = useState<number | null>(
+    null
+  );
+  const mainContentRef = useRef<HTMLDivElement>(null);
   const [showWarningModal, setShowWarningModal] = useState(false);
+
+  // Calculate initial widths based on container size (only when divider is enabled)
+  useEffect(() => {
+    // Only calculate widths if divider is enabled
+    if (!isFileUploadType || !isDividerEnabled) {
+      return;
+    }
+
+    const calculateInitialWidths = () => {
+      if (
+        mainContentRef.current &&
+        leftSectionWidth === null &&
+        rightSectionWidth === null
+      ) {
+        // Use both offsetWidth and getBoundingClientRect for better accuracy
+        const containerElement = mainContentRef.current;
+        const containerWidth = Math.max(
+          containerElement.offsetWidth,
+          containerElement.getBoundingClientRect().width
+        );
+
+        // Only calculate if container has valid width (at least 600px to ensure both sections fit)
+        if (containerWidth >= 600) {
+          // Default: left takes remaining space, right is 384px (w-96)
+          const defaultRightWidth = 384;
+          const defaultLeftWidth = containerWidth - defaultRightWidth - 8; // 8px for divider and gap
+
+          // Ensure minimum widths
+          const finalLeftWidth = Math.max(300, defaultLeftWidth);
+          const finalRightWidth = containerWidth - finalLeftWidth - 8;
+
+          setLeftSectionWidth(finalLeftWidth);
+          setRightSectionWidth(Math.max(300, finalRightWidth));
+        }
+      }
+    };
+
+    // Use multiple strategies to ensure calculation happens after DOM is ready
+    const tryCalculate = () => {
+      // Strategy 1: requestAnimationFrame (waits for next paint)
+      requestAnimationFrame(() => {
+        calculateInitialWidths();
+
+        // Strategy 2: If still not calculated, try after multiple delays
+        if (leftSectionWidth === null && rightSectionWidth === null) {
+          setTimeout(() => {
+            calculateInitialWidths();
+            // Strategy 3: One more try after a longer delay
+            if (leftSectionWidth === null && rightSectionWidth === null) {
+              setTimeout(calculateInitialWidths, 300);
+            }
+          }, 50);
+        }
+      });
+    };
+
+    // Start calculation
+    tryCalculate();
+
+    // Also try on window resize
+    const handleResize = () => {
+      if (leftSectionWidth === null && rightSectionWidth === null) {
+        calculateInitialWidths();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // Use ResizeObserver to watch for container size changes
+    let resizeObserver: ResizeObserver | null = null;
+    if (mainContentRef.current && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            if (leftSectionWidth === null && rightSectionWidth === null) {
+              calculateInitialWidths();
+            }
+          }
+        }
+      });
+      resizeObserver.observe(mainContentRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, [leftSectionWidth, rightSectionWidth, isFileUploadType, isDividerEnabled]);
   const [validationErrors, setValidationErrors] = useState({
     projectName: false,
     shortDescription: false,
@@ -1400,9 +1519,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden p-2 flex gap-1 bg-[#EEEEEE]">
+      <div
+        ref={mainContentRef}
+        className="flex-1 overflow-hidden p-2 flex gap-1 bg-[#EEEEEE] w-full"
+        style={{ minWidth: 0 }} // Ensure flex child can shrink below content size
+      >
         {/* Left Section - Form */}
-        <div className="flex-1 overflow-hidden pr-3 bg-white p-8 rounded-lg flex flex-col">
+        <div
+          className="overflow-hidden pr-3 bg-white p-8 rounded-lg flex flex-col"
+          style={{
+            width:
+              isFileUploadType && isDividerEnabled && leftSectionWidth !== null
+                ? `${leftSectionWidth}px`
+                : "auto",
+            flex:
+              isFileUploadType && isDividerEnabled && leftSectionWidth !== null
+                ? "none"
+                : "1",
+            minWidth: "300px",
+          }}
+        >
           <div className="flex-1 overflow-y-auto">
             {/* Project Name */}
             <div className="mb-6 p-2">
@@ -1956,8 +2092,36 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
           </div>
         </div>
 
+        {/* Resizable Divider - Only show when type=file&scale=devider and widths are initialized */}
+        {isFileUploadType &&
+          isDividerEnabled &&
+          leftSectionWidth !== null &&
+          rightSectionWidth !== null && (
+            <ResizableDivider
+              initialLeftWidth={leftSectionWidth}
+              onResize={(leftWidth, rightWidth) => {
+                setLeftSectionWidth(leftWidth);
+                setRightSectionWidth(rightWidth);
+              }}
+              minLeftWidth={300}
+              maxLeftWidth={1200}
+              minRightWidth={300}
+              maxRightWidth={800}
+              containerRef={mainContentRef}
+            />
+          )}
+
         {/* Right Sidebar - Upload */}
-        <div className="w-96 flex flex-col">
+        <div
+          className="flex flex-col"
+          style={{
+            width:
+              isFileUploadType && isDividerEnabled && rightSectionWidth !== null
+                ? `${rightSectionWidth}px`
+                : "384px",
+            minWidth: "300px",
+          }}
+        >
           <div className="flex-1 overflow-y-auto space-y-2 pr-3 px-4 rounded-lg">
             {/* App Icon */}
             <FileUploadSection
@@ -2030,6 +2194,51 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 attachmentFiles.length > 0 ? attachmentFiles : undefined
               }
             />
+
+            {/* Prototype Upload - Only show when type=file */}
+            {isFileUploadType && (
+              <PrototypeUploadSection
+                title="Upload Prototype"
+                required={false}
+                onFilesChange={setPrototypeFiles}
+                maxFileSize={100 * 1024 * 1024} // 100MB
+                initialFiles={
+                  prototypeFiles.length > 0 ? prototypeFiles : undefined
+                }
+                onPreviewDeviceChange={(previewWidth) => {
+                  // Auto-adjust right section width based on preview width
+                  // Only adjust if widths are already initialized
+                  if (
+                    leftSectionWidth === null ||
+                    rightSectionWidth === null ||
+                    !mainContentRef.current
+                  ) {
+                    return;
+                  }
+
+                  // Add padding and margins: phone frame (16px) + container padding (16px) + section padding (16px) + extra space (40px)
+                  const requiredWidth = previewWidth + 16 + 16 + 16 + 40; // preview + phone frame + container padding + section padding + extra space
+                  const minRightWidth = Math.max(300, requiredWidth);
+                  const maxRightWidth = 800;
+
+                  if (minRightWidth <= maxRightWidth) {
+                    // Adjust right section width, but keep left section reasonable
+                    const containerWidth =
+                      mainContentRef.current.getBoundingClientRect().width;
+                    const newRightWidth = Math.min(
+                      maxRightWidth,
+                      Math.max(minRightWidth, rightSectionWidth)
+                    );
+                    const newLeftWidth = containerWidth - newRightWidth - 8; // 8px for divider and gap
+
+                    if (newLeftWidth >= 300) {
+                      setRightSectionWidth(newRightWidth);
+                      setLeftSectionWidth(newLeftWidth);
+                    }
+                  }
+                }}
+              />
+            )}
           </div>
 
           {/* Action Buttons - Fixed at bottom */}
