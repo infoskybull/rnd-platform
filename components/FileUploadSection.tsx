@@ -94,20 +94,29 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
   // Initialize with initialFiles if provided (for edit mode)
   useEffect(() => {
-    if (initialFiles && initialFiles.length > 0 && !hasInitialized) {
-      const initializeFiles = async () => {
-        const filePromises = initialFiles.map(async (file) => {
-          const preview = await createPreview(file);
-          return { file, preview };
-        });
-        const filesWithPreviews = await Promise.all(filePromises);
-        setUploadedFiles(filesWithPreviews);
-        onFilesChange?.(initialFiles);
-        setHasInitialized(true);
-      };
-      initializeFiles();
+    if (initialFiles && initialFiles.length > 0) {
+      // Check if we need to initialize (either not initialized yet, or files changed)
+      const currentFileNames = uploadedFiles.map(uf => uf.file.name).sort().join(',');
+      const newFileNames = initialFiles.map(f => f.name).sort().join(',');
+      const shouldInitialize = !hasInitialized || 
+        uploadedFiles.length === 0 ||
+        currentFileNames !== newFileNames;
+      
+      if (shouldInitialize) {
+        const initializeFiles = async () => {
+          const filePromises = initialFiles.map(async (file) => {
+            const preview = await createPreview(file);
+            return { file, preview };
+          });
+          const filesWithPreviews = await Promise.all(filePromises);
+          setUploadedFiles(filesWithPreviews);
+          onFilesChange?.(initialFiles);
+          setHasInitialized(true);
+        };
+        initializeFiles();
+      }
     }
-  }, [initialFiles, hasInitialized, onFilesChange, createPreview]);
+  }, [initialFiles, hasInitialized, onFilesChange, createPreview, uploadedFiles]);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {

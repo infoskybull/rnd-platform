@@ -37,13 +37,17 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const dispatch = useAppDispatch();
   const aiPageState = useAppSelector((state) => state.aiPage);
   const uploadState = useAppSelector((state) => state.upload);
-  // Set default to empty string, or empty if it's a default placeholder value
+  
+  // Use local state for project name to avoid cache issues
+  const [localProjectName, setLocalProjectName] = useState<string>("");
+  
+  // Get project name: use local state if set, otherwise from Redux store (for AI page navigation)
   const projectNameFromStore = aiPageState.projectName || "";
-  const projectName =
-    projectNameFromStore === "Project name" ||
+  const projectName = localProjectName || 
+    (projectNameFromStore === "Project name" ||
     projectNameFromStore === "Unnamed"
       ? ""
-      : projectNameFromStore;
+      : projectNameFromStore);
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -347,21 +351,19 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     };
   }, []);
 
-  // Set default project name to empty when component mounts (not in edit mode)
+  // Clear project name when entering page without ID, or when ID changes
   useEffect(() => {
-    if (!id && !isEditMode) {
-      // Only clear if it's a default placeholder value
-      const currentName = aiPageState.projectName || "";
-      if (
-        currentName === "Project name" ||
-        currentName === "Unnamed" ||
-        currentName === ""
-      ) {
-        dispatch(setProjectNameAction(""));
-      }
+    if (!id) {
+      // Always clear project name when entering page without ID
+      setIsEditMode(false);
+      setLocalProjectName("");
+      dispatch(setProjectNameAction(""));
+    } else {
+      // When ID exists, clear local project name first (will be set from project data)
+      setLocalProjectName("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id]);
 
   // Load project data for edit mode
   useEffect(() => {
@@ -379,9 +381,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
 
         // Map project data to form fields
         if (projectData) {
-          // Set project name
+          // Set project name from project data
           if (projectData.title) {
+            setLocalProjectName(projectData.title);
             dispatch(setProjectNameAction(projectData.title));
+          } else {
+            setLocalProjectName("");
           }
 
           // Set descriptions
@@ -851,8 +856,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       let finalFeatureImageFileKey = featureImageFileKey;
       let finalAttachmentFileKeys = [...attachmentFileKeys];
 
-      // Upload app icon if provided
-      if (appIconFiles.length > 0 && !finalAppIconFileKey) {
+      // Upload app icon if provided (always upload new file if user selected one)
+      if (appIconFiles.length > 0) {
         const uploadResult = await uploadFile(appIconFiles[0]);
         if (uploadResult.error) {
           throw new Error(uploadResult.error);
@@ -861,8 +866,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         setAppIconFileKey(finalAppIconFileKey);
       }
 
-      // Upload feature image (thumbnail) if provided
-      if (featureImageFiles.length > 0 && !finalFeatureImageFileKey) {
+      // Upload feature image (thumbnail) if provided (always upload new file if user selected one)
+      if (featureImageFiles.length > 0) {
         const uploadResult = await uploadFile(featureImageFiles[0]);
         if (uploadResult.error) {
           throw new Error(uploadResult.error);
@@ -1216,8 +1221,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       let finalFeatureImageFileKey = featureImageFileKey;
       let finalAttachmentFileKeys = [...attachmentFileKeys];
 
-      // Upload app icon if provided
-      if (appIconFiles.length > 0 && !finalAppIconFileKey) {
+      // Upload app icon if provided (always upload new file if user selected one)
+      if (appIconFiles.length > 0) {
         const uploadResult = await uploadFile(appIconFiles[0]);
         if (uploadResult.error) {
           throw new Error(uploadResult.error);
@@ -1226,8 +1231,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         setAppIconFileKey(finalAppIconFileKey);
       }
 
-      // Upload feature image (thumbnail) if provided
-      if (featureImageFiles.length > 0 && !finalFeatureImageFileKey) {
+      // Upload feature image (thumbnail) if provided (always upload new file if user selected one)
+      if (featureImageFiles.length > 0) {
         const uploadResult = await uploadFile(featureImageFiles[0]);
         if (uploadResult.error) {
           throw new Error(uploadResult.error);
@@ -1409,8 +1414,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 placeholder="Enter project name"
                 value={projectName}
                 onChange={(e) => {
-                  dispatch(setProjectNameAction(e.target.value));
-                  const trimmedValue = e.target.value.trim();
+                  const newValue = e.target.value;
+                  setLocalProjectName(newValue);
+                  dispatch(setProjectNameAction(newValue));
+                  const trimmedValue = newValue.trim();
                   // Clear error if field is no longer empty
                   if (validationErrors.projectName && trimmedValue !== "") {
                     setValidationErrors((prev) => ({
