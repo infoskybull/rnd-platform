@@ -37,7 +37,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const dispatch = useAppDispatch();
   const aiPageState = useAppSelector((state) => state.aiPage);
   const uploadState = useAppSelector((state) => state.upload);
-  const projectName = aiPageState.projectName || "";
+  // Set default to empty string, or empty if it's a default placeholder value
+  const projectNameFromStore = aiPageState.projectName || "";
+  const projectName =
+    projectNameFromStore === "Project name" ||
+    projectNameFromStore === "Unnamed"
+      ? ""
+      : projectNameFromStore;
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -57,8 +63,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const [longDescription, setLongDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [platform, setPlatform] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState("");
+  const [platform, setPlatform] = useState("Mobile"); // Default to first platform
+  const [selectedGenre, setSelectedGenre] = useState("Action"); // Default to first genre
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
   const [selectedPackages, setSelectedPackages] = useState<number[]>([1]); // Package 1 (Pay to view) is always available
@@ -81,7 +87,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     projectName: false,
     shortDescription: false,
     longDescription: false,
+    tags: false,
+    platform: false,
+    genre: false,
+    sellingPrice: false,
+    appIcon: false,
+    featureImage: false,
   });
+  const [projectNameWarning, setProjectNameWarning] = useState(false);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -147,11 +160,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const handleTagAdd = (tag: string) => {
     if (tags.length < 5 && !tags.includes(tag)) {
       setTags([...tags, tag]);
+      if (validationErrors.tags) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          tags: false,
+        }));
+      }
     }
   };
 
   const handleTagRemove = (tag: string) => {
     setTags(tags.filter((t) => t !== tag));
+    // Note: We don't clear validation error here because removing a tag might make it invalid again
   };
 
   const handleTagInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -163,6 +183,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
           setTags([...tags, trimmedTag]);
           setTagInput("");
           setShowTagSuggestions(false);
+          if (validationErrors.tags) {
+            setValidationErrors((prev) => ({
+              ...prev,
+              tags: false,
+            }));
+          }
         } else {
           // Tag đã tồn tại, chỉ clear input
           setTagInput("");
@@ -179,15 +205,65 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       setTags([...tags, suggestion]);
       setTagInput("");
       setShowTagSuggestions(false);
+      if (validationErrors.tags) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          tags: false,
+        }));
+      }
     }
   };
 
   const handlePackageToggle = (packageId: number) => {
-    setSelectedPackages((prev) =>
-      prev.includes(packageId)
+    setSelectedPackages((prev) => {
+      const wasSelected = prev.includes(packageId);
+      const newSelected = wasSelected
         ? prev.filter((id) => id !== packageId)
-        : [...prev, packageId]
-    );
+        : [...prev, packageId];
+
+      // Clear validation error when toggling packages if all selected packages have valid prices
+      if (validationErrors.sellingPrice) {
+        // If no package is selected, keep error
+        if (newSelected.length === 0) {
+          // Keep error
+        } else {
+          // Check all selected packages have price > 0
+          let allValid = true;
+          if (newSelected.includes(1)) {
+            const price1 = parseFloat(packagePrices[1] || "0");
+            if (price1 <= 0) allValid = false;
+          }
+          if (newSelected.includes(2)) {
+            const price2 = parseFloat(packagePrices[2] || "0");
+            if (price2 <= 0) allValid = false;
+          }
+          if (newSelected.includes(3)) {
+            const price3 = parseFloat(packagePrices[3] || "0");
+            if (price3 <= 0) allValid = false;
+          }
+          if (allValid) {
+            setValidationErrors((prev) => ({
+              ...prev,
+              sellingPrice: false,
+            }));
+          }
+        }
+      }
+
+      // Auto focus on price input when package is selected (not deselected)
+      if (!wasSelected && newSelected.includes(packageId)) {
+        setTimeout(() => {
+          const priceInputRef =
+            packagePriceRefs[packageId as keyof typeof packagePriceRefs];
+          if (priceInputRef?.current) {
+            priceInputRef.current.focus();
+            priceInputRef.current.select(); // Select all text for easy replacement
+          }
+        }, 100);
+      }
+
+      return newSelected;
+    });
   };
 
   const handlePackagePriceChange = (packageId: number, price: string) => {
@@ -197,12 +273,51 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       ...prev,
       [packageId]: numericValue,
     }));
+    // Clear validation error if all selected packages now have valid prices (> 0)
+    if (validationErrors.sellingPrice) {
+      // Check all selected packages have price > 0
+      let allValid = true;
+      if (selectedPackages.length === 0) {
+        allValid = false;
+      } else {
+        if (selectedPackages.includes(1)) {
+          const price1 = parseFloat(
+            packageId === 1 ? numericValue : packagePrices[1] || "0"
+          );
+          if (price1 <= 0) allValid = false;
+        }
+        if (selectedPackages.includes(2)) {
+          const price2 = parseFloat(
+            packageId === 2 ? numericValue : packagePrices[2] || "0"
+          );
+          if (price2 <= 0) allValid = false;
+        }
+        if (selectedPackages.includes(3)) {
+          const price3 = parseFloat(
+            packageId === 3 ? numericValue : packagePrices[3] || "0"
+          );
+          if (price3 <= 0) allValid = false;
+        }
+      }
+      if (allValid) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          sellingPrice: false,
+        }));
+      }
+    }
   };
 
   // Close dropdowns when clicking outside
   const platformRef = useRef<HTMLDivElement>(null);
   const genreRef = useRef<HTMLDivElement>(null);
   const tagInputRef = useRef<HTMLDivElement>(null);
+  // Refs for package price inputs
+  const packagePriceRefs = {
+    1: useRef<HTMLInputElement>(null),
+    2: useRef<HTMLInputElement>(null),
+    3: useRef<HTMLInputElement>(null),
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -230,6 +345,22 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
+  }, []);
+
+  // Set default project name to empty when component mounts (not in edit mode)
+  useEffect(() => {
+    if (!id && !isEditMode) {
+      // Only clear if it's a default placeholder value
+      const currentName = aiPageState.projectName || "";
+      if (
+        currentName === "Project name" ||
+        currentName === "Unnamed" ||
+        currentName === ""
+      ) {
+        dispatch(setProjectNameAction(""));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load project data for edit mode
@@ -434,12 +565,114 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     setTimeout(() => setShowToast(false), 5000);
   };
 
+  // Validation function for individual fields
+  const validateField = (fieldName: string) => {
+    setValidationErrors((prev) => {
+      const newErrors = { ...prev };
+
+      switch (fieldName) {
+        case "projectName": {
+          const trimmedProjectName = projectName.trim();
+          // Empty -> error (required)
+          if (trimmedProjectName === "") {
+            newErrors.projectName = true;
+            setProjectNameWarning(false);
+          }
+          // Default value -> warning (not error)
+          else if (
+            trimmedProjectName === "Unnamed" ||
+            trimmedProjectName === "Project name"
+          ) {
+            newErrors.projectName = false;
+            setProjectNameWarning(true);
+          }
+          // Valid value -> no error, no warning
+          else {
+            newErrors.projectName = false;
+            setProjectNameWarning(false);
+          }
+          break;
+        }
+        case "shortDescription": {
+          newErrors.shortDescription = !shortDescription.trim();
+          break;
+        }
+        case "longDescription": {
+          newErrors.longDescription = !longDescription.trim();
+          break;
+        }
+        case "tags": {
+          newErrors.tags = tags.length === 0;
+          break;
+        }
+        case "platform": {
+          newErrors.platform = !platform || platform.trim() === "";
+          break;
+        }
+        case "genre": {
+          newErrors.genre = !selectedGenre || selectedGenre.trim() === "";
+          break;
+        }
+        case "sellingPrice": {
+          // If no package is selected, it's an error
+          if (selectedPackages.length === 0) {
+            newErrors.sellingPrice = true;
+            break;
+          }
+
+          // Check each selected package - all selected packages must have price > 0
+          let hasError = false;
+          if (selectedPackages.includes(1)) {
+            const price1 = parseFloat(packagePrices[1] || "0");
+            if (price1 <= 0) {
+              hasError = true;
+            }
+          }
+          if (selectedPackages.includes(2)) {
+            const price2 = parseFloat(packagePrices[2] || "0");
+            if (price2 <= 0) {
+              hasError = true;
+            }
+          }
+          if (selectedPackages.includes(3)) {
+            const price3 = parseFloat(packagePrices[3] || "0");
+            if (price3 <= 0) {
+              hasError = true;
+            }
+          }
+          newErrors.sellingPrice = hasError;
+          break;
+        }
+        case "appIcon": {
+          // Check if app icon is uploaded (either file or fileKey exists)
+          newErrors.appIcon =
+            appIconFiles.length === 0 && appIconFileKey === "";
+          break;
+        }
+        case "featureImage": {
+          // Check if feature image is uploaded (either file or fileKey exists)
+          newErrors.featureImage =
+            featureImageFiles.length === 0 && featureImageFileKey === "";
+          break;
+        }
+      }
+
+      return newErrors;
+    });
+  };
+
   const handlePublish = async () => {
     // Reset validation errors
     const errors = {
       projectName: false,
       shortDescription: false,
       longDescription: false,
+      tags: false,
+      platform: false,
+      genre: false,
+      sellingPrice: false,
+      appIcon: false,
+      featureImage: false,
     };
 
     // Check if project name is still "Unnamed" or "Project name" or empty
@@ -462,35 +695,139 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.longDescription = true;
     }
 
-    // If there are any errors, show them
+    // Validate tags - must have at least 1 tag
+    if (tags.length === 0) {
+      errors.tags = true;
+    }
+
+    // Validate platform - required
+    if (!platform || platform.trim() === "") {
+      errors.platform = true;
+    }
+
+    // Validate genre - required
+    if (!selectedGenre || selectedGenre.trim() === "") {
+      errors.genre = true;
+    }
+
+    // Validate selling price - if a package is selected, its price must be > 0
+    // If no package is selected, it's an error
+    if (selectedPackages.length === 0) {
+      errors.sellingPrice = true;
+    } else {
+      // Check each selected package - all selected packages must have price > 0
+      let hasError = false;
+      if (selectedPackages.includes(1)) {
+        const price1 = parseFloat(packagePrices[1] || "0");
+        if (price1 <= 0) {
+          hasError = true;
+        }
+      }
+      if (selectedPackages.includes(2)) {
+        const price2 = parseFloat(packagePrices[2] || "0");
+        if (price2 <= 0) {
+          hasError = true;
+        }
+      }
+      if (selectedPackages.includes(3)) {
+        const price3 = parseFloat(packagePrices[3] || "0");
+        if (price3 <= 0) {
+          hasError = true;
+        }
+      }
+      errors.sellingPrice = hasError;
+    }
+
+    // Validate App Icon - required
+    if (appIconFiles.length === 0 && appIconFileKey === "") {
+      errors.appIcon = true;
+    }
+
+    // Validate Feature Image - required
+    if (featureImageFiles.length === 0 && featureImageFileKey === "") {
+      errors.featureImage = true;
+    }
+
+    // If there are any errors, show them directly on the fields
     if (
       errors.projectName ||
       errors.shortDescription ||
-      errors.longDescription
+      errors.longDescription ||
+      errors.tags ||
+      errors.platform ||
+      errors.genre ||
+      errors.sellingPrice ||
+      errors.appIcon ||
+      errors.featureImage
     ) {
       setValidationErrors(errors);
-      setShowWarningModal(true);
+      // Scroll to first error field
+      setTimeout(() => {
+        if (errors.projectName) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (errors.shortDescription) {
+          const element = document.querySelector(
+            'input[placeholder="Write a short description"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.longDescription) {
+          const element = document.querySelector(
+            'textarea[placeholder="Enter description"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.tags) {
+          const element = document.querySelector(
+            'input[placeholder="Maximum 5 tags"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.platform) {
+          const element = document.querySelector(
+            'input[placeholder="Select platform"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.genre) {
+          const element = document.querySelector(
+            'input[placeholder="Select genre"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.sellingPrice) {
+          const sellingPriceSection = document.querySelector(".mb-6.p-2 h2");
+          sellingPriceSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.appIcon) {
+          const appIconSection = document.querySelector('[title="App Icon"]');
+          appIconSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.featureImage) {
+          const featureImageSection = document.querySelector(
+            '[title="Feature Image"]'
+          );
+          featureImageSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+      }, 100);
       return;
-    }
-
-    // Note: Package 1 (Pay to view) is always available, so we don't need to validate it
-    // We only validate packages 2 and 3 if they are selected
-
-    // Validate package prices
-    if (selectedPackages.includes(2)) {
-      const price2 = parseFloat(packagePrices[2] || "0");
-      if (!price2 || price2 < 1) {
-        showToastMessage("Pay per Prototype price must be at least 1", "error");
-        return;
-      }
-    }
-
-    if (selectedPackages.includes(3)) {
-      const price3 = parseFloat(packagePrices[3] || "0");
-      if (!price3 || price3 < 1) {
-        showToastMessage("Collaboration budget must be at least 1", "error");
-        return;
-      }
     }
 
     // Clear validation errors if all valid
@@ -498,6 +835,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       projectName: false,
       shortDescription: false,
       longDescription: false,
+      tags: false,
+      platform: false,
+      genre: false,
+      sellingPrice: false,
+      appIcon: false,
+      featureImage: false,
     });
 
     // Upload files if needed
@@ -689,6 +1032,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       projectName: false,
       shortDescription: false,
       longDescription: false,
+      tags: false,
+      platform: false,
+      genre: false,
+      sellingPrice: false,
+      appIcon: false,
+      featureImage: false,
     };
 
     // Check if project name is still "Unnamed" or "Project name" or empty
@@ -711,14 +1060,138 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.longDescription = true;
     }
 
-    // If there are any errors, show them
+    // Validate tags - must have at least 1 tag
+    if (tags.length === 0) {
+      errors.tags = true;
+    }
+
+    // Validate platform - required
+    if (!platform || platform.trim() === "") {
+      errors.platform = true;
+    }
+
+    // Validate genre - required
+    if (!selectedGenre || selectedGenre.trim() === "") {
+      errors.genre = true;
+    }
+
+    // Validate selling price - if a package is selected, its price must be > 0
+    // If no package is selected, it's an error
+    if (selectedPackages.length === 0) {
+      errors.sellingPrice = true;
+    } else {
+      // Check each selected package - all selected packages must have price > 0
+      let hasError = false;
+      if (selectedPackages.includes(1)) {
+        const price1 = parseFloat(packagePrices[1] || "0");
+        if (price1 <= 0) {
+          hasError = true;
+        }
+      }
+      if (selectedPackages.includes(2)) {
+        const price2 = parseFloat(packagePrices[2] || "0");
+        if (price2 <= 0) {
+          hasError = true;
+        }
+      }
+      if (selectedPackages.includes(3)) {
+        const price3 = parseFloat(packagePrices[3] || "0");
+        if (price3 <= 0) {
+          hasError = true;
+        }
+      }
+      errors.sellingPrice = hasError;
+    }
+
+    // Validate App Icon - required
+    if (appIconFiles.length === 0 && appIconFileKey === "") {
+      errors.appIcon = true;
+    }
+
+    // Validate Feature Image - required
+    if (featureImageFiles.length === 0 && featureImageFileKey === "") {
+      errors.featureImage = true;
+    }
+
+    // If there are any errors, show them directly on the fields
     if (
       errors.projectName ||
       errors.shortDescription ||
-      errors.longDescription
+      errors.longDescription ||
+      errors.tags ||
+      errors.platform ||
+      errors.genre ||
+      errors.sellingPrice ||
+      errors.appIcon ||
+      errors.featureImage
     ) {
       setValidationErrors(errors);
-      setShowWarningModal(true);
+      // Scroll to first error field
+      setTimeout(() => {
+        if (errors.projectName) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (errors.shortDescription) {
+          const element = document.querySelector(
+            'input[placeholder="Write a short description"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.longDescription) {
+          const element = document.querySelector(
+            'textarea[placeholder="Enter description"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.tags) {
+          const element = document.querySelector(
+            'input[placeholder="Maximum 5 tags"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.platform) {
+          const element = document.querySelector(
+            'input[placeholder="Select platform"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.genre) {
+          const element = document.querySelector(
+            'input[placeholder="Select genre"]'
+          );
+          element?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.sellingPrice) {
+          const sellingPriceSection = document.querySelector(".mb-6.p-2 h2");
+          sellingPriceSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.appIcon) {
+          const appIconSection = document.querySelector('[title="App Icon"]');
+          appIconSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (errors.featureImage) {
+          const featureImageSection = document.querySelector(
+            '[title="Feature Image"]'
+          );
+          featureImageSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+      }, 100);
       return;
     }
 
@@ -727,6 +1200,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       projectName: false,
       shortDescription: false,
       longDescription: false,
+      tags: false,
+      platform: false,
+      genre: false,
+      sellingPrice: false,
+      appIcon: false,
+      featureImage: false,
     });
 
     // Upload files if needed
@@ -922,26 +1401,40 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
           <div className="flex-1 overflow-y-auto">
             {/* Project Name */}
             <div className="mb-6 p-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 Project name <span className="text-red-500">*</span>
-              </label>
+              </h2>
               <input
                 type="text"
                 placeholder="Enter project name"
                 value={projectName}
                 onChange={(e) => {
                   dispatch(setProjectNameAction(e.target.value));
-                  if (validationErrors.projectName && e.target.value.trim()) {
+                  const trimmedValue = e.target.value.trim();
+                  // Clear error if field is no longer empty
+                  if (validationErrors.projectName && trimmedValue !== "") {
                     setValidationErrors((prev) => ({
                       ...prev,
                       projectName: false,
                     }));
                   }
+                  // Clear warning if field is no longer default value
+                  if (
+                    projectNameWarning &&
+                    trimmedValue !== "Unnamed" &&
+                    trimmedValue !== "Project name" &&
+                    trimmedValue !== ""
+                  ) {
+                    setProjectNameWarning(false);
+                  }
                 }}
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-2xl font-bold ${
+                onBlur={() => validateField("projectName")}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-black text-2xl font-bold ${
                   validationErrors.projectName
                     ? "border-red-500 focus:ring-red-500"
-                    : "border-gray-300"
+                    : projectNameWarning
+                    ? "border-yellow-500 focus:ring-yellow-500"
+                    : "border-gray-300 focus:ring-blue-500"
                 }`}
               />
               {validationErrors.projectName && (
@@ -949,13 +1442,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                   Project name is required
                 </p>
               )}
+              {projectNameWarning && !validationErrors.projectName && (
+                <p className="mt-1 text-sm text-yellow-600">
+                  Change the project name to match your game
+                </p>
+              )}
             </div>
 
             {/* Short Description */}
             <div className="mb-6 p-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 Short description <span className="text-red-500">*</span>
-              </label>
+              </h2>
               <input
                 type="text"
                 placeholder="Write a short description"
@@ -972,6 +1470,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                     }));
                   }
                 }}
+                onBlur={() => validateField("shortDescription")}
                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black ${
                   validationErrors.shortDescription
                     ? "border-red-500 focus:ring-red-500"
@@ -987,9 +1486,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
 
             {/* Long Description */}
             <div className="mb-6 p-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 Long description <span className="text-red-500">*</span>
-              </label>
+              </h2>
               <textarea
                 placeholder="Enter description"
                 value={longDescription}
@@ -1005,6 +1504,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                     }));
                   }
                 }}
+                onBlur={() => validateField("longDescription")}
                 rows={6}
                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-black ${
                   validationErrors.longDescription
@@ -1023,13 +1523,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
               {/* Labels Row - Always on same line */}
               <div className="grid grid-cols-3 gap-4 mb-2">
                 <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
-                  Tags
+                  Tags <span className="text-red-500">*</span>
                 </label>
                 <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
-                  Platform
+                  Platform <span className="text-red-500">*</span>
                 </label>
                 <label className="text-sm font-semibold text-gray-900 flex-shrink-0">
-                  Genre
+                  Genre <span className="text-red-500">*</span>
                 </label>
               </div>
 
@@ -1069,6 +1569,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                         if (e.target.value.trim()) {
                           setShowTagSuggestions(true);
                         }
+                        if (validationErrors.tags && tags.length > 0) {
+                          setValidationErrors((prev) => ({
+                            ...prev,
+                            tags: false,
+                          }));
+                        }
                       }}
                       onKeyDown={handleTagInputKeyPress}
                       onFocus={() => {
@@ -1076,8 +1582,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           setShowTagSuggestions(true);
                         }
                       }}
-                      className={`w-full py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-600 ${
+                      onBlur={() => {
+                        // Delay to allow clicking on suggestions
+                        setTimeout(() => {
+                          validateField("tags");
+                        }, 200);
+                      }}
+                      className={`w-full py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-gray-600 ${
                         loadingSuggestions ? "px-4 pr-10" : "px-4"
+                      } ${
+                        validationErrors.tags
+                          ? "border-red-500 focus:ring-red-500"
+                          : "border-gray-300 focus:ring-blue-500"
                       }`}
                     />
                     {/* Loading Indicator */}
@@ -1142,6 +1658,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       </div>
                     )}
                   </div>
+                  {validationErrors.tags && (
+                    <p className="mt-1 text-sm text-red-500">
+                      Tags are required
+                    </p>
+                  )}
                 </div>
 
                 {/* Platform */}
@@ -1152,10 +1673,20 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       value={platform}
                       readOnly
                       placeholder="Select platform"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer ${
+                        validationErrors.platform
+                          ? "border-red-500 focus:ring-red-500"
+                          : "border-gray-300 focus:ring-blue-500"
+                      }`}
                       onClick={() =>
                         setShowPlatformDropdown(!showPlatformDropdown)
                       }
+                      onBlur={() => {
+                        // Delay to allow clicking on dropdown items
+                        setTimeout(() => {
+                          validateField("platform");
+                        }, 200);
+                      }}
                     />
                     {platform && (
                       <button
@@ -1163,6 +1694,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           e.stopPropagation();
                           setPlatform("");
                           setShowPlatformDropdown(false);
+                          if (validationErrors.platform) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              platform: false,
+                            }));
+                          }
                         }}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
                       >
@@ -1189,6 +1726,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             onClick={() => {
                               setPlatform(p);
                               setShowPlatformDropdown(false);
+                              if (validationErrors.platform) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  platform: false,
+                                }));
+                              }
                             }}
                             className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
                               platform === p
@@ -1202,6 +1745,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       </div>
                     )}
                   </div>
+                  {validationErrors.platform && (
+                    <p className="mt-1 text-sm text-red-500">
+                      Platform is required
+                    </p>
+                  )}
                 </div>
 
                 {/* Genre */}
@@ -1212,8 +1760,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       value={selectedGenre}
                       readOnly
                       placeholder="Select genre"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer"
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent bg-white text-gray-600 pr-12 cursor-pointer ${
+                        validationErrors.genre
+                          ? "border-red-500 focus:ring-red-500"
+                          : "border-gray-300 focus:ring-blue-500"
+                      }`}
                       onClick={() => setShowGenreDropdown(!showGenreDropdown)}
+                      onBlur={() => {
+                        // Delay to allow clicking on dropdown items
+                        setTimeout(() => {
+                          validateField("genre");
+                        }, 200);
+                      }}
                     />
                     {selectedGenre && (
                       <button
@@ -1221,6 +1779,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           e.stopPropagation();
                           setSelectedGenre("");
                           setShowGenreDropdown(false);
+                          if (validationErrors.genre) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              genre: false,
+                            }));
+                          }
                         }}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
                       >
@@ -1247,6 +1811,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             onClick={() => {
                               setSelectedGenre(g);
                               setShowGenreDropdown(false);
+                              if (validationErrors.genre) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  genre: false,
+                                }));
+                              }
                             }}
                             className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
                               selectedGenre === g
@@ -1260,6 +1830,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       </div>
                     )}
                   </div>
+                  {validationErrors.genre && (
+                    <p className="mt-1 text-sm text-red-500">
+                      Genre is required
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1267,7 +1842,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             {/* Set Selling Price */}
             <div className="mb-6 p-2">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Set selling price
+                Set selling price <span className="text-red-500">*</span>
               </h2>
               <p className="text-sm text-gray-600 mb-4">
                 Select the following sales package:
@@ -1311,7 +1886,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                     <div
                       className={`border-2 rounded-lg p-4 mt-2 transition-colors ${
                         selectedPackages.includes(pkg.id)
-                          ? "border-blue-600 bg-blue-50"
+                          ? validationErrors.sellingPrice &&
+                            parseFloat(
+                              packagePrices[
+                                pkg.id as keyof typeof packagePrices
+                              ] || "0"
+                            ) <= 0
+                            ? "border-red-500 bg-red-50"
+                            : "border-blue-600 bg-blue-50"
                           : "border-gray-300"
                       }`}
                     >
@@ -1329,6 +1911,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           USD
                         </span>
                         <input
+                          ref={
+                            packagePriceRefs[
+                              pkg.id as keyof typeof packagePriceRefs
+                            ]
+                          }
                           type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
@@ -1340,6 +1927,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           }
                           onClick={(e) => e.stopPropagation()}
                           onFocus={(e) => e.stopPropagation()}
+                          onBlur={() => validateField("sellingPrice")}
                           className={`flex-1 text-2xl font-bold bg-transparent border-none outline-none focus:outline-none p-0 w-auto min-w-[60px] max-w-[120px] text-right rounded ${
                             selectedPackages.includes(pkg.id)
                               ? "text-gray-900 focus:ring-1 focus:ring-blue-500"
@@ -1351,6 +1939,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                   </div>
                 ))}
               </div>
+              {validationErrors.sellingPrice && (
+                <p className="mt-2 text-sm text-red-500">
+                  At least one selling price option must be selected with a
+                  value greater than 0
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1367,9 +1961,21 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
               maxFiles={1}
               currentFiles={appIconFiles.length}
               acceptedFileTypes="image/jpeg,image/jpg,image/png"
-              onFilesChange={setAppIconFiles}
+              onFilesChange={(files) => {
+                setAppIconFiles(files);
+                // Clear validation error when file is uploaded
+                if (validationErrors.appIcon && files.length > 0) {
+                  setValidationErrors((prev) => ({
+                    ...prev,
+                    appIcon: false,
+                  }));
+                }
+              }}
               maxFileSize={5 * 1024 * 1024} // 5MB
               initialFiles={appIconFiles.length > 0 ? appIconFiles : undefined}
+              validationError={
+                validationErrors.appIcon ? "App Icon is required" : undefined
+              }
             />
 
             {/* Feature Image */}
@@ -1381,10 +1987,24 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
               maxFiles={1}
               currentFiles={featureImageFiles.length}
               acceptedFileTypes="image/jpeg,image/jpg,image/png"
-              onFilesChange={setFeatureImageFiles}
+              onFilesChange={(files) => {
+                setFeatureImageFiles(files);
+                // Clear validation error when file is uploaded
+                if (validationErrors.featureImage && files.length > 0) {
+                  setValidationErrors((prev) => ({
+                    ...prev,
+                    featureImage: false,
+                  }));
+                }
+              }}
               maxFileSize={5 * 1024 * 1024} // 5MB
               initialFiles={
                 featureImageFiles.length > 0 ? featureImageFiles : undefined
+              }
+              validationError={
+                validationErrors.featureImage
+                  ? "Feature Image is required"
+                  : undefined
               }
             />
 
@@ -1497,6 +2117,21 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       Long description is required
                     </li>
                   )}
+                  {validationErrors.tags && (
+                    <li className="text-red-600">Tags are required</li>
+                  )}
+                  {validationErrors.platform && (
+                    <li className="text-red-600">Platform is required</li>
+                  )}
+                  {validationErrors.genre && (
+                    <li className="text-red-600">Genre is required</li>
+                  )}
+                  {validationErrors.sellingPrice && (
+                    <li className="text-red-600">
+                      At least one selling price option must be selected with a
+                      value greater than 0
+                    </li>
+                  )}
                 </ul>
               </div>
               <div className="flex justify-end">
@@ -1523,6 +2158,48 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                         behavior: "smooth",
                         block: "center",
                       });
+                    } else if (validationErrors.tags) {
+                      const element = document.querySelector(
+                        'input[placeholder="Maximum 5 tags"]'
+                      );
+                      element?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    } else if (validationErrors.platform) {
+                      const element = document.querySelector(
+                        'input[placeholder="Select platform"]'
+                      );
+                      element?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    } else if (validationErrors.genre) {
+                      const element = document.querySelector(
+                        'input[placeholder="Select genre"]'
+                      );
+                      element?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    } else if (validationErrors.sellingPrice) {
+                      const element = document.querySelector(
+                        'h2:contains("Set selling price")'
+                      );
+                      if (!element) {
+                        // Fallback: scroll to selling price section
+                        const sellingPriceSection =
+                          document.querySelector(".mb-6.p-2 h2");
+                        sellingPriceSection?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                      } else {
+                        element.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                      }
                     }
                   }}
                   className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"

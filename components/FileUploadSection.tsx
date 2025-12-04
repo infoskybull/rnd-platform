@@ -11,6 +11,7 @@ interface FileUploadSectionProps {
   onFilesChange?: (files: File[]) => void;
   maxFileSize?: number; // in bytes
   initialFiles?: File[]; // Initial files to display (for edit mode)
+  validationError?: string; // Validation error message from parent
 }
 
 interface UploadedFile {
@@ -29,6 +30,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onFilesChange,
   maxFileSize = 10 * 1024 * 1024, // 10MB default
   initialFiles,
+  validationError,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -357,9 +359,9 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       </div>
 
       {/* Error Message */}
-      {error && (
+      {(error || validationError) && (
         <p className="text-xs text-red-500 mt-1 text-center w-full px-4">
-          {error}
+          {validationError || error}
         </p>
       )}
 
