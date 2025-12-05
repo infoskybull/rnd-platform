@@ -110,6 +110,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   const [attachmentFileKeys, setAttachmentFileKeys] = useState<string[]>([]);
   const [prototypeFiles, setPrototypeFiles] = useState<File[]>([]);
   const [prototypeFileKey, setPrototypeFileKey] = useState<string>("");
+  const [prototypeFileUrl, setPrototypeFileUrl] = useState<string>("");
+  const [prototypePreviewCode, setPrototypePreviewCode] = useState<string>("");
   const [leftSectionWidth, setLeftSectionWidth] = useState<number | null>(null);
   const [rightSectionWidth, setRightSectionWidth] = useState<number | null>(
     null
@@ -1029,16 +1031,20 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         projectTypes.push("dev_collaboration");
       }
 
-      // Get fileUrls from navigation state (from AI page) or Redux store
-      // Priority: navigationState > uploadState
-      const sourceFileUrls = navigationState?.uploadedFileUrl
+      // Get fileUrls from prototype upload (priority 1) or navigation state (from AI page) or Redux store
+      // Priority: prototypeFileUrl > navigationState > uploadState
+      const sourceFileUrls = prototypeFileUrl
+        ? [prototypeFileUrl]
+        : navigationState?.uploadedFileUrl
         ? [navigationState.uploadedFileUrl]
         : uploadState.payload?.uploadUrl
         ? [uploadState.payload.uploadUrl]
         : undefined;
 
       const sourceFileKey =
-        navigationState?.uploadedFileKey || uploadState.payload?.fileKey;
+        prototypeFileKey ||
+        navigationState?.uploadedFileKey ||
+        uploadState.payload?.fileKey;
       const detectedRepoFormat =
         navigationState?.detectedFormat ||
         uploadState.payload?.repoFormat ||
@@ -1052,6 +1058,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         finalAppIconFileKey,
         finalFeatureImageFileKey,
         finalAttachmentFileKeys,
+        prototypePreviewCode,
       });
 
       // Prepare project data
@@ -1085,6 +1092,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
           !sourceFileUrls ||
           sourceFileUrls.length === 0) &&
           sourceFileKey && { fileKeys: [sourceFileKey] }),
+        // Add previewCode if available (from prototype build)
+        ...(prototypePreviewCode && { previewCode: prototypePreviewCode }),
       };
 
       // Add pricing fields based on selected packages
@@ -1394,16 +1403,20 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         projectTypes.push("dev_collaboration");
       }
 
-      // Get fileUrls from navigation state (from AI page) or Redux store
-      // Priority: navigationState > uploadState
-      const sourceFileUrls = navigationState?.uploadedFileUrl
+      // Get fileUrls from prototype upload (priority 1) or navigation state (from AI page) or Redux store
+      // Priority: prototypeFileUrl > navigationState > uploadState
+      const sourceFileUrls = prototypeFileUrl
+        ? [prototypeFileUrl]
+        : navigationState?.uploadedFileUrl
         ? [navigationState.uploadedFileUrl]
         : uploadState.payload?.uploadUrl
         ? [uploadState.payload.uploadUrl]
         : undefined;
 
       const sourceFileKey =
-        navigationState?.uploadedFileKey || uploadState.payload?.fileKey;
+        prototypeFileKey ||
+        navigationState?.uploadedFileKey ||
+        uploadState.payload?.fileKey;
       const detectedRepoFormat =
         navigationState?.detectedFormat ||
         uploadState.payload?.repoFormat ||
@@ -1417,6 +1430,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
         finalAppIconFileKey,
         finalFeatureImageFileKey,
         finalAttachmentFileKeys,
+        prototypePreviewCode,
       });
 
       // Prepare project data
@@ -1450,6 +1464,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
           !sourceFileUrls ||
           sourceFileUrls.length === 0) &&
           sourceFileKey && { fileKeys: [sourceFileKey] }),
+        // Add previewCode if available (from prototype build)
+        ...(prototypePreviewCode && { previewCode: prototypePreviewCode }),
       };
 
       // Add pricing fields based on selected packages
@@ -2205,6 +2221,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 initialFiles={
                   prototypeFiles.length > 0 ? prototypeFiles : undefined
                 }
+                onUploadComplete={(fileKey, fileUrl, previewCode) => {
+                  setPrototypeFileKey(fileKey);
+                  setPrototypeFileUrl(fileUrl);
+                  if (previewCode) {
+                    setPrototypePreviewCode(previewCode);
+                  }
+                }}
                 onPreviewDeviceChange={(previewWidth) => {
                   // Auto-adjust right section width based on preview width
                   // Only adjust if widths are already initialized

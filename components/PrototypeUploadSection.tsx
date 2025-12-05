@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { detectProjectFormat } from "../utils/projectAnalyzer";
 import PrototypePreview from "./PrototypePreview";
+import { useFileUpload } from "../hooks/useFileUpload";
 
 declare const JSZip: any;
 
@@ -12,6 +13,7 @@ interface PrototypeUploadSectionProps {
   initialFiles?: File[];
   validationError?: string;
   onPreviewDeviceChange?: (previewWidth: number) => void; // Callback when preview device changes
+  onUploadComplete?: (fileKey: string, fileUrl: string, previewCode?: string) => void; // Callback when file is uploaded and preview is complete
 }
 
 interface FileInfo {
@@ -28,6 +30,7 @@ const PrototypeUploadSection: React.FC<PrototypeUploadSectionProps> = ({
   initialFiles,
   validationError,
   onPreviewDeviceChange,
+  onUploadComplete,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -42,6 +45,11 @@ const PrototypeUploadSection: React.FC<PrototypeUploadSectionProps> = ({
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [zipFileKey, setZipFileKey] = useState<string>("");
+  const [zipFileUrl, setZipFileUrl] = useState<string>("");
+  const [previewCode, setPreviewCode] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
+  const { uploadFile } = useFileUpload();
 
   const validateFile = (file: File): string | null => {
     // Check if it's a ZIP file
@@ -127,6 +135,28 @@ const PrototypeUploadSection: React.FC<PrototypeUploadSectionProps> = ({
         setDetectedFormat("html"); // Default
       }
 
+      // Upload ZIP file to S3 before building
+      setIsUploading(true);
+      try {
+        const uploadResult = await uploadFile(file);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        setZipFileKey(uploadResult.fileKey);
+        setZipFileUrl(uploadResult.uploadUrl);
+      } catch (uploadErr) {
+        console.error("Error uploading ZIP file:", uploadErr);
+        setError(
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : "Failed to upload ZIP file"
+        );
+        setPreviewReady(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+
       setPreviewReady(true);
     } catch (err) {
       const errorMessage =
@@ -210,6 +240,9 @@ const PrototypeUploadSection: React.FC<PrototypeUploadSectionProps> = ({
     setDetectedFormat(null);
     setFileStructure([]);
     setPreviewReady(false);
+    setZipFileKey("");
+    setZipFileUrl("");
+    setPreviewCode("");
     onFilesChange?.([]);
     setError("");
   }, [onFilesChange]);
@@ -465,6 +498,14 @@ const PrototypeUploadSection: React.FC<PrototypeUploadSectionProps> = ({
           htmlContent={isSimpleHtml ? htmlContent : null}
           onDeviceChange={onPreviewDeviceChange}
           projectType={detectedFormat || undefined}
+          zipFileKey={zipFileKey || undefined}
+          onBuildComplete={(previewUrl, fileKey) => {
+            setPreviewCode(previewUrl);
+            // Notify parent component about upload completion
+            if (zipFileKey && zipFileUrl) {
+              onUploadComplete?.(zipFileKey, zipFileUrl, previewUrl);
+            }
+          }}
         />
       )}
 

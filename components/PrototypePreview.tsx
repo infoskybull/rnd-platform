@@ -4,9 +4,10 @@ import { buildService, BuildStatusResponse } from "../services/buildService";
 interface PrototypePreviewProps {
   zipFile: File | null;
   htmlContent?: string | null; // Direct HTML content for simple HTML prototypes
-  onBuildComplete?: (previewUrl: string) => void;
+  onBuildComplete?: (previewUrl: string, fileKey?: string) => void; // Updated to include fileKey
   onDeviceChange?: (previewWidth: number) => void; // Callback when device/preview size changes
   projectType?: "react" | "webgl" | "html"; // Project format type
+  zipFileKey?: string; // Optional fileKey of the uploaded zip file
 }
 
 interface DevicePreset {
@@ -38,6 +39,7 @@ const PrototypePreview: React.FC<PrototypePreviewProps> = ({
   onBuildComplete,
   onDeviceChange,
   projectType,
+  zipFileKey,
 }) => {
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildProgress, setBuildProgress] =
@@ -122,7 +124,7 @@ const PrototypePreview: React.FC<PrototypePreviewProps> = ({
 
       if (finalStatus.status === "completed" && finalStatus.standaloneHtmlUrl) {
         setPreviewUrl(finalStatus.standaloneHtmlUrl);
-        onBuildComplete?.(finalStatus.standaloneHtmlUrl);
+        onBuildComplete?.(finalStatus.standaloneHtmlUrl, zipFileKey);
         setError(null);
         setLoadError(false);
         // Load HTML content for mobile preview
@@ -314,7 +316,7 @@ const PrototypePreview: React.FC<PrototypePreviewProps> = ({
         // Only update if URL changed
         if (newPreviewUrl !== previewUrl) {
           setPreviewUrl(newPreviewUrl);
-          onBuildComplete?.(newPreviewUrl);
+          onBuildComplete?.(newPreviewUrl, zipFileKey);
           // Load new HTML content
           await loadHtmlContent(newPreviewUrl);
         } else {

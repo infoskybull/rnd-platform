@@ -1395,6 +1395,7 @@ class ApiService {
     fileKeys?: string[]; // Optional - S3 keys to move from pending to created
     thumbnail?: string; // Optional - thumbnail fileKey
     appIcon?: string; // NEW - Optional - app icon fileKey
+    previewCode?: string; // Optional - S3 URL of built preview from /api/build/start
   }): Promise<any> {
     return this.makeRequest("/game-projects", {
       method: "POST",
@@ -1420,6 +1421,7 @@ class ApiService {
       fileKeys?: string[];
       thumbnail?: string;
       appIcon?: string; // NEW
+      previewCode?: string; // Optional - S3 URL of built preview from /api/build/start
       isFeatured?: boolean; // Only publisher role can set
     }
   ): Promise<any> {

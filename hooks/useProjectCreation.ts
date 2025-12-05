@@ -19,6 +19,7 @@ interface ProjectData {
   fileKeys?: string[]; // Optional - S3 keys to move from pending to created
   thumbnail?: string; // Optional - thumbnail fileKey
   appIcon?: string; // NEW - Optional - app icon fileKey
+  previewCode?: string; // Optional - S3 URL of built preview from /api/build/start
 }
 
 interface ProjectCreationResult {
@@ -160,6 +161,7 @@ export const useProjectCreation = () => {
         }),
         ...(projectData.thumbnail && { thumbnail: projectData.thumbnail }),
         ...(projectData.appIcon && { appIcon: projectData.appIcon }), // NEW
+        ...(projectData.previewCode && { previewCode: projectData.previewCode }), // NEW - previewCode from build
       };
 
       // Add flat pricing fields based on projectType

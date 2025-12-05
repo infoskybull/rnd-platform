@@ -217,6 +217,7 @@ export interface GameProject {
   searchKeywords: string[];
   attachments: string[];
   fileUrls?: string[]; // URLs to project source files
+  previewCode?: string; // Optional - S3 URL of built preview from /api/build/start
   averageRating: number;
   reviewCount: number;
   thumbnail?: string;

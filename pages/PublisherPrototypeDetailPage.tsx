@@ -242,13 +242,30 @@ const PublisherPrototypeDetailPage: React.FC<
     return project.attachments;
   }, [project?.attachments, project?.thumbnail]);
 
-  // Load and extract project preview
+  // Load and extract project preview - prioritize previewCode if available
   useEffect(() => {
     const loadProjectPreview = async () => {
+      // Check access permissions
+      if (!isOwner && !hasPaidToView && !isPaid && !isFreeToView) {
+        setHtmlContent("");
+        setProjectFiles({});
+        return;
+      }
+
+      // Priority 1: Use previewCode if available (built preview from /api/build/start)
+      // With previewCode, we can use iframe src directly, no need to load HTML content
+      if (project?.previewCode) {
+        setHtmlContent(""); // Clear htmlContent to indicate we're using previewCode
+        setProjectFiles({}); // No need for file extraction with previewCode
+        setPreviewLoading(false);
+        setPreviewError(null);
+        return;
+      }
+
+      // Priority 2: Fallback to fileUrls (extract from ZIP)
       if (
         !project?.fileUrls ||
-        project.fileUrls.length === 0 ||
-        (!isOwner && !hasPaidToView && !isPaid && !isFreeToView)
+        project.fileUrls.length === 0
       ) {
         setHtmlContent("");
         setProjectFiles({});
@@ -327,7 +344,7 @@ const PublisherPrototypeDetailPage: React.FC<
     };
 
     loadProjectPreview();
-  }, [project?.fileUrls, isPaid, hasPaidToView, isFreeToView, isOwner]);
+  }, [project?.previewCode, project?.fileUrls, isPaid, hasPaidToView, isFreeToView, isOwner]);
 
   // Listen for file requests from the preview iframe
   useEffect(() => {
@@ -585,9 +602,9 @@ const PublisherPrototypeDetailPage: React.FC<
                     {/* Notch */}
                     <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-gray-800 rounded-b-2xl z-20"></div>
 
-                    {/* Project Preview from fileUrls */}
-                    {project?.fileUrls &&
-                    project.fileUrls.length > 0 &&
+                    {/* Project Preview - prioritize previewCode, fallback to fileUrls */}
+                    {((project?.previewCode) ||
+                      (project?.fileUrls && project.fileUrls.length > 0)) &&
                     (isOwner || hasPaidToView || isPaid || isFreeToView) ? (
                       <>
                         {previewLoading && (
@@ -610,7 +627,23 @@ const PublisherPrototypeDetailPage: React.FC<
                             </div>
                           </div>
                         )}
-                        {htmlContent && !previewLoading && !previewError && (
+                        {/* Show preview - if previewCode exists, use src directly; otherwise use srcDoc with htmlContent */}
+                        {project?.previewCode && !previewLoading && !previewError && (
+                          <iframe
+                            key={previewKey}
+                            src={project.previewCode}
+                            className="w-full h-full border-0"
+                            style={{
+                              transform: "scale(1)",
+                              transformOrigin: "top left",
+                              width: "100%",
+                              height: "100%",
+                            }}
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                            title={`Preview of ${project.title}`}
+                          />
+                        )}
+                        {!project?.previewCode && htmlContent && !previewLoading && !previewError && (
                           <iframe
                             key={previewKey}
                             srcDoc={(() => {
