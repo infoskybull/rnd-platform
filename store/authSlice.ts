@@ -245,6 +245,27 @@ export const initializeAuth = createAsyncThunk(
               return { user: updatedUser, accessToken, refreshToken };
             }
           } catch (verifyError) {
+            // Check if error is due to refresh token expiration
+            const errorMessage =
+              verifyError instanceof Error
+                ? verifyError.message
+                : String(verifyError);
+            const isRefreshTokenExpired =
+              errorMessage.includes("Refresh token expired") ||
+              errorMessage.includes("Session expired") ||
+              errorMessage.includes("expired") ||
+              errorMessage.includes("not authorized");
+
+            if (isRefreshTokenExpired) {
+              console.log(
+                "Refresh token expired during verification, forcing logout and clearing tokens"
+              );
+              // Force logout to clear all tokens and state
+              await apiService.logout();
+              // Return empty state instead of using cached data
+              return { user: null, accessToken: null, refreshToken: null };
+            }
+
             console.warn(
               "Failed to verify user with server, using cached data:",
               verifyError
@@ -304,6 +325,25 @@ export const initializeAuth = createAsyncThunk(
           return { user, accessToken, refreshToken };
         } catch (error) {
           console.error("Token verification failed:", error);
+          // Check if error is due to refresh token expiration
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isRefreshTokenExpired =
+            errorMessage.includes("Refresh token expired") ||
+            errorMessage.includes("Session expired") ||
+            errorMessage.includes("expired") ||
+            errorMessage.includes("not authorized");
+
+          if (isRefreshTokenExpired) {
+            console.log(
+              "Refresh token expired detected, forcing logout and clearing tokens"
+            );
+            // Force logout to clear all tokens and state
+            await apiService.logout();
+            // Return empty state instead of throwing error
+            return { user: null, accessToken: null, refreshToken: null };
+          }
+
           // Tokens are invalid, clear them
           apiService.logout();
           throw error;
@@ -314,6 +354,30 @@ export const initializeAuth = createAsyncThunk(
       return { user: null, accessToken: null, refreshToken: null };
     } catch (error) {
       console.error("Auth initialization failed:", error);
+      
+      // Check if error is due to refresh token expiration
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const isRefreshTokenExpired =
+        errorMessage.includes("Refresh token expired") ||
+        errorMessage.includes("Session expired") ||
+        errorMessage.includes("expired") ||
+        errorMessage.includes("not authorized");
+
+      if (isRefreshTokenExpired) {
+        console.log(
+          "Refresh token expired during initialization, forcing logout"
+        );
+        // Force logout to clear all tokens and state
+        try {
+          await apiService.logout();
+        } catch (logoutError) {
+          console.error("Error during forced logout:", logoutError);
+        }
+        // Return empty state instead of rejecting with error
+        return { user: null, accessToken: null, refreshToken: null };
+      }
+
       return rejectWithValue(
         error instanceof Error ? error.message : "Auth initialization failed"
       );
@@ -918,7 +982,17 @@ const authSlice = createSlice({
         state.user = null;
         state.accessToken = null;
         state.refreshToken = null;
-        state.error = action.payload as string;
+        
+        // Don't show error if it's related to expired tokens - these are handled gracefully
+        const errorMessage = (action.payload as string) || "";
+        const isTokenExpiredError =
+          errorMessage.includes("Refresh token expired") ||
+          errorMessage.includes("Session expired") ||
+          errorMessage.includes("expired") ||
+          errorMessage.includes("not authorized");
+        
+        // Only set error if it's not a token expiration error
+        state.error = isTokenExpiredError ? null : (action.payload as string);
         state.isInitialized = true;
       })
       // Login user

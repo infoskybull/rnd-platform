@@ -698,6 +698,16 @@ class ApiService {
             errorMessage = errorText || errorMessage;
           }
 
+          // If refresh token endpoint returns 401/403, refresh token has expired
+          if (response.status === 401 || response.status === 403) {
+            console.error(
+              "[API Interceptor] Refresh token has expired (401/403), forcing logout"
+            );
+            // Force logout before throwing error
+            this.logout();
+            throw new Error("Refresh token expired. Please login again.");
+          }
+
           if (response.status === 404) {
             throw new Error("Refresh endpoint not implemented");
           }
