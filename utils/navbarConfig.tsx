@@ -100,16 +100,18 @@ export const getNavigationItems = (
     });
     baseItems.push({
       label: "Upload",
-      path: "/prototype/upload",
+      path: "/prototype/upload?type=file&scale=devider",
       icon: uploadIcon,
     });
   }
 
   return baseItems.map((item) => ({
     ...item,
-    active: activePath
-      ? activePath === item.path || activePath.startsWith(item.path + "/")
-      : false,
+    active: (() => {
+      if (!activePath) return false;
+      const basePath = item.path.split("?")[0];
+      return activePath === basePath || activePath.startsWith(basePath + "/");
+    })(),
   }));
 };
 

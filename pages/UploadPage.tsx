@@ -56,6 +56,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     if (!isFileUploadType) {
       setPrototypeFiles([]);
       setPrototypeFileKey("");
+      setValidationErrors((prev) => ({
+        ...prev,
+        prototypeUpload: false,
+      }));
     }
   }, [isFileUploadType]);
 
@@ -218,6 +222,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
     sellingPrice: false,
     appIcon: false,
     featureImage: false,
+    prototypeUpload: false,
   });
   const [projectNameWarning, setProjectNameWarning] = useState(false);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
@@ -781,6 +786,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             featureImageFiles.length === 0 && featureImageFileKey === "";
           break;
         }
+        case "prototypeUpload": {
+          // Only required when type=file is present
+          newErrors.prototypeUpload = isFileUploadType
+            ? prototypeFiles.length === 0 && prototypeFileKey === ""
+            : false;
+          break;
+        }
       }
 
       return newErrors;
@@ -799,6 +811,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       sellingPrice: false,
       appIcon: false,
       featureImage: false,
+      prototypeUpload: false,
     };
 
     // Check if project name is still "Unnamed" or "Project name" or empty
@@ -874,6 +887,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.featureImage = true;
     }
 
+    // Validate Prototype Upload - required only when type=file
+    if (isFileUploadType) {
+      if (prototypeFiles.length === 0 && prototypeFileKey === "") {
+        errors.prototypeUpload = true;
+      }
+    }
+
     // If there are any errors, show them directly on the fields
     if (
       errors.projectName ||
@@ -884,7 +904,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.genre ||
       errors.sellingPrice ||
       errors.appIcon ||
-      errors.featureImage
+      errors.featureImage ||
+      errors.prototypeUpload
     ) {
       setValidationErrors(errors);
       // Scroll to first error field
@@ -951,6 +972,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             behavior: "smooth",
             block: "center",
           });
+        } else if (errors.prototypeUpload) {
+          const prototypeSection = document.getElementById(
+            "prototype-upload-section"
+          );
+          prototypeSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 100);
       return;
@@ -967,6 +996,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       sellingPrice: false,
       appIcon: false,
       featureImage: false,
+      prototypeUpload: false,
     });
 
     // Upload files if needed
@@ -1171,6 +1201,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       sellingPrice: false,
       appIcon: false,
       featureImage: false,
+      prototypeUpload: false,
     };
 
     // Check if project name is still "Unnamed" or "Project name" or empty
@@ -1246,6 +1277,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.featureImage = true;
     }
 
+    // Validate Prototype Upload - required only when type=file
+    if (isFileUploadType) {
+      if (prototypeFiles.length === 0 && prototypeFileKey === "") {
+        errors.prototypeUpload = true;
+      }
+    }
+
     // If there are any errors, show them directly on the fields
     if (
       errors.projectName ||
@@ -1256,7 +1294,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       errors.genre ||
       errors.sellingPrice ||
       errors.appIcon ||
-      errors.featureImage
+      errors.featureImage ||
+      errors.prototypeUpload
     ) {
       setValidationErrors(errors);
       // Scroll to first error field
@@ -1323,6 +1362,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             behavior: "smooth",
             block: "center",
           });
+        } else if (errors.prototypeUpload) {
+          const prototypeSection = document.getElementById(
+            "prototype-upload-section"
+          );
+          prototypeSection?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 100);
       return;
@@ -1339,6 +1386,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
       sellingPrice: false,
       appIcon: false,
       featureImage: false,
+      prototypeUpload: false,
     });
 
     // Upload files if needed
@@ -1553,8 +1601,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 ? "none"
                 : "1",
             minWidth: "300px",
-          }}
-        >
+          }}>
           <div className="flex-1 overflow-y-auto">
             {/* Project Name */}
             <div className="mb-6 p-2">
@@ -1697,21 +1744,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 {/* Tags */}
                 <div
                   className="mb-6 flex flex-col min-h-[42px] relative"
-                  ref={tagInputRef}
-                >
+                  ref={tagInputRef}>
                   {/* Tags display area - can wrap and scale */}
                   {tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 min-h-[26px]">
                       {tags.map((tag) => (
                         <span
                           key={tag}
-                          className="inline-flex items-center px-3 py-1 rounded-[10%] bg-gray-100 border border-gray-300 text-gray-700 text-sm whitespace-nowrap flex-shrink-0"
-                        >
+                          className="inline-flex items-center px-3 py-1 rounded-[10%] bg-gray-100 border border-gray-300 text-gray-700 text-sm whitespace-nowrap flex-shrink-0">
                           #{tag}
                           <button
                             onClick={() => handleTagRemove(tag)}
-                            className="ml-2 text-gray-500 hover:text-gray-700"
-                          >
+                            className="ml-2 text-gray-500 hover:text-gray-700">
                             ×
                           </button>
                         </span>
@@ -1762,21 +1806,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                           className="animate-spin h-5 w-5 text-blue-500"
                           xmlns="http://www.w3.org/2000/svg"
                           fill="none"
-                          viewBox="0 0 24 24"
-                        >
+                          viewBox="0 0 24 24">
                           <circle
                             className="opacity-25"
                             cx="12"
                             cy="12"
                             r="10"
                             stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
+                            strokeWidth="4"></circle>
                           <path
                             className="opacity-75"
                             fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                       </div>
                     )}
@@ -1795,14 +1836,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             <div
                               key={index}
                               onClick={() => handleSelectSuggestion(suggestion)}
-                              className="px-4 py-2 cursor-pointer hover:bg-blue-50 text-gray-700 text-sm flex items-center gap-2"
-                            >
+                              className="px-4 py-2 cursor-pointer hover:bg-blue-50 text-gray-700 text-sm flex items-center gap-2">
                               <svg
                                 className="w-4 h-4 text-blue-500"
                                 fill="none"
                                 stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                                viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
@@ -1860,14 +1899,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             }));
                           }
                         }}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
-                      >
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10">
                         <svg
                           className="w-3 h-3 text-gray-600"
                           fill="none"
                           stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
+                          viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -1896,8 +1933,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                               platform === p
                                 ? "bg-blue-50 text-blue-700"
                                 : "text-gray-700"
-                            }`}
-                          >
+                            }`}>
                             {p}
                           </div>
                         ))}
@@ -1945,14 +1981,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             }));
                           }
                         }}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
-                      >
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full border border-gray-300 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors z-10">
                         <svg
                           className="w-3 h-3 text-gray-600"
                           fill="none"
                           stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
+                          viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -1981,8 +2015,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                               selectedGenre === g
                                 ? "bg-blue-50 text-blue-700"
                                 : "text-gray-700"
-                            }`}
-                          >
+                            }`}>
                             {g}
                           </div>
                         ))}
@@ -2016,8 +2049,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                         selectedPackages.includes(pkg.id)
                           ? "border-blue-600 bg-blue-50"
                           : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
+                      }`}>
                       {/* Checkbox in top right */}
                       <div className="absolute top-3 right-3 z-10">
                         <CustomCheckbox
@@ -2054,8 +2086,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             ? "border-red-500 bg-red-50"
                             : "border-blue-600 bg-blue-50"
                           : "border-gray-300"
-                      }`}
-                    >
+                      }`}>
                       <div className="flex items-start gap-2 justify-between">
                         <span
                           className="text-gray-600"
@@ -2065,8 +2096,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                             fontSize: "20px",
                             lineHeight: "100%",
                             letterSpacing: "0%",
-                          }}
-                        >
+                          }}>
                           USD
                         </span>
                         <input
@@ -2136,8 +2166,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 ? `${rightSectionWidth}px`
                 : "384px",
             minWidth: "300px",
-          }}
-        >
+          }}>
           <div className="flex-1 overflow-y-auto space-y-2 pr-3 px-4 rounded-lg">
             {/* App Icon */}
             <FileUploadSection
@@ -2213,54 +2242,75 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
 
             {/* Prototype Upload - Only show when type=file */}
             {isFileUploadType && (
-              <PrototypeUploadSection
-                title="Upload Prototype"
-                required={false}
-                onFilesChange={setPrototypeFiles}
-                maxFileSize={100 * 1024 * 1024} // 100MB
-                initialFiles={
-                  prototypeFiles.length > 0 ? prototypeFiles : undefined
-                }
-                onUploadComplete={(fileKey, fileUrl, previewCode) => {
-                  setPrototypeFileKey(fileKey);
-                  setPrototypeFileUrl(fileUrl);
-                  if (previewCode) {
-                    setPrototypePreviewCode(previewCode);
-                  }
-                }}
-                onPreviewDeviceChange={(previewWidth) => {
-                  // Auto-adjust right section width based on preview width
-                  // Only adjust if widths are already initialized
-                  if (
-                    leftSectionWidth === null ||
-                    rightSectionWidth === null ||
-                    !mainContentRef.current
-                  ) {
-                    return;
-                  }
-
-                  // Add padding and margins: phone frame (16px) + container padding (16px) + section padding (16px) + extra space (40px)
-                  const requiredWidth = previewWidth + 16 + 16 + 16 + 40; // preview + phone frame + container padding + section padding + extra space
-                  const minRightWidth = Math.max(300, requiredWidth);
-                  const maxRightWidth = 800;
-
-                  if (minRightWidth <= maxRightWidth) {
-                    // Adjust right section width, but keep left section reasonable
-                    const containerWidth =
-                      mainContentRef.current.getBoundingClientRect().width;
-                    const newRightWidth = Math.min(
-                      maxRightWidth,
-                      Math.max(minRightWidth, rightSectionWidth)
-                    );
-                    const newLeftWidth = containerWidth - newRightWidth - 8; // 8px for divider and gap
-
-                    if (newLeftWidth >= 300) {
-                      setRightSectionWidth(newRightWidth);
-                      setLeftSectionWidth(newLeftWidth);
+              <div id="prototype-upload-section">
+                <PrototypeUploadSection
+                  title="Upload Prototype"
+                  required={true}
+                  onFilesChange={(files) => {
+                    setPrototypeFiles(files);
+                    if (validationErrors.prototypeUpload && files.length > 0) {
+                      setValidationErrors((prev) => ({
+                        ...prev,
+                        prototypeUpload: false,
+                      }));
                     }
+                  }}
+                  maxFileSize={100 * 1024 * 1024} // 100MB
+                  initialFiles={
+                    prototypeFiles.length > 0 ? prototypeFiles : undefined
                   }
-                }}
-              />
+                  validationError={
+                    validationErrors.prototypeUpload
+                      ? "Prototype upload is required"
+                      : undefined
+                  }
+                  onUploadComplete={(fileKey, fileUrl, previewCode) => {
+                    setPrototypeFileKey(fileKey);
+                    setPrototypeFileUrl(fileUrl);
+                    if (previewCode) {
+                      setPrototypePreviewCode(previewCode);
+                    }
+                    if (validationErrors.prototypeUpload && fileKey) {
+                      setValidationErrors((prev) => ({
+                        ...prev,
+                        prototypeUpload: false,
+                      }));
+                    }
+                  }}
+                  onPreviewDeviceChange={(previewWidth) => {
+                    // Auto-adjust right section width based on preview width
+                    // Only adjust if widths are already initialized
+                    if (
+                      leftSectionWidth === null ||
+                      rightSectionWidth === null ||
+                      !mainContentRef.current
+                    ) {
+                      return;
+                    }
+
+                    // Add padding and margins: phone frame (16px) + container padding (16px) + section padding (16px) + extra space (40px)
+                    const requiredWidth = previewWidth + 16 + 16 + 16 + 40; // preview + phone frame + container padding + section padding + extra space
+                    const minRightWidth = Math.max(300, requiredWidth);
+                    const maxRightWidth = 800;
+
+                    if (minRightWidth <= maxRightWidth) {
+                      // Adjust right section width, but keep left section reasonable
+                      const containerWidth =
+                        mainContentRef.current.getBoundingClientRect().width;
+                      const newRightWidth = Math.min(
+                        maxRightWidth,
+                        Math.max(minRightWidth, rightSectionWidth)
+                      );
+                      const newLeftWidth = containerWidth - newRightWidth - 8; // 8px for divider and gap
+
+                      if (newLeftWidth >= 300) {
+                        setRightSectionWidth(newRightWidth);
+                        setLeftSectionWidth(newLeftWidth);
+                      }
+                    }
+                  }}
+                />
+              </div>
             )}
           </div>
 
@@ -2276,8 +2326,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 fontSize: "20px",
                 lineHeight: "100%",
                 letterSpacing: "0%",
-              }}
-            >
+              }}>
               Cancel
             </button>
             <button
@@ -2291,8 +2340,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 fontSize: "20px",
                 lineHeight: "100%",
                 letterSpacing: "0%",
-              }}
-            >
+              }}>
               {creating || uploadingFiles ? "Saving..." : "Save as draft"}
             </button>
             <button
@@ -2306,8 +2354,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                 fontSize: "20px",
                 lineHeight: "100%",
                 letterSpacing: "0%",
-              }}
-            >
+              }}>
               {creating || uploadingFiles ? "Publishing..." : "Publish"}
             </button>
           </div>
@@ -2325,8 +2372,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                     className="w-6 h-6 text-yellow-600"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -2441,8 +2487,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
                       }
                     }
                   }}
-                  className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-                >
+                  className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium">
                   OK
                 </button>
               </div>
@@ -2458,8 +2503,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
             toastType === "success"
               ? "bg-green-600 text-white"
               : "bg-red-600 text-white"
-          }`}
-        >
+          }`}>
           <span>{toastMessage}</span>
         </div>
       )}
