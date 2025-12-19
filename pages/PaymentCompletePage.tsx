@@ -7,6 +7,7 @@ import RnDLogo from "../components/icons/RnDLogo";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 
 const PaymentCompletePage: React.FC = () => {
@@ -148,7 +149,9 @@ const PaymentCompletePage: React.FC = () => {
 
   // Get navigation items for navbar
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -185,8 +188,7 @@ const PaymentCompletePage: React.FC = () => {
                   className="w-12 h-12 text-white"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                  viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -274,8 +276,7 @@ const PaymentCompletePage: React.FC = () => {
             {/* Done Button */}
             <button
               onClick={handleDone}
-              className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-            >
+              className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
               Done
             </button>
           </div>
@@ -294,8 +295,7 @@ const PaymentCompletePage: React.FC = () => {
             <p className="text-gray-600 mb-6">{message}</p>
             <button
               onClick={() => navigate("/payment")}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
               Return to Payment
             </button>
           </div>

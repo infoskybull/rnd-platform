@@ -52,7 +52,7 @@ const AdminRouteWrapper: React.FC<AdminRouteWrapperProps> = ({ page }) => {
       case "accounts":
         return <AdminAccountsPage />;
       case "messages":
-        return <MessagesTab useFullHeight />;
+        return <MessagesTab useFullHeight theme="light" />;
       case "reports":
         return <AdminReportsPage />;
       case "projects":

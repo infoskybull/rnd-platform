@@ -6,6 +6,7 @@ import RnDLogo from "../components/icons/RnDLogo";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import { usePublisherDashboard } from "../hooks/usePublisherDashboard";
 import { apiService } from "../services/api";
@@ -33,7 +34,9 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
 
   // Get navigation items with active state based on current path
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   // Fetch dashboard data
   const {
@@ -211,8 +214,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                     activeFilter === filter
                       ? "bg-blue-500 text-white shadow-sm"
                       : "text-gray-700 hover:text-gray-900"
-                  }`}
-                >
+                  }`}>
                   {filter}
                 </button>
               ))}
@@ -224,16 +226,14 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                 viewMode === "list"
                   ? "Switch to Grid View"
                   : "Switch to List View"
-              }
-            >
+              }>
               {viewMode === "list" ? (
                 <svg
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z"
                     stroke="#757575"
@@ -255,8 +255,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                   height="25"
                   viewBox="0 0 25 15"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     fillRule="evenodd"
                     clip-rule="evenodd"
@@ -279,8 +278,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
             <div className="text-red-500">Error: {error}</div>
             <button
               onClick={refresh}
-              className="ml-4 text-sm underline hover:no-underline"
-            >
+              className="ml-4 text-sm underline hover:no-underline">
               Try again
             </button>
           </div>
@@ -315,8 +313,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                     <tr>
                       <td
                         colSpan={6}
-                        className="px-6 py-12 text-center text-gray-500"
-                      >
+                        className="px-6 py-12 text-center text-gray-500">
                         No projects found
                       </td>
                     </tr>
@@ -327,8 +324,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                         <tr
                           key={project._id}
                           className="hover:bg-gray-50 cursor-pointer"
-                          onClick={() => handleProjectClick(project)}
-                        >
+                          onClick={() => handleProjectClick(project)}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <div className="w-12 h-12 bg-gray-200 rounded flex-shrink-0 flex items-center justify-center">
@@ -405,8 +401,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                   <div
                     key={project._id}
                     onClick={() => handleProjectClick(project)}
-                    className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all duration-300 cursor-pointer group relative aspect-square"
-                  >
+                    className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all duration-300 cursor-pointer group relative aspect-square">
                     {/* Thumbnail Section - Takes 100% initially, 50% on hover */}
                     <div className="relative w-full h-full bg-gray-200 overflow-hidden transition-all duration-300 group-hover:h-1/2">
                       {project.thumbnail ? (
@@ -439,8 +434,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                               : status === "Completed"
                               ? "bg-purple-500 text-white"
                               : "bg-gray-500 text-white"
-                          }`}
-                        >
+                          }`}>
                           {status}
                         </span>
                       </div>
@@ -480,8 +474,7 @@ const PublisherDashboardPage: React.FC<PublisherDashboardPageProps> = ({
                               viewBox="0 0 33 33"
                               fill="none"
                               xmlns="http://www.w3.org/2000/svg"
-                              style={{ transform: "scale(1.25)" }}
-                            >
+                              style={{ transform: "scale(1.25)" }}>
                               <path
                                 fillRule="evenodd"
                                 clipRule="evenodd"

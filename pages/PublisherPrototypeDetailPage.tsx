@@ -8,6 +8,7 @@ import { useAuth } from "../hooks/useAuth";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 
 interface PublisherPrototypeDetailPageProps {
@@ -42,7 +43,9 @@ const PublisherPrototypeDetailPage: React.FC<
 
   // Get navigation items with active state based on current path
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   // Helper function to check if project is free (payToViewAmount is 0, null, undefined, or missing)
   const isFreeToView = useMemo(() => {
@@ -263,10 +266,7 @@ const PublisherPrototypeDetailPage: React.FC<
       }
 
       // Priority 2: Fallback to fileUrls (extract from ZIP)
-      if (
-        !project?.fileUrls ||
-        project.fileUrls.length === 0
-      ) {
+      if (!project?.fileUrls || project.fileUrls.length === 0) {
         setHtmlContent("");
         setProjectFiles({});
         return;
@@ -344,7 +344,14 @@ const PublisherPrototypeDetailPage: React.FC<
     };
 
     loadProjectPreview();
-  }, [project?.previewCode, project?.fileUrls, isPaid, hasPaidToView, isFreeToView, isOwner]);
+  }, [
+    project?.previewCode,
+    project?.fileUrls,
+    isPaid,
+    hasPaidToView,
+    isFreeToView,
+    isOwner,
+  ]);
 
   // Listen for file requests from the preview iframe
   useEffect(() => {
@@ -579,16 +586,14 @@ const PublisherPrototypeDetailPage: React.FC<
                 isPurchasedOrCollaboration
                   ? "mt-10 flex-1 justify-center"
                   : "mt-10"
-              }`}
-            >
+              }`}>
               {/* Preview Area - Mobile Screen Preview */}
               <div className="relative flex items-center justify-center mb-4">
                 {/* Mobile Preview - Larger when purchased/collaboration */}
                 <div
                   className={`relative ${
                     isPurchasedOrCollaboration ? "w-[420px]" : "w-[280px]"
-                  } aspect-[9/16] bg-gray-800 rounded-[2.5rem] p-2 shadow-2xl`}
-                >
+                  } aspect-[9/16] bg-gray-800 rounded-[2.5rem] p-2 shadow-2xl`}>
                   {/* Phone Frame */}
                   <div
                     className="relative w-full h-full bg-white rounded-[2rem] overflow-hidden transition-all duration-300"
@@ -597,13 +602,12 @@ const PublisherPrototypeDetailPage: React.FC<
                         isOwner || hasPaidToView || isPaid || isFreeToView
                           ? "blur(0px)"
                           : "blur(10px)",
-                    }}
-                  >
+                    }}>
                     {/* Notch */}
                     <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-gray-800 rounded-b-2xl z-20"></div>
 
                     {/* Project Preview - prioritize previewCode, fallback to fileUrls */}
-                    {((project?.previewCode) ||
+                    {(project?.previewCode ||
                       (project?.fileUrls && project.fileUrls.length > 0)) &&
                     (isOwner || hasPaidToView || isPaid || isFreeToView) ? (
                       <>
@@ -628,27 +632,32 @@ const PublisherPrototypeDetailPage: React.FC<
                           </div>
                         )}
                         {/* Show preview - if previewCode exists, use src directly; otherwise use srcDoc with htmlContent */}
-                        {project?.previewCode && !previewLoading && !previewError && (
-                          <iframe
-                            key={previewKey}
-                            src={project.previewCode}
-                            className="w-full h-full border-0"
-                            style={{
-                              transform: "scale(1)",
-                              transformOrigin: "top left",
-                              width: "100%",
-                              height: "100%",
-                            }}
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                            title={`Preview of ${project.title}`}
-                          />
-                        )}
-                        {!project?.previewCode && htmlContent && !previewLoading && !previewError && (
-                          <iframe
-                            key={previewKey}
-                            srcDoc={(() => {
-                              // Interceptor script to handle file requests
-                              const interceptorScript = `
+                        {project?.previewCode &&
+                          !previewLoading &&
+                          !previewError && (
+                            <iframe
+                              key={previewKey}
+                              src={project.previewCode}
+                              className="w-full h-full border-0"
+                              style={{
+                                transform: "scale(1)",
+                                transformOrigin: "top left",
+                                width: "100%",
+                                height: "100%",
+                              }}
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              title={`Preview of ${project.title}`}
+                            />
+                          )}
+                        {!project?.previewCode &&
+                          htmlContent &&
+                          !previewLoading &&
+                          !previewError && (
+                            <iframe
+                              key={previewKey}
+                              srcDoc={(() => {
+                                // Interceptor script to handle file requests
+                                const interceptorScript = `
                                 const requests = new Map();
                                 let requestIdCounter = 0;
 
@@ -724,8 +733,8 @@ const PublisherPrototypeDetailPage: React.FC<
                                 };
                               `;
 
-                              // Mobile viewport CSS for proper fit in mobile preview - full screen
-                              const mobileViewportCSS = `
+                                // Mobile viewport CSS for proper fit in mobile preview - full screen
+                                const mobileViewportCSS = `
                                 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                                 <style>
                                   /* Mobile viewport rules for game preview - full screen */
@@ -801,28 +810,28 @@ const PublisherPrototypeDetailPage: React.FC<
                                 </style>
                               `;
 
-                              const headEndIndex = htmlContent
-                                .toLowerCase()
-                                .indexOf("</head>");
-                              return headEndIndex !== -1
-                                ? htmlContent.slice(0, headEndIndex) +
-                                    mobileViewportCSS +
-                                    `<script>${interceptorScript}</script>` +
-                                    htmlContent.slice(headEndIndex)
-                                : `<head>${mobileViewportCSS}<script>${interceptorScript}</script></head>` +
-                                    htmlContent;
-                            })()}
-                            className="w-full h-full border-0"
-                            style={{
-                              transform: "scale(1)",
-                              transformOrigin: "top left",
-                              width: "100%",
-                              height: "100%",
-                            }}
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                            title={`Preview of ${project.title}`}
-                          />
-                        )}
+                                const headEndIndex = htmlContent
+                                  .toLowerCase()
+                                  .indexOf("</head>");
+                                return headEndIndex !== -1
+                                  ? htmlContent.slice(0, headEndIndex) +
+                                      mobileViewportCSS +
+                                      `<script>${interceptorScript}</script>` +
+                                      htmlContent.slice(headEndIndex)
+                                  : `<head>${mobileViewportCSS}<script>${interceptorScript}</script></head>` +
+                                      htmlContent;
+                              })()}
+                              className="w-full h-full border-0"
+                              style={{
+                                transform: "scale(1)",
+                                transformOrigin: "top left",
+                                width: "100%",
+                                height: "100%",
+                              }}
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              title={`Preview of ${project.title}`}
+                            />
+                          )}
                         {!htmlContent && !previewLoading && !previewError && (
                           <div className="w-full h-full flex items-center justify-center bg-gray-100">
                             <div className="text-gray-600 text-xs text-center px-2">
@@ -875,8 +884,7 @@ const PublisherPrototypeDetailPage: React.FC<
                       }
                     }}
                     className="w-32 px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap flex items-center justify-center gap-2"
-                    title="Edit this prototype"
-                  >
+                    title="Edit this prototype">
                     Edit
                   </button>
                 </div>
@@ -905,8 +913,7 @@ const PublisherPrototypeDetailPage: React.FC<
                         {pkg.contents.map((content, idx) => (
                           <div
                             key={idx}
-                            className="text-sm text-gray-600 flex items-start leading-relaxed"
-                          >
+                            className="text-sm text-gray-600 flex items-start leading-relaxed">
                             <span className="text-blue-600 mr-2 mt-0.5">•</span>
                             <span>{content}</span>
                           </div>
@@ -923,20 +930,17 @@ const PublisherPrototypeDetailPage: React.FC<
                           <div className="flex gap-2 mt-auto">
                             <button
                               disabled
-                              className="flex-[2] px-4 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed text-sm"
-                            >
+                              className="flex-[2] px-4 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed text-sm">
                               Paid
                             </button>
                             <button
                               disabled
-                              className="flex-[1] px-3 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed flex items-center justify-center"
-                            >
+                              className="flex-[1] px-3 py-2.5 bg-gray-400 text-white font-medium rounded-lg cursor-not-allowed flex items-center justify-center">
                               <svg
                                 className="w-5 h-5"
                                 fill="none"
                                 stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                                viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
@@ -952,20 +956,17 @@ const PublisherPrototypeDetailPage: React.FC<
                             <div className="flex gap-2 mt-auto">
                               <button
                                 onClick={() => handlePurchase(pkg)}
-                                className="flex-[2] px-4 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                              >
+                                className="flex-[2] px-4 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors text-sm">
                                 Pay
                               </button>
                               <button
                                 onClick={() => handlePurchase(pkg)}
-                                className="flex-[1] px-3 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center"
-                              >
+                                className="flex-[1] px-3 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center">
                                 <svg
                                   className="w-5 h-5"
                                   fill="none"
                                   stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
+                                  viewBox="0 0 24 24">
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
@@ -1004,8 +1005,7 @@ const PublisherPrototypeDetailPage: React.FC<
                       className="w-12 h-12 text-white"
                       fill="none"
                       stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                      viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1044,14 +1044,12 @@ const PublisherPrototypeDetailPage: React.FC<
                       isFollowing
                         ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
                         : "bg-blue-500 text-white hover:bg-blue-600"
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}>
                     <svg
                       className="w-4 h-4"
                       fill="none"
                       stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                      viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1066,14 +1064,12 @@ const PublisherPrototypeDetailPage: React.FC<
                   onClick={() =>
                     navigate(`/dashboard/publisher/portfolio/${id || "1"}`)
                   }
-                  className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
-                >
+                  className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2">
                   <svg
                     className="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1121,8 +1117,7 @@ const PublisherPrototypeDetailPage: React.FC<
                   !showMore && (
                     <button
                       onClick={() => setShowMore(true)}
-                      className="text-blue-600 ml-1 hover:underline"
-                    >
+                      className="text-blue-600 ml-1 hover:underline">
                       Show more
                     </button>
                   )}
@@ -1138,16 +1133,14 @@ const PublisherPrototypeDetailPage: React.FC<
                 <button
                   onClick={handleLike}
                   disabled={!isAuthenticated || !user?.id}
-                  className="flex items-center gap-1 hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                  className="flex items-center gap-1 hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed">
                   <svg
                     className={`w-4 h-4 ${
                       isLikedByUser ? "text-blue-600" : "text-gray-600"
                     }`}
                     fill={isLikedByUser ? "currentColor" : "none"}
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1160,8 +1153,7 @@ const PublisherPrototypeDetailPage: React.FC<
                       isLikedByUser
                         ? "text-blue-600 font-medium"
                         : "text-gray-600"
-                    }`}
-                  >
+                    }`}>
                     {project.likeCount || 0}
                   </span>
                 </button>
@@ -1170,8 +1162,7 @@ const PublisherPrototypeDetailPage: React.FC<
                     className="w-4 h-4 text-gray-600"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1194,8 +1185,7 @@ const PublisherPrototypeDetailPage: React.FC<
                     className="w-4 h-4 text-gray-600"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1220,8 +1210,7 @@ const PublisherPrototypeDetailPage: React.FC<
                   project.tags.map((tag, idx) => (
                     <span
                       key={idx}
-                      className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                    >
+                      className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
                       #{tag}
                     </span>
                   ))

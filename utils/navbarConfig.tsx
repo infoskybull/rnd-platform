@@ -7,14 +7,28 @@ export interface NavigationItem {
   active?: boolean;
 }
 
+export const getMessagesPathForRole = (
+  role: "creator" | "publisher" | "admin" | undefined
+) => {
+  switch (role) {
+    case "creator":
+      return "/dashboard/creator/messages";
+    case "publisher":
+      return "/dashboard/publisher/messages";
+    case "admin":
+      return "/admin/messages";
+    default:
+      return "/dashboard";
+  }
+};
+
 // Common navigation items
 const dashboardIcon = (
   <svg
     className="w-5 h-5"
     fill="none"
     stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
+    viewBox="0 0 24 24">
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -29,8 +43,7 @@ const marketplaceIcon = (
     className="w-5 h-5"
     fill="none"
     stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
+    viewBox="0 0 24 24">
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -45,8 +58,7 @@ const useAIIcon = (
     className="w-5 h-5"
     fill="none"
     stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
+    viewBox="0 0 24 24">
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -61,8 +73,7 @@ const uploadIcon = (
     className="w-5 h-5"
     fill="none"
     stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
+    viewBox="0 0 24 24">
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -130,15 +141,23 @@ export const getPublisherNavigationItems = (
 };
 
 // Default right icons (notifications, messages, cart)
-export const getDefaultRightIcons = () => [
+export const getDefaultRightIcons = (handlers?: {
+  onNotificationsClick?: () => void;
+  onMessagesClick?: () => void;
+  onCartClick?: () => void;
+  badges?: {
+    notifications?: number;
+    messages?: number;
+    cart?: number;
+  };
+}) => [
   {
     icon: (
       <svg
         className="w-6 h-6"
         fill="none"
         stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
+        viewBox="0 0 24 24">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -147,7 +166,8 @@ export const getDefaultRightIcons = () => [
         />
       </svg>
     ),
-    badge: 150,
+    badge: handlers?.badges?.notifications ?? 150,
+    onClick: handlers?.onNotificationsClick,
   },
   {
     icon: (
@@ -155,8 +175,7 @@ export const getDefaultRightIcons = () => [
         className="w-6 h-6"
         fill="none"
         stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
+        viewBox="0 0 24 24">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -165,7 +184,8 @@ export const getDefaultRightIcons = () => [
         />
       </svg>
     ),
-    badge: 150,
+    badge: handlers?.badges?.messages ?? 150,
+    onClick: handlers?.onMessagesClick,
   },
   {
     icon: (
@@ -173,8 +193,7 @@ export const getDefaultRightIcons = () => [
         className="w-6 h-6"
         fill="none"
         stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
+        viewBox="0 0 24 24">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -183,6 +202,7 @@ export const getDefaultRightIcons = () => [
         />
       </svg>
     ),
-    badge: 150,
+    badge: handlers?.badges?.cart ?? 150,
+    onClick: handlers?.onCartClick,
   },
 ];

@@ -7,6 +7,7 @@ import RnDLogo from "../components/icons/RnDLogo";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import {
   Web3WalletCredentials,
@@ -506,7 +507,9 @@ const PaymentPage: React.FC = () => {
 
   // Get navigation items for navbar (optional for payment page)
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   if (loadingProject) {
     return (
@@ -526,8 +529,7 @@ const PaymentPage: React.FC = () => {
           <p className="text-red-600 mb-4">Invalid payment amount</p>
           <button
             onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
-          >
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg">
             Go Back
           </button>
         </div>
@@ -737,8 +739,7 @@ const PaymentPage: React.FC = () => {
                     paymentMethod === "paypal"
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                       : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
+                  }`}>
                   <div className="flex items-center justify-center space-x-2">
                     <span className="font-semibold">PayPal</span>
                   </div>
@@ -750,15 +751,13 @@ const PaymentPage: React.FC = () => {
                     paymentMethod === "visa"
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                       : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
+                  }`}>
                   <div className="flex items-center justify-center space-x-2">
                     <svg
                       className="w-5 h-5"
                       fill="none"
                       stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                      viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -776,15 +775,13 @@ const PaymentPage: React.FC = () => {
                     paymentMethod === "web3"
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                       : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
+                  }`}>
                   <div className="flex items-center justify-center space-x-2">
                     <svg
                       className="w-5 h-5"
                       fill="none"
                       stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                      viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -812,8 +809,7 @@ const PaymentPage: React.FC = () => {
                           href="https://developer.paypal.com/dashboard/accounts"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline hover:text-yellow-900"
-                        >
+                          className="underline hover:text-yellow-900">
                           PayPal Developer Dashboard
                         </a>
                       </p>
@@ -829,8 +825,7 @@ const PaymentPage: React.FC = () => {
                   <button
                     onClick={handlePayPalPayment}
                     disabled={processing || paymentAmount === 0}
-                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2"
-                  >
+                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2">
                     {processing ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -841,8 +836,7 @@ const PaymentPage: React.FC = () => {
                         <svg
                           className="w-5 h-5"
                           fill="currentColor"
-                          viewBox="0 0 24 24"
-                        >
+                          viewBox="0 0 24 24">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
                         </svg>
                         <span>Pay with PayPal - ${paymentAmount}</span>
@@ -951,8 +945,7 @@ const PaymentPage: React.FC = () => {
                   <button
                     onClick={handleVisaPayment}
                     disabled={processing}
-                    className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-                  >
+                    className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
                     {processing ? "Processing..." : `Pay $${paymentAmount}`}
                   </button>
                 </div>
@@ -1006,16 +999,14 @@ const PaymentPage: React.FC = () => {
                           handleWeb3Payment(credentials);
                         }}
                         disabled={processing}
-                        className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-                      >
+                        className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
                         {processing ? "Processing..." : `Pay $${paymentAmount}`}
                       </button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setShowWeb3Modal(true)}
-                      className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-                    >
+                      className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
                       Connect Wallet
                     </button>
                   )}

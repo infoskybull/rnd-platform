@@ -5,6 +5,7 @@ import DashboardNavbar from "../components/DashboardNavbar";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import { generateGameCodeStream } from "../services/geminiService";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -743,7 +744,9 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
   };
 
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden">
@@ -759,8 +762,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
       <div className="w-full px-6 py-3 border-b border-gray-200 bg-white flex items-center justify-start">
         <button
           onClick={handleClearAll}
-          className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
+          className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
           Clear all
         </button>
         <div className="flex items-center gap-2 ml-auto">
@@ -770,8 +772,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
               height="28"
               viewBox="0 0 28 28"
               fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+              xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M5.83333 24.5C5.19167 24.5 4.64256 24.2717 4.186 23.8152C3.72944 23.3586 3.50078 22.8091 3.5 22.1667V5.83333C3.5 5.19167 3.72867 4.64256 4.186 4.186C4.64333 3.72944 5.19244 3.50078 5.83333 3.5H18.8708C19.1819 3.5 19.4787 3.55833 19.761 3.675C20.0433 3.79167 20.2911 3.95694 20.5042 4.17083L23.8292 7.49583C24.0431 7.70972 24.2083 7.95783 24.325 8.24017C24.4417 8.5225 24.5 8.81883 24.5 9.12917V22.1667C24.5 22.8083 24.2717 23.3578 23.8152 23.8152C23.3586 24.2725 22.8091 24.5008 22.1667 24.5H5.83333ZM22.1667 9.15833L18.8417 5.83333H5.83333V22.1667H22.1667V9.15833ZM14 21C14.9722 21 15.7986 20.6597 16.4792 19.9792C17.1597 19.2986 17.5 18.4722 17.5 17.5C17.5 16.5278 17.1597 15.7014 16.4792 15.0208C15.7986 14.3403 14.9722 14 14 14C13.0278 14 12.2014 14.3403 11.5208 15.0208C10.8403 15.7014 10.5 16.5278 10.5 17.5C10.5 18.4722 10.8403 19.2986 11.5208 19.9792C12.2014 20.6597 13.0278 21 14 21ZM8.16667 11.6667H16.3333C16.6639 11.6667 16.9412 11.5547 17.1652 11.3307C17.3892 11.1067 17.5008 10.8298 17.5 10.5V8.16667C17.5 7.83611 17.388 7.55922 17.164 7.336C16.94 7.11278 16.6631 7.00078 16.3333 7H8.16667C7.83611 7 7.55922 7.112 7.336 7.336C7.11278 7.56 7.00078 7.83689 7 8.16667V10.5C7 10.8306 7.112 11.1078 7.336 11.3318C7.56 11.5558 7.83689 11.6674 8.16667 11.6667ZM5.83333 9.15833V22.1667V5.83333V9.15833Z"
                 fill="#757575"
@@ -787,8 +788,9 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
               generatedCode === INITIAL_HTML_PLACEHOLDER
             }
             className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title={isDownloading ? "Downloading..." : "Download project as ZIP"}
-          >
+            title={
+              isDownloading ? "Downloading..." : "Download project as ZIP"
+            }>
             {isDownloading ? (
               <div className="w-7 h-7 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
             ) : (
@@ -797,8 +799,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 height="31"
                 viewBox="0 0 31 31"
                 fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
+                xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M15.4998 20.1178C15.3276 20.1178 15.1662 20.0911 15.0155 20.0377C14.8648 19.9843 14.7248 19.8926 14.5957 19.7626L9.94567 15.1126C9.68734 14.8543 9.56334 14.5529 9.57367 14.2084C9.584 13.864 9.708 13.5626 9.94567 13.3043C10.204 13.0459 10.511 12.9116 10.8666 12.9013C11.2223 12.8909 11.5288 13.0145 11.7863 13.272L14.2082 15.6938V6.45842C14.2082 6.09245 14.3322 5.78589 14.5802 5.53875C14.8282 5.29161 15.1347 5.16761 15.4998 5.16675C15.8649 5.16589 16.1719 5.28989 16.4208 5.53875C16.6697 5.78761 16.7932 6.09417 16.7915 6.45842V15.6938L19.2134 13.272C19.4717 13.0136 19.7787 12.8896 20.1343 12.9C20.49 12.9103 20.7965 13.0451 21.054 13.3043C21.2908 13.5626 21.4148 13.864 21.426 14.2084C21.4372 14.5529 21.3132 14.8543 21.054 15.1126L16.404 19.7626C16.2748 19.8918 16.1349 19.9835 15.9842 20.0377C15.8335 20.092 15.6721 20.1187 15.4998 20.1178ZM7.74984 25.8334C7.03942 25.8334 6.43148 25.5807 5.926 25.0752C5.42053 24.5697 5.16737 23.9614 5.1665 23.2501V20.6668C5.1665 20.3008 5.2905 19.9942 5.5385 19.7471C5.7865 19.4999 6.09306 19.3759 6.45817 19.3751C6.82328 19.3742 7.13027 19.4982 7.37913 19.7471C7.62799 19.9959 7.75156 20.3025 7.74984 20.6668V23.2501H23.2498V20.6668C23.2498 20.3008 23.3738 19.9942 23.6218 19.7471C23.8698 19.4999 24.1764 19.3759 24.5415 19.3751C24.9066 19.3742 25.2136 19.4982 25.4625 19.7471C25.7113 19.9959 25.8349 20.3025 25.8332 20.6668V23.2501C25.8332 23.9605 25.5804 24.5689 25.075 25.0752C24.5695 25.5815 23.9611 25.8343 23.2498 25.8334H7.74984Z"
                   fill="#757575"
@@ -820,8 +821,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 key={message.id}
                 className={`flex items-start gap-3 ${
                   message.isUser ? "justify-end" : ""
-                }`}
-              >
+                }`}>
                 {!message.isUser && (
                   <button
                     onClick={async () => {
@@ -842,15 +842,13 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                         ? "text-green-600 bg-green-50"
                         : "text-gray-400 hover:text-gray-600"
                     }`}
-                    title={copiedMessageId === message.id ? "Copied!" : "Copy"}
-                  >
+                    title={copiedMessageId === message.id ? "Copied!" : "Copy"}>
                     {copiedMessageId === message.id ? (
                       <svg
                         className="w-5 h-5"
                         fill="none"
                         stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                        viewBox="0 0 24 24">
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -864,8 +862,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                         height="20"
                         viewBox="0 0 20 20"
                         fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
+                        xmlns="http://www.w3.org/2000/svg">
                         <path
                           fillRule="evenodd"
                           clipRule="evenodd"
@@ -885,8 +882,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 <div
                   className={`flex-1 ${
                     message.isUser ? "flex justify-end" : ""
-                  }`}
-                >
+                  }`}>
                   <div className="max-w-md">
                     {!message.isUser && (
                       <div className="text-xs text-gray-500 mb-1">
@@ -924,8 +920,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                           message.isUser
                             ? "bg-gray-200 text-gray-800"
                             : "bg-white text-gray-800 border border-gray-200"
-                        }`}
-                      >
+                        }`}>
                         {message.isGenerating ? (
                           <div className="flex items-center gap-2">
                             <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
@@ -948,14 +943,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                             handleSaveEdit();
                           }}
                           className="p-1 text-green-600 hover:text-green-700 rounded flex-shrink-0"
-                          title="Save"
-                        >
+                          title="Save">
                           <svg
                             className="w-4 h-4"
                             fill="none"
                             stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
+                            viewBox="0 0 24 24">
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -970,14 +963,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                             handleCancelEdit();
                           }}
                           className="p-1 text-red-600 hover:text-red-700 rounded flex-shrink-0"
-                          title="Cancel"
-                        >
+                          title="Cancel">
                           <svg
                             className="w-4 h-4"
                             fill="none"
                             stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
+                            viewBox="0 0 24 24">
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -1010,15 +1001,13 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                           }`}
                           title={
                             copiedMessageId === message.id ? "Copied!" : "Copy"
-                          }
-                        >
+                          }>
                           {copiedMessageId === message.id ? (
                             <svg
                               className="w-5 h-5"
                               fill="none"
                               stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
+                              viewBox="0 0 24 24">
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -1032,8 +1021,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                               height="20"
                               viewBox="0 0 20 20"
                               fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
+                              xmlns="http://www.w3.org/2000/svg">
                               <path
                                 fillRule="evenodd"
                                 clipRule="evenodd"
@@ -1060,15 +1048,13 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                             handleEditMessage(message.id, message.text);
                           }}
                           className="p-1 text-gray-400 hover:text-gray-600 rounded flex-shrink-0"
-                          title="Edit"
-                        >
+                          title="Edit">
                           <svg
                             width="24"
                             height="24"
                             viewBox="0 0 24 24"
                             fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
+                            xmlns="http://www.w3.org/2000/svg">
                             <path
                               d="M4 21C3.71667 21 3.47933 20.904 3.288 20.712C3.09667 20.52 3.00067 20.2827 3 20V17.575C3 17.3083 3.05 17.054 3.15 16.812C3.25 16.57 3.39167 16.3577 3.575 16.175L16.2 3.575C16.4 3.39167 16.621 3.25 16.863 3.15C17.105 3.05 17.359 3 17.625 3C17.891 3 18.1493 3.05 18.4 3.15C18.6507 3.25 18.8673 3.4 19.05 3.6L20.425 5C20.625 5.18333 20.7707 5.4 20.862 5.65C20.9533 5.9 20.9993 6.15 21 6.4C21 6.66667 20.954 6.921 20.862 7.163C20.77 7.405 20.6243 7.62567 20.425 7.825L7.825 20.425C7.64167 20.6083 7.429 20.75 7.187 20.85C6.945 20.95 6.691 21 6.425 21H4ZM17.6 7.8L19 6.4L17.6 5L16.2 6.4L17.6 7.8Z"
                               fill="black"
@@ -1100,14 +1086,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 disabled={isLoading}
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed z-10"
                 type="button"
-                title="Upload file or image"
-              >
+                title="Upload file or image">
                 <svg
                   className="w-5 h-5"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                  viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1129,8 +1113,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 onClick={() => inputValue.trim() && handleSendMessage()}
                 disabled={isLoading}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                type="button"
-              >
+                type="button">
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                 ) : inputValue.trim() ? (
@@ -1138,8 +1121,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                     className="w-5 h-5"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1152,8 +1134,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                     className="w-5 h-5"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1169,8 +1150,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 {uploadedFiles.map((file, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm"
-                  >
+                    className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded text-sm">
                     <span className="truncate max-w-[150px]">{file.name}</span>
                     <button
                       onClick={() => {
@@ -1179,14 +1159,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                         );
                       }}
                       className="text-blue-700 hover:text-blue-900"
-                      type="button"
-                    >
+                      type="button">
                       <svg
                         className="w-4 h-4"
                         fill="none"
                         stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                        viewBox="0 0 24 24">
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -1212,8 +1190,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 activeTab === "preview"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
+              }`}>
               Preview
             </button>
             <button
@@ -1222,8 +1199,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 activeTab === "code"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
+              }`}>
               Code
             </button>
             <button
@@ -1232,8 +1208,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 activeTab === "fullscreen"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
+              }`}>
               Full screen
             </button>
           </div>
@@ -1381,8 +1356,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                           }
                         }}
                         disabled={isAutoUploading}
-                        className="my-4 px-8 py-3 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-                      >
+                        className="my-4 px-8 py-3 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto">
                         {isAutoUploading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1443,14 +1417,12 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
                 </h2>
                 <button
                   onClick={() => setShowUploadErrorModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
+                  className="text-gray-400 hover:text-gray-600 transition-colors">
                   <svg
                     className="w-6 h-6"
                     fill="none"
                     stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
+                    viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1464,8 +1436,7 @@ const CreatorUseAIPage: React.FC<CreatorUseAIPageProps> = ({
               <div className="flex justify-end">
                 <button
                   onClick={() => setShowUploadErrorModal(false)}
-                  className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                >
+                  className="px-4 py-2 bg-primary-blue text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
                   OK
                 </button>
               </div>

@@ -11,6 +11,7 @@ import DashboardNavbar from "../components/DashboardNavbar";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import CustomCheckbox from "../components/CustomCheckbox";
 import FileUploadSection from "../components/FileUploadSection";
@@ -1561,7 +1562,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onLogout }) => {
   };
 
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   // Show loading state while loading project for edit
   if (loadingProject) {

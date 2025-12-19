@@ -7,6 +7,7 @@ import RnDLogo from "../components/icons/RnDLogo";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import { gsap } from "gsap";
 
@@ -70,15 +71,13 @@ const TagsList: React.FC<TagsListProps> = ({ tags, projectId }) => {
       ref={containerRef}
       className="relative flex flex-col items-end gap-1"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+      onMouseLeave={() => setIsHovered(false)}>
       {/* Visible tags (1-2 tags) */}
       <div className="flex flex-wrap gap-1 justify-end">
         {visibleTags.map((tag, index) => (
           <span
             key={`visible-${index}`}
-            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700"
-          >
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
             {tag}
           </span>
         ))}
@@ -100,8 +99,7 @@ const TagsList: React.FC<TagsListProps> = ({ tags, projectId }) => {
                 display: "none",
                 transform: "translateY(30px)",
                 opacity: 0,
-              }}
-            >
+              }}>
               {tag}
             </span>
           ))}
@@ -126,15 +124,15 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(
     new Set()
   );
-  const [failedAppIcons, setFailedAppIcons] = useState<Set<string>>(
-    new Set()
-  );
+  const [failedAppIcons, setFailedAppIcons] = useState<Set<string>>(new Set());
 
   const filters = ["Featured", "Free to view", "Liked", "Following"];
 
   // Get navigation items with active state based on current path
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   const loadProjects = useCallback(async () => {
     try {
@@ -154,7 +152,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
 
       // Apply filter based on activeFilter
       let projectsData: GameProject[] = [];
-      
+
       if (activeFilter === "Following") {
         // Use dedicated following endpoint
         try {
@@ -164,7 +162,10 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
             status: "published",
             ...(searchQuery && { search: searchQuery }),
           });
-          projectsData = followingResponse.projects || followingResponse.data?.projects || [];
+          projectsData =
+            followingResponse.projects ||
+            followingResponse.data?.projects ||
+            [];
         } catch (err) {
           console.error("Failed to load following projects:", err);
           projectsData = [];
@@ -246,8 +247,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                     activeFilter === filter
                       ? "bg-blue-500 text-white shadow-sm"
                       : "text-gray-700 hover:text-gray-900"
-                  }`}
-                >
+                  }`}>
                   {filter}
                 </button>
               ))}
@@ -259,16 +259,14 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                 viewMode === "list"
                   ? "Switch to Grid View"
                   : "Switch to List View"
-              }
-            >
+              }>
               {viewMode === "list" ? (
                 <svg
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z"
                     stroke="#757575"
@@ -290,8 +288,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                   height="25"
                   viewBox="0 0 25 15"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     fillRule="evenodd"
                     clipRule="evenodd"
@@ -354,8 +351,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-6 py-12 text-center text-gray-500"
-                      >
+                        className="px-6 py-12 text-center text-gray-500">
                         No projects found
                       </td>
                     </tr>
@@ -365,8 +361,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                         <tr
                           key={project._id}
                           className="hover:bg-gray-50 cursor-pointer"
-                          onClick={() => handleProjectClick(project)}
-                        >
+                          onClick={() => handleProjectClick(project)}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <div className="w-12 h-12 bg-gray-200 rounded flex-shrink-0 flex items-center justify-center">
@@ -453,8 +448,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                 <div
                   key={project._id}
                   onClick={() => handleProjectClick(project)}
-                  className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all duration-300 group relative aspect-square"
-                >
+                  className="bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-all duration-300 group relative aspect-square">
                   {/* Thumbnail Section - Takes 100% initially, 50% on hover */}
                   <div className="relative w-full h-full bg-gray-200 overflow-hidden transition-all duration-300 group-hover:h-1/2">
                     {project.thumbnail && !failedThumbnails.has(project._id) ? (
@@ -524,8 +518,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                               className="w-4 h-4 text-white"
                               fill="none"
                               stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
+                              viewBox="0 0 24 24">
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -538,10 +531,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                       </div>
                       {/* Categories/Tags */}
                       <p className="text-xs text-gray-500 mb-2">
-                        {[
-                          project.gameGenre,
-                          project.targetPlatform,
-                        ]
+                        {[project.gameGenre, project.targetPlatform]
                           .filter(Boolean)
                           .join(", ") || "N/A"}
                       </p>
@@ -556,8 +546,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                                 className="w-2.5 h-2.5 text-blue-600"
                                 fill="none"
                                 stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                                viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
@@ -580,8 +569,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                                 className="w-2.5 h-2.5 text-blue-600"
                                 fill="none"
                                 stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                                viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
@@ -604,8 +592,7 @@ const PublisherMarketplacePage: React.FC<PublisherMarketplacePageProps> = ({
                                 className="w-2.5 h-2.5 text-blue-600"
                                 fill="none"
                                 stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
+                                viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"

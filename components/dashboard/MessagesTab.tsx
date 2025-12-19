@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import { useAuth } from "../../hooks/useAuth";
 import apiService from "../../services/api";
 import adminService, {
@@ -64,6 +70,7 @@ type ConversationItem =
 
 interface MessagesTabProps {
   useFullHeight?: boolean;
+  theme?: "light" | "dark";
 }
 
 // Helper function to safely format timestamp for display
@@ -117,7 +124,10 @@ const formatTimestampForDisplay = (timestamp: any): string => {
   }
 };
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({
+  useFullHeight = false,
+  theme = "dark",
+}) => {
   const { user, isAuthenticated, isLoading, accessToken } = useAuth();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState<boolean>(true);
@@ -238,6 +248,9 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
     }
   );
   const [searchInput, setSearchInput] = useState<string>("");
+  const [conversationFilter, setConversationFilter] = useState<
+    "all" | "unread"
+  >("all");
 
   // Debounce search input for admin
   useEffect(() => {
@@ -272,6 +285,44 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
     }
     return conversations;
   }, [conversations, isAdmin]);
+
+  const getUnreadCountForConversation = useCallback(
+    (c: ConversationItem): number => {
+      if (c.kind === "admin_support") {
+        if (!adminChatStatus) return 0;
+        return isAdmin
+          ? adminChatStatus.unreadCountByAdmin || 0
+          : adminChatStatus.unreadCountByUser || 0;
+      }
+      if ("unreadCount" in c && typeof c.unreadCount === "number") {
+        return c.unreadCount;
+      }
+      return 0;
+    },
+    [adminChatStatus, isAdmin]
+  );
+
+  const displayConversations = useMemo(() => {
+    const q = searchInput.trim().toLowerCase();
+    return sortedConversations.filter((c) => {
+      // Filter: unread only
+      if (conversationFilter === "unread") {
+        if (getUnreadCountForConversation(c) <= 0) return false;
+      }
+      // Search: title/subtitle
+      if (!q) return true;
+      const subtitle = "subtitle" in c ? c.subtitle : undefined;
+      return (
+        c.title.toLowerCase().includes(q) ||
+        (subtitle ? subtitle.toLowerCase().includes(q) : false)
+      );
+    });
+  }, [
+    sortedConversations,
+    searchInput,
+    conversationFilter,
+    getUnreadCountForConversation,
+  ]);
 
   useEffect(() => {
     const loadList = async () => {
@@ -989,6 +1040,26 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
 
               // Only include messages with timestamp NEWER than lastMessageTime
               if (lastMessageTime > 0) {
+                // Also dedupe by content + author + near-identical timestamp (WebSocket vs REST can produce different IDs)
+                const isDuplicateBySignature = prevMessages.some((prevMsg) => {
+                  const prevTs = prevMsg.ts || (prevMsg as any).createdAt;
+                  const prevTime = normalizeTimestamp(prevTs);
+                  if (!prevTime || isNaN(prevTime) || prevTime <= 0)
+                    return false;
+
+                  const sameContent =
+                    (prevMsg as any).content === (msg as any).content;
+                  const sameAuthor =
+                    ((prevMsg as any).authorId || (prevMsg as any).senderId) ===
+                    ((msg as any).authorId || (msg as any).senderId);
+
+                  if (!sameContent || !sameAuthor) return false;
+                  return Math.abs(prevTime - msgTime) < 10000; // within 10s
+                });
+                if (isDuplicateBySignature) {
+                  return false;
+                }
+
                 // We have existing messages, only add NEW messages (after lastMessageTime)
                 // Skip if timestamp is less than lastMessageTime
                 if (msgTime < lastMessageTime) {
@@ -2234,12 +2305,22 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
     }
   };
 
+  const isLight = theme === "light";
+
   if (isLoading) {
-    return <div className="text-gray-300">Loading...</div>;
+    return (
+      <div className={isLight ? "text-gray-600" : "text-gray-300"}>
+        Loading...
+      </div>
+    );
   }
 
   if (!isAuthenticated || !user) {
-    return <div className="text-gray-300">Please login to view messages</div>;
+    return (
+      <div className={isLight ? "text-gray-600" : "text-gray-300"}>
+        Please login to view messages
+      </div>
+    );
   }
 
   return (
@@ -2248,30 +2329,40 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
         useFullHeight
           ? "h-full max-h-full"
           : "h-[calc(100vh-10rem)] max-h-[calc(100vh-10rem)]"
-      } flex flex-col lg:grid lg:grid-cols-3 gap-3 sm:gap-4 overflow-hidden`}
-    >
+      } flex flex-col lg:grid lg:grid-cols-3 gap-3 sm:gap-4 overflow-hidden ${
+        isLight ? "bg-gray-100 p-4" : ""
+      }`}>
       {/* Mobile toggle */}
       {isMobile && (
         <div className="lg:hidden mb-3 flex-shrink-0">
-          <div className="inline-flex rounded-lg overflow-hidden border border-gray-700 w-full">
+          <div
+            className={`inline-flex rounded-lg overflow-hidden border w-full ${
+              isLight ? "border-gray-200 bg-white" : "border-gray-700"
+            }`}>
             <button
               onClick={() => setMobileView("list")}
               className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${
                 mobileView === "list"
-                  ? "bg-indigo-600 text-white"
+                  ? isLight
+                    ? "bg-blue-600 text-white"
+                    : "bg-indigo-600 text-white"
+                  : isLight
+                  ? "bg-white text-gray-700 hover:bg-gray-50"
                   : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
+              }`}>
               Conversations
             </button>
             <button
               onClick={() => setMobileView("chat")}
               className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${
                 mobileView === "chat"
-                  ? "bg-indigo-600 text-white"
+                  ? isLight
+                    ? "bg-blue-600 text-white"
+                    : "bg-indigo-600 text-white"
+                  : isLight
+                  ? "bg-white text-gray-700 hover:bg-gray-50"
                   : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
+              }`}>
               Chat
             </button>
           </div>
@@ -2279,14 +2370,31 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
       )}
       {/* Left Pane: Conversations */}
       <div
-        className={`lg:col-span-1 bg-gray-800/60 rounded-xl border border-gray-700 shadow-md flex flex-col ${
+        className={`lg:col-span-1 ${
+          isLight
+            ? "bg-white rounded-lg border border-gray-200"
+            : "bg-gray-800/60 rounded-xl border border-gray-700 shadow-md"
+        } flex flex-col ${
           isMobile ? "flex-1 min-h-0" : "h-full max-h-full"
-        } overflow-hidden ${isMobile && mobileView !== "list" ? "hidden" : ""}`}
-      >
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between gap-2 flex-shrink-0">
+        } overflow-hidden ${
+          isMobile && mobileView !== "list" ? "hidden" : ""
+        }`}>
+        <div
+          className={`p-4 flex items-center justify-between gap-2 flex-shrink-0 ${
+            isLight ? "border-b border-gray-200" : "border-b border-gray-700"
+          }`}>
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-indigo-400" />
-            <div className="font-semibold text-white">Conversations</div>
+            <MessageSquare
+              className={`w-4 h-4 ${
+                isLight ? "text-gray-700" : "text-indigo-400"
+              }`}
+            />
+            <div
+              className={`font-semibold ${
+                isLight ? "text-gray-900 text-3xl" : "text-white"
+              }`}>
+              {isLight ? "Message" : "Conversations"}
+            </div>
           </div>
           {/* Show user search button for all users (to create user-to-user chats) */}
           {(isCreator || isPublisher || isAdmin) && (
@@ -2298,21 +2406,31 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   setShowChatUserSearch(!showChatUserSearch);
                 }
               }}
-              className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
+              className={`p-1.5 rounded-lg transition-colors ${
+                isLight ? "hover:bg-gray-100" : "hover:bg-gray-700"
+              }`}
               title={
                 isAdmin
                   ? "Search users to chat (Admin Support)"
                   : "Start a new chat"
-              }
-            >
-              <UserPlus className="w-4 h-4 text-indigo-400" />
+              }>
+              <UserPlus
+                className={`w-4 h-4 ${
+                  isLight ? "text-gray-600" : "text-indigo-400"
+                }`}
+              />
             </button>
           )}
         </div>
 
         {/* User Search Panel for Admin */}
         {isAdmin && showUserSearch && (
-          <div className="p-3 border-b border-gray-700 bg-gray-800/80 flex-shrink-0">
+          <div
+            className={`p-3 flex-shrink-0 ${
+              isLight
+                ? "border-b border-gray-200 bg-white"
+                : "border-b border-gray-700 bg-gray-800/80"
+            }`}>
             <div className="flex items-center gap-2 mb-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input
@@ -2320,7 +2438,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                 value={userSearchQuery}
                 onChange={(e) => setUserSearchQuery(e.target.value)}
                 placeholder="Search users by name or email..."
-                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                className={`flex-1 px-3 py-2 rounded-lg text-sm outline-none ${
+                  isLight
+                    ? "bg-white border border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    : "bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                }`}
                 autoFocus
               />
               <button
@@ -2329,8 +2451,9 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   setUserSearchQuery("");
                   setUsersList([]);
                 }}
-                className="p-1.5 hover:bg-gray-600 rounded-lg transition-colors"
-              >
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isLight ? "hover:bg-gray-100" : "hover:bg-gray-600"
+                }`}>
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
@@ -2350,17 +2473,26 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   <button
                     key={userItem._id}
                     onClick={() => createUserConversation(userItem)}
-                    className="w-full text-left px-3 py-2 rounded-lg border border-gray-600 hover:border-indigo-500/40 hover:bg-gray-700/50 transition-colors"
-                  >
+                    className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                      isLight
+                        ? "border-gray-200 hover:bg-gray-50"
+                        : "border-gray-600 hover:border-indigo-500/40 hover:bg-gray-700/50"
+                    }`}>
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
+                        <div
+                          className={`text-sm font-medium truncate ${
+                            isLight ? "text-gray-900" : "text-white"
+                          }`}>
                           {`${userItem.firstName || ""} ${
                             userItem.lastName || ""
                           }`.trim() || userItem.email}
                         </div>
-                        <div className="text-xs text-gray-400 truncate">
+                        <div
+                          className={`text-xs truncate ${
+                            isLight ? "text-gray-500" : "text-gray-400"
+                          }`}>
                           {userItem.email}
                         </div>
                         <div className="text-[10px] text-gray-500 mt-0.5">
@@ -2386,7 +2518,12 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
 
         {/* User Chat Search Panel for Creator/Publisher */}
         {(isCreator || isPublisher) && showChatUserSearch && (
-          <div className="p-3 border-b border-gray-700 bg-gray-800/80 flex-shrink-0">
+          <div
+            className={`p-3 flex-shrink-0 ${
+              isLight
+                ? "border-b border-gray-200 bg-white"
+                : "border-b border-gray-700 bg-gray-800/80"
+            }`}>
             <div className="flex items-center gap-2 mb-2">
               <Search className="w-4 h-4 text-gray-400" />
               <input
@@ -2394,7 +2531,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                 value={chatUserSearchQuery}
                 onChange={(e) => setChatUserSearchQuery(e.target.value)}
                 placeholder="Search users by name or email..."
-                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                className={`flex-1 px-3 py-2 rounded-lg text-sm outline-none ${
+                  isLight
+                    ? "bg-white border border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    : "bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                }`}
                 autoFocus
               />
               <button
@@ -2403,8 +2544,9 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   setChatUserSearchQuery("");
                   setChatUsersList([]);
                 }}
-                className="p-1.5 hover:bg-gray-600 rounded-lg transition-colors"
-              >
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isLight ? "hover:bg-gray-100" : "hover:bg-gray-600"
+                }`}>
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
@@ -2421,17 +2563,26 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   <button
                     key={userItem._id}
                     onClick={() => createOrGetUserChat(userItem._id)}
-                    className="w-full text-left px-3 py-2 rounded-lg border border-gray-600 hover:border-indigo-500/40 hover:bg-gray-700/50 transition-colors"
-                  >
+                    className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                      isLight
+                        ? "border-gray-200 hover:bg-gray-50"
+                        : "border-gray-600 hover:border-indigo-500/40 hover:bg-gray-700/50"
+                    }`}>
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
+                        <div
+                          className={`text-sm font-medium truncate ${
+                            isLight ? "text-gray-900" : "text-white"
+                          }`}>
                           {`${userItem.firstName || ""} ${
                             userItem.lastName || ""
                           }`.trim() || userItem.email}
                         </div>
-                        <div className="text-xs text-gray-400 truncate">
+                        <div
+                          className={`text-xs truncate ${
+                            isLight ? "text-gray-500" : "text-gray-400"
+                          }`}>
                           {userItem.email}
                         </div>
                         <div className="text-[10px] text-gray-500 mt-0.5">
@@ -2454,20 +2605,50 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
           </div>
         )}
 
-        <div className="p-3 border-b border-gray-700 flex-shrink-0">
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300">
-            <Search className="w-4 h-4" />
+        <div
+          className={`p-3 flex-shrink-0 ${
+            isLight ? "border-b border-gray-200" : "border-b border-gray-700"
+          }`}>
+          <div
+            className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm ${
+              isLight
+                ? "bg-white border-gray-300 text-gray-700"
+                : "bg-gray-800 border-gray-700 text-gray-300"
+            }`}>
+            <Search className={`w-4 h-4 ${isLight ? "text-gray-400" : ""}`} />
             <input
-              className="bg-transparent outline-none flex-1 text-sm"
+              className={`bg-transparent outline-none flex-1 text-sm ${
+                isLight ? "placeholder:text-gray-400" : ""
+              }`}
               placeholder={isAdmin ? "Search conversations..." : "Search..."}
-              value={isAdmin ? searchInput : ""}
-              onChange={(e) => {
-                if (isAdmin) {
-                  setSearchInput(e.target.value);
-                }
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
+          {isLight && (
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                type="button"
+                onClick={() => setConversationFilter("all")}
+                className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                  conversationFilter === "all"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}>
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setConversationFilter("unread")}
+                className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                  conversationFilter === "unread"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}>
+                Unread
+              </button>
+            </div>
+          )}
           {isAdmin && (
             <div className="flex items-center gap-2 mt-2">
               <select
@@ -2479,8 +2660,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     page: 1,
                   }));
                 }}
-                className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-white"
-              >
+                className={`px-2 py-1 rounded text-xs ${
+                  isLight
+                    ? "bg-white border border-gray-300 text-gray-700"
+                    : "bg-gray-700 border border-gray-600 text-white"
+                }`}>
                 <option value="">All Status</option>
                 <option value="pending">Pending</option>
                 <option value="active">Active</option>
@@ -2492,35 +2676,88 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
         </div>
         <div className="flex-1 overflow-y-auto p-2 custom-scrollbar min-h-0">
           {loadingList && (
-            <div className="text-gray-400 text-sm px-2 py-2">
+            <div
+              className={`text-sm px-2 py-2 ${
+                isLight ? "text-gray-500" : "text-gray-400"
+              }`}>
               Loading list...
             </div>
           )}
           {listError && (
-            <div className="text-red-400 text-sm px-2 py-2">{listError}</div>
+            <div className="text-red-600 text-sm px-2 py-2">{listError}</div>
           )}
           {!loadingList && !listError && (
             <div className="space-y-1">
-              {sortedConversations.map((c) => (
+              {displayConversations.map((c) => (
                 <button
                   key={`${c.kind}_${c.id}`}
                   onClick={() => setSelected(c)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border hover:border-indigo-500/40 hover:bg-gray-700/50 transition-colors ${
-                    selected && selected.kind === c.kind && selected.id === c.id
-                      ? "border-indigo-500/40 bg-gray-700/60"
-                      : "border-gray-700"
-                  }`}
-                >
-                  <div className="text-sm font-medium text-white truncate">
-                    {c.title}
-                  </div>
-                  {"subtitle" in c && c.subtitle && (
-                    <div className="text-xs text-gray-400 truncate">
-                      {c.subtitle}
+                  className={`w-full text-left px-3 py-3 rounded-lg border transition-colors ${
+                    isLight
+                      ? `border-gray-200 hover:bg-gray-50 ${
+                          selected &&
+                          selected.kind === c.kind &&
+                          selected.id === c.id
+                            ? "bg-gray-50"
+                            : "bg-white"
+                        }`
+                      : `hover:border-indigo-500/40 hover:bg-gray-700/50 ${
+                          selected &&
+                          selected.kind === c.kind &&
+                          selected.id === c.id
+                            ? "border-indigo-500/40 bg-gray-700/60"
+                            : "border-gray-700"
+                        }`
+                  }`}>
+                  {isLight ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <svg
+                          className="w-5 h-5 text-gray-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M16 14a4 4 0 01-8 0m8 0a4 4 0 00-8 0m8 0v1a3 3 0 11-6 0v-1m6 0H9"
+                          />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-gray-900 truncate">
+                            {c.title}
+                          </div>
+                          <div className="text-xs text-gray-500 whitespace-nowrap">
+                            {"dateLabel" in c ? (c as any).dateLabel : ""}
+                          </div>
+                        </div>
+                        {"subtitle" in c && c.subtitle && (
+                          <div className="text-sm text-gray-600 truncate">
+                            {c.subtitle}
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div className="text-sm font-medium text-white truncate">
+                        {c.title}
+                      </div>
+                      {"subtitle" in c && c.subtitle && (
+                        <div className="text-xs text-gray-400 truncate">
+                          {c.subtitle}
+                        </div>
+                      )}
+                    </>
                   )}
                   {c.kind === "admin_support" && (
-                    <div className="text-[10px] text-indigo-300 mt-1">
+                    <div
+                      className={`text-[10px] mt-1 ${
+                        isLight ? "text-blue-600" : "text-indigo-300"
+                      }`}>
                       Pinned
                     </div>
                   )}
@@ -2555,8 +2792,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     )}
                 </button>
               ))}
-              {sortedConversations.length === 0 && (
-                <div className="text-gray-400 text-sm px-2 py-2">
+              {displayConversations.length === 0 && (
+                <div
+                  className={`text-sm px-2 py-2 ${
+                    isLight ? "text-gray-500" : "text-gray-400"
+                  }`}>
                   No conversations
                 </div>
               )}
@@ -2567,12 +2807,69 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
 
       {/* Right Pane: Chat box */}
       <div
-        className={`lg:col-span-2 bg-gray-800/60 rounded-xl border border-gray-700 shadow-md p-4 sm:p-6 flex flex-col ${
+        className={`lg:col-span-2 ${
+          isLight
+            ? "bg-white rounded-lg border border-gray-200"
+            : "bg-gray-800/60 rounded-xl border border-gray-700 shadow-md"
+        } p-4 sm:p-6 flex flex-col ${
           isMobile ? "flex-1 min-h-0" : "h-full max-h-full"
-        } overflow-hidden ${isMobile && mobileView !== "chat" ? "hidden" : ""}`}
-      >
+        } overflow-hidden ${
+          isMobile && mobileView !== "chat" ? "hidden" : ""
+        }`}>
+        {isLight && (
+          <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <svg
+                  className="w-5 h-5 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 14a4 4 0 01-8 0m8 0a4 4 0 00-8 0m8 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-gray-900 truncate">
+                  {selected ? selected.title : "Select a conversation"}
+                </div>
+                <div className="text-xs text-gray-500 truncate">
+                  {user.role === "creator"
+                    ? "Developer"
+                    : user.role === "publisher"
+                    ? "Publisher"
+                    : "Admin"}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="p-2 rounded-md hover:bg-gray-100 text-gray-600"
+              title="Delete">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-4 0h14"
+                />
+              </svg>
+            </button>
+          </div>
+        )}
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
+          <div
+            className={`flex-1 flex items-center justify-center ${
+              isLight ? "text-gray-500" : "text-gray-400"
+            }`}>
             Select a conversation to start chatting
           </div>
         ) : selected.kind === "admin_support" ||
@@ -2648,8 +2945,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                 {/* Messages Container */}
                 <div
                   ref={messagesContainerRef}
-                  className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 mb-4 min-h-0"
-                >
+                  className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 mb-4 min-h-0">
                   {messagesLoading && messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full min-h-[200px] space-y-3">
                       <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
@@ -2683,15 +2979,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                           key={adminMsg.id || idx}
                           className={`flex ${
                             isMine ? "justify-end" : "justify-start"
-                          }`}
-                        >
+                          }`}>
                           <div
                             className={`max-w-[80%] rounded-lg px-3 py-2 border ${
                               isMine
-                                ? "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                                ? isLight
+                                  ? "bg-blue-50 border-blue-200 text-gray-900"
+                                  : "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                                : isLight
+                                ? "bg-gray-100 border-gray-200 text-gray-900"
                                 : "bg-gray-700/50 border-gray-600 text-gray-100"
-                            }`}
-                          >
+                            }`}>
                             {!isMine && (
                               <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
                                 {adminMsg.senderRole || "User"}
@@ -2709,32 +3007,28 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                                   {adminMsg.messageStatus === "sending" && (
                                     <span
                                       className="text-[10px] text-gray-400"
-                                      title="Đang gửi"
-                                    >
+                                      title="Đang gửi">
                                       <Clock className="w-3 h-3" />
                                     </span>
                                   )}
                                   {adminMsg.messageStatus === "sent" && (
                                     <span
                                       className="text-[10px] text-gray-400"
-                                      title="Đã gửi"
-                                    >
+                                      title="Đã gửi">
                                       <Check className="w-3 h-3" />
                                     </span>
                                   )}
                                   {adminMsg.messageStatus === "delivered" && (
                                     <span
                                       className="text-[10px] text-indigo-400"
-                                      title="Đã nhận"
-                                    >
+                                      title="Đã nhận">
                                       <CheckCheck className="w-3 h-3" />
                                     </span>
                                   )}
                                   {adminMsg.messageStatus === "read" && (
                                     <span
                                       className="text-[10px] text-indigo-500"
-                                      title="Đã đọc"
-                                    >
+                                      title="Đã đọc">
                                       <CheckCheck className="w-3 h-3" />
                                     </span>
                                   )}
@@ -2755,16 +3049,23 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
             {adminChatIdForSupport && (
               <form
                 onSubmit={handleSendMessage}
-                className="mt-4 space-y-2 flex-shrink-0 w-full min-w-0"
-              >
+                className="mt-4 space-y-2 flex-shrink-0 w-full min-w-0">
                 {replyTo && (
-                  <div className="text-xs text-gray-400 flex items-center justify-between bg-gray-700/50 px-2 py-1 rounded">
+                  <div
+                    className={`text-xs flex items-center justify-between px-2 py-1 rounded ${
+                      isLight
+                        ? "text-gray-600 bg-gray-100"
+                        : "text-gray-400 bg-gray-700/50"
+                    }`}>
                     <span>Replying to message</span>
                     <button
                       type="button"
                       onClick={() => setReplyTo(null)}
-                      className="text-gray-300 hover:text-white"
-                    >
+                      className={`${
+                        isLight
+                          ? "text-gray-600 hover:text-gray-900"
+                          : "text-gray-300 hover:text-white"
+                      }`}>
                       Cancel
                     </button>
                   </div>
@@ -2773,6 +3074,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   value={messageContent}
                   onChange={(e) => setMessageContent(e.target.value)}
                   onKeyDown={(e) => {
+                    // Avoid double-send when using IME (e.g. Vietnamese/Japanese) where Enter confirms composition
+                    if ((e.nativeEvent as any)?.isComposing) return;
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       if (
@@ -2787,7 +3090,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   }}
                   placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
                   disabled={sendingMessage || !adminSupportConnected}
-                  className="w-full min-w-0 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:ring-inset disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                  className={`w-full min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed resize-none ${
+                    isLight
+                      ? "border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      : "border-gray-600 bg-gray-700 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:ring-inset"
+                  }`}
                   rows={3}
                   style={{ boxSizing: "border-box" }}
                 />
@@ -2797,8 +3104,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     {attachmentFiles.map((file, index) => (
                       <div
                         key={index}
-                        className="relative inline-flex items-center gap-2 px-2 py-1 bg-gray-700/50 border border-gray-600 rounded-lg text-xs"
-                      >
+                        className={`relative inline-flex items-center gap-2 px-2 py-1 border rounded-lg text-xs ${
+                          isLight
+                            ? "bg-gray-50 border-gray-200"
+                            : "bg-gray-700/50 border-gray-600"
+                        }`}>
                         {file.type.startsWith("image/") &&
                         attachmentUrls[index] ? (
                           <img
@@ -2809,16 +3119,26 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                         ) : (
                           <File className="w-4 h-4 text-gray-400" />
                         )}
-                        <span className="text-gray-300 max-w-[100px] truncate">
+                        <span
+                          className={`max-w-[100px] truncate ${
+                            isLight ? "text-gray-700" : "text-gray-300"
+                          }`}>
                           {file.name}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleRemoveAttachment(index)}
-                          className="p-0.5 hover:bg-gray-600 rounded transition-colors"
-                          disabled={sendingMessage || !adminSupportConnected}
-                        >
-                          <X className="w-3 h-3 text-gray-400 hover:text-white" />
+                          className={`p-0.5 rounded transition-colors ${
+                            isLight ? "hover:bg-gray-200" : "hover:bg-gray-600"
+                          }`}
+                          disabled={sendingMessage || !adminSupportConnected}>
+                          <X
+                            className={`w-3 h-3 ${
+                              isLight
+                                ? "text-gray-500 hover:text-gray-900"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                          />
                         </button>
                       </div>
                     ))}
@@ -2826,8 +3146,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       type="button"
                       onClick={handleClearAttachments}
                       className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
-                      disabled={sendingMessage || !adminSupportConnected}
-                    >
+                      disabled={sendingMessage || !adminSupportConnected}>
                       Clear all
                     </button>
                   </div>
@@ -2857,8 +3176,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       onClick={handleFileButtonClick}
                       disabled={sendingMessage || !adminSupportConnected}
                       className="p-2 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Upload file"
-                    >
+                      title="Upload file">
                       <Paperclip className="w-4 h-4 text-gray-400 hover:text-indigo-400" />
                     </button>
                     <button
@@ -2866,8 +3184,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       onClick={handleImageButtonClick}
                       disabled={sendingMessage || !adminSupportConnected}
                       className="p-2 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Upload image"
-                    >
+                      title="Upload image">
                       <Image className="w-4 h-4 text-gray-400 hover:text-indigo-400" />
                     </button>
                   </div>
@@ -2878,8 +3195,19 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       !messageContent.trim() ||
                       !adminSupportConnected
                     }
-                    className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                    className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
+                    <svg
+                      width="20"
+                      height="17"
+                      viewBox="0 0 20 17"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true">
+                      <path
+                        d="M1.4 16.8828L18.85 9.40281C19.0304 9.32597 19.1842 9.19779 19.2923 9.03421C19.4004 8.87064 19.4581 8.67889 19.4581 8.48281C19.4581 8.28674 19.4004 8.09499 19.2923 7.93141C19.1842 7.76784 19.0304 7.63966 18.85 7.56281L1.4 0.0828133C1.2489 0.0169078 1.08377 -0.0103438 0.919509 0.00351645C0.755246 0.0173767 0.597018 0.0719128 0.459098 0.162205C0.321179 0.252498 0.207908 0.375706 0.129505 0.520713C0.0511009 0.665721 0.010031 0.827967 0.00999999 0.992814L0 5.60281C0 6.10281 0.37 6.53281 0.87 6.59281L15 8.48281L0.87 10.3628C0.37 10.4328 0 10.8628 0 11.3628L0.00999999 15.9728C0.00999999 16.6828 0.74 17.1728 1.4 16.8828Z"
+                        fill="white"
+                      />
+                    </svg>
                     {sendingMessage ? "Sending..." : "Send"}
                   </button>
                   {isAdmin && (
@@ -2897,8 +3225,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                           adminChatStatus?.status === "resolved"
                             ? "bg-green-600 hover:bg-green-700 text-white"
                             : "bg-gray-600 hover:bg-gray-700 text-white"
-                        }`}
-                      >
+                        }`}>
                         {adminChatStatus?.status === "resolved"
                           ? "Reopen"
                           : "Resolve"}
@@ -2911,8 +3238,16 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
           </div>
         ) : selected.kind === "admin_report" ? (
           <div className="space-y-3">
-            <div className="text-white font-semibold">Report Details</div>
-            <div className="text-sm text-gray-300">
+            <div
+              className={`font-semibold ${
+                isLight ? "text-gray-900" : "text-white"
+              }`}>
+              Report Details
+            </div>
+            <div
+              className={`text-sm ${
+                isLight ? "text-gray-600" : "text-gray-300"
+              }`}>
               Admin can manage reports in Admin Management. This view lists
               reports as conversations for quick access.
             </div>
@@ -2942,8 +3277,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
             {/* Messages Container */}
             <div
               ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 mb-4 min-h-0 overflow-hidden"
-            >
+              className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 mb-4 min-h-0 overflow-hidden">
               {messagesLoading && messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full min-h-[200px] space-y-3">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
@@ -2977,15 +3311,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       key={chatMsg.id || idx}
                       className={`flex ${
                         isMine ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                      }`}>
                       <div
                         className={`max-w-[80%] rounded-lg px-3 py-2 border ${
                           isMine
-                            ? "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                            ? isLight
+                              ? "bg-blue-50 border-blue-200 text-gray-900"
+                              : "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                            : isLight
+                            ? "bg-gray-100 border-gray-200 text-gray-900"
                             : "bg-gray-700/50 border-gray-600 text-gray-100"
-                        }`}
-                      >
+                        }`}>
                         <div className="text-sm whitespace-pre-wrap break-words">
                           {chatMsg.content}
                         </div>
@@ -2998,32 +3334,28 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                               {(msg as any).messageStatus === "sending" && (
                                 <span
                                   className="text-[10px] text-gray-400"
-                                  title="Đang gửi"
-                                >
+                                  title="Đang gửi">
                                   <Clock className="w-3 h-3" />
                                 </span>
                               )}
                               {(msg as any).messageStatus === "sent" && (
                                 <span
                                   className="text-[10px] text-gray-400"
-                                  title="Đã gửi"
-                                >
+                                  title="Đã gửi">
                                   <Check className="w-3 h-3" />
                                 </span>
                               )}
                               {(msg as any).messageStatus === "delivered" && (
                                 <span
                                   className="text-[10px] text-indigo-400"
-                                  title="Đã nhận"
-                                >
+                                  title="Đã nhận">
                                   <CheckCheck className="w-3 h-3" />
                                 </span>
                               )}
                               {(msg as any).messageStatus === "read" && (
                                 <span
                                   className="text-[10px] text-indigo-500"
-                                  title="Đã đọc"
-                                >
+                                  title="Đã đọc">
                                   <CheckCheck className="w-3 h-3" />
                                 </span>
                               )}
@@ -3041,16 +3373,23 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
             {/* Message Input Form */}
             <form
               onSubmit={handleSendMessage}
-              className="mt-4 space-y-2 flex-shrink-0 px-0"
-            >
+              className="mt-4 space-y-2 flex-shrink-0 px-0">
               {replyTo && (
-                <div className="text-xs text-gray-400 flex items-center justify-between bg-gray-700/50 px-2 py-1 rounded">
+                <div
+                  className={`text-xs flex items-center justify-between px-2 py-1 rounded ${
+                    isLight
+                      ? "text-gray-600 bg-gray-100"
+                      : "text-gray-400 bg-gray-700/50"
+                  }`}>
                   <span>Replying to message</span>
                   <button
                     type="button"
                     onClick={() => setReplyTo(null)}
-                    className="text-gray-300 hover:text-white"
-                  >
+                    className={`${
+                      isLight
+                        ? "text-gray-600 hover:text-gray-900"
+                        : "text-gray-300 hover:text-white"
+                    }`}>
                     Cancel
                   </button>
                 </div>
@@ -3059,6 +3398,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                 value={messageContent}
                 onChange={(e) => setMessageContent(e.target.value)}
                 onKeyDown={(e) => {
+                  // Avoid double-send when using IME (Enter confirms composition)
+                  if ((e.nativeEvent as any)?.isComposing) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (messageContent.trim() && !sendingMessage) {
@@ -3073,7 +3414,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     : "Connecting..."
                 }
                 disabled={sendingMessage || !userChatConnected}
-                className="w-full min-w-0 px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:ring-inset disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                className={`w-full min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed resize-none ${
+                  isLight
+                    ? "border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    : "border-gray-600 bg-gray-700 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:ring-inset"
+                }`}
                 rows={3}
                 style={{ boxSizing: "border-box" }}
               />
@@ -3083,8 +3428,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   {attachmentFiles.map((file, index) => (
                     <div
                       key={index}
-                      className="relative inline-flex items-center gap-2 px-2 py-1 bg-gray-700/50 border border-gray-600 rounded-lg text-xs"
-                    >
+                      className={`relative inline-flex items-center gap-2 px-2 py-1 border rounded-lg text-xs ${
+                        isLight
+                          ? "bg-gray-50 border-gray-200"
+                          : "bg-gray-700/50 border-gray-600"
+                      }`}>
                       {file.type.startsWith("image/") &&
                       attachmentUrls[index] ? (
                         <img
@@ -3095,16 +3443,26 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       ) : (
                         <File className="w-4 h-4 text-gray-400" />
                       )}
-                      <span className="text-gray-300 max-w-[100px] truncate">
+                      <span
+                        className={`max-w-[100px] truncate ${
+                          isLight ? "text-gray-700" : "text-gray-300"
+                        }`}>
                         {file.name}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleRemoveAttachment(index)}
-                        className="p-0.5 hover:bg-gray-600 rounded transition-colors"
-                        disabled={sendingMessage}
-                      >
-                        <X className="w-3 h-3 text-gray-400 hover:text-white" />
+                        className={`p-0.5 rounded transition-colors ${
+                          isLight ? "hover:bg-gray-200" : "hover:bg-gray-600"
+                        }`}
+                        disabled={sendingMessage}>
+                        <X
+                          className={`w-3 h-3 ${
+                            isLight
+                              ? "text-gray-500 hover:text-gray-900"
+                              : "text-gray-400 hover:text-white"
+                          }`}
+                        />
                       </button>
                     </div>
                   ))}
@@ -3112,8 +3470,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     type="button"
                     onClick={handleClearAttachments}
                     className="px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
-                    disabled={sendingMessage}
-                  >
+                    disabled={sendingMessage}>
                     Clear all
                   </button>
                 </div>
@@ -3143,8 +3500,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     onClick={handleFileButtonClick}
                     disabled={sendingMessage || !userChatConnected}
                     className="p-2 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Upload file"
-                  >
+                    title="Upload file">
                     <Paperclip className="w-4 h-4 text-gray-400 hover:text-indigo-400" />
                   </button>
                   <button
@@ -3152,8 +3508,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     onClick={handleImageButtonClick}
                     disabled={sendingMessage || !userChatConnected}
                     className="p-2 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Upload image"
-                  >
+                    title="Upload image">
                     <Image className="w-4 h-4 text-gray-400 hover:text-indigo-400" />
                   </button>
                 </div>
@@ -3164,8 +3519,19 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     !messageContent.trim() ||
                     !userChatConnected
                   }
-                  className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                  className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
+                  <svg
+                    width="20"
+                    height="17"
+                    viewBox="0 0 20 17"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true">
+                    <path
+                      d="M1.4 16.8828L18.85 9.40281C19.0304 9.32597 19.1842 9.19779 19.2923 9.03421C19.4004 8.87064 19.4581 8.67889 19.4581 8.48281C19.4581 8.28674 19.4004 8.09499 19.2923 7.93141C19.1842 7.76784 19.0304 7.63966 18.85 7.56281L1.4 0.0828133C1.2489 0.0169078 1.08377 -0.0103438 0.919509 0.00351645C0.755246 0.0173767 0.597018 0.0719128 0.459098 0.162205C0.321179 0.252498 0.207908 0.375706 0.129505 0.520713C0.0511009 0.665721 0.010031 0.827967 0.00999999 0.992814L0 5.60281C0 6.10281 0.37 6.53281 0.87 6.59281L15 8.48281L0.87 10.3628C0.37 10.4328 0 10.8628 0 11.3628L0.00999999 15.9728C0.00999999 16.6828 0.74 17.1728 1.4 16.8828Z"
+                      fill="white"
+                    />
+                  </svg>
                   {sendingMessage ? "Sending..." : "Send"}
                 </button>
               </div>
@@ -3196,8 +3562,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
             {/* Messages Container */}
             <div
               ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 min-h-0"
-            >
+              className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 min-h-0">
               {messagesLoading && messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full min-h-[200px] space-y-3">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
@@ -3239,15 +3604,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                       key={msg.id || idx}
                       className={`flex ${
                         isMine ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                      }`}>
                       <div
                         className={`max-w-[80%] rounded-lg px-3 py-2 border ${
                           isMine
-                            ? "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                            ? isLight
+                              ? "bg-blue-50 border-blue-200 text-gray-900"
+                              : "bg-indigo-600/20 border-indigo-500/30 text-indigo-100"
+                            : isLight
+                            ? "bg-gray-100 border-gray-200 text-gray-900"
                             : "bg-gray-700/50 border-gray-600 text-gray-100"
-                        }`}
-                      >
+                        }`}>
                         {!isMine && (
                           <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
                             {authorRole || "User"}
@@ -3265,8 +3632,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                                   href={url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs text-indigo-300 hover:text-indigo-200 underline"
-                                >
+                                  className={`text-xs underline ${
+                                    isLight
+                                      ? "text-blue-600 hover:text-blue-700"
+                                      : "text-indigo-300 hover:text-indigo-200"
+                                  }`}>
                                   Attachment {i + 1}
                                 </a>
                               ))}
@@ -3277,8 +3647,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                           {selected?.kind === "collaboration" && (
                             <button
                               onClick={() => setReplyTo(msg.id)}
-                              className="hover:text-indigo-300"
-                            >
+                              className={`${
+                                isLight
+                                  ? "hover:text-blue-700"
+                                  : "hover:text-indigo-300"
+                              }`}>
                               Reply
                             </button>
                           )}
@@ -3294,16 +3667,23 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
             {/* Message Input Form */}
             <form
               onSubmit={handleSendMessage}
-              className="mt-4 space-y-2 flex-shrink-0 px-0"
-            >
+              className="mt-4 space-y-2 flex-shrink-0 px-0">
               {replyTo && (
-                <div className="text-xs text-gray-400 flex items-center justify-between bg-gray-700/50 px-2 py-1 rounded">
+                <div
+                  className={`text-xs flex items-center justify-between px-2 py-1 rounded ${
+                    isLight
+                      ? "text-gray-600 bg-gray-100"
+                      : "text-gray-400 bg-gray-700/50"
+                  }`}>
                   <span>Replying to message</span>
                   <button
                     type="button"
                     onClick={() => setReplyTo(null)}
-                    className="text-gray-300 hover:text-white"
-                  >
+                    className={`${
+                      isLight
+                        ? "text-gray-600 hover:text-gray-900"
+                        : "text-gray-300 hover:text-white"
+                    }`}>
                     Cancel
                   </button>
                 </div>
@@ -3312,6 +3692,8 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                 value={messageContent}
                 onChange={(e) => setMessageContent(e.target.value)}
                 onKeyDown={(e) => {
+                  // Avoid double-send when using IME (Enter confirms composition)
+                  if ((e.nativeEvent as any)?.isComposing) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (messageContent.trim() && !sendingMessage && connected) {
@@ -3326,7 +3708,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                     : "Connecting..."
                 }
                 disabled={!connected || sendingMessage}
-                className="w-full min-w-0 px-3 py-2 border bg-gray-700 border-gray-600 text-white rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                className={`w-full min-w-0 px-3 py-2 border rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed resize-none ${
+                  isLight
+                    ? "bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    : "bg-gray-700 border-gray-600 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                }`}
                 rows={3}
                 style={{ boxSizing: "border-box" }}
               />
@@ -3337,15 +3723,34 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ useFullHeight = false }) => {
                   onChange={(e) => setMessageAttachments(e.target.value)}
                   placeholder="Attachment URLs (comma-separated)"
                   disabled={!connected || sendingMessage}
-                  className="flex-1 px-3 py-2 border bg-gray-700 border-gray-600 text-white rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`flex-1 px-3 py-2 border rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isLight
+                      ? "bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      : "bg-gray-700 border-gray-600 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  }`}
                 />
                 <button
                   type="submit"
                   disabled={
                     sendingMessage || !messageContent.trim() || !connected
                   }
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                  className={`px-4 py-2 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isLight
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  } inline-flex items-center gap-2`}>
+                  <svg
+                    width="20"
+                    height="17"
+                    viewBox="0 0 20 17"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true">
+                    <path
+                      d="M1.4 16.8828L18.85 9.40281C19.0304 9.32597 19.1842 9.19779 19.2923 9.03421C19.4004 8.87064 19.4581 8.67889 19.4581 8.48281C19.4581 8.28674 19.4004 8.09499 19.2923 7.93141C19.1842 7.76784 19.0304 7.63966 18.85 7.56281L1.4 0.0828133C1.2489 0.0169078 1.08377 -0.0103438 0.919509 0.00351645C0.755246 0.0173767 0.597018 0.0719128 0.459098 0.162205C0.321179 0.252498 0.207908 0.375706 0.129505 0.520713C0.0511009 0.665721 0.010031 0.827967 0.00999999 0.992814L0 5.60281C0 6.10281 0.37 6.53281 0.87 6.59281L15 8.48281L0.87 10.3628C0.37 10.4328 0 10.8628 0 11.3628L0.00999999 15.9728C0.00999999 16.6828 0.74 17.1728 1.4 16.8828Z"
+                      fill="white"
+                    />
+                  </svg>
                   {sendingMessage ? "Sending..." : "Send"}
                 </button>
               </div>

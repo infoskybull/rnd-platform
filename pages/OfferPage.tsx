@@ -6,6 +6,7 @@ import RnDLogo from "../components/icons/RnDLogo";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 import apiService from "../services/api";
 
@@ -44,7 +45,9 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
   const [error, setError] = useState<string | null>(null);
 
   const navigationItems = getNavigationItems(user?.role, "/offer");
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   // Generate HTML content from form data
   const generateOfferContent = (): string => {
@@ -160,8 +163,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                   className="w-8 h-8 text-gray-600"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                  viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -189,8 +191,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
             {/* Button */}
             <button
               onClick={handleBackToPrototypeDetail}
-              className="w-full px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
+              className="w-full px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
               Back to Prototype Detail
             </button>
           </div>
@@ -354,8 +355,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                               operator: e.target.value,
                             })
                           }
-                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900"
-                        >
+                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900">
                           <option>Greater than</option>
                           <option>Less than</option>
                           <option>Equal to</option>
@@ -430,8 +430,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                               operator: e.target.value,
                             })
                           }
-                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900"
-                        >
+                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900">
                           <option>Greater than</option>
                           <option>Less than</option>
                           <option>Equal to</option>
@@ -444,8 +443,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                               value: e.target.value,
                             })
                           }
-                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900"
-                        >
+                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900">
                           <option>90%</option>
                           <option>80%</option>
                           <option>70%</option>
@@ -469,8 +467,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                               operator: e.target.value,
                             })
                           }
-                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900"
-                        >
+                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900">
                           <option>Greater than</option>
                           <option>Less than</option>
                           <option>Equal to</option>
@@ -483,8 +480,7 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
                               value: e.target.value,
                             })
                           }
-                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900"
-                        >
+                          className="px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white text-gray-900">
                           <option>30m</option>
                           <option>20m</option>
                           <option>15m</option>
@@ -511,15 +507,13 @@ const OfferPage: React.FC<OfferPageProps> = ({ user, onLogout }) => {
             <button
               onClick={handleMakeOffer}
               disabled={isSubmitting || !creatorId}
-              className="px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
+              className="px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
               {isSubmitting ? "Sending..." : "Make offer"}
             </button>
             <button
               onClick={handleCancel}
               disabled={isSubmitting}
-              className="px-6 py-3 bg-gray-300 text-white font-medium rounded-lg hover:bg-gray-400 transition-colors disabled:bg-gray-200 disabled:cursor-not-allowed"
-            >
+              className="px-6 py-3 bg-gray-300 text-white font-medium rounded-lg hover:bg-gray-400 transition-colors disabled:bg-gray-200 disabled:cursor-not-allowed">
               Cancel
             </button>
           </div>

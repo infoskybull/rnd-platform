@@ -6,6 +6,7 @@ import DashboardNavbar from "../components/DashboardNavbar";
 import {
   getNavigationItems,
   getDefaultRightIcons,
+  getMessagesPathForRole,
 } from "../utils/navbarConfig";
 
 interface CreatorDashboardPageProps {
@@ -31,7 +32,9 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
 
   // Get navigation items with active state based on current path
   const navigationItems = getNavigationItems(user?.role, location.pathname);
-  const rightIcons = getDefaultRightIcons();
+  const rightIcons = getDefaultRightIcons({
+    onMessagesClick: () => navigate(getMessagesPathForRole(user?.role)),
+  });
 
   const loadProjects = useCallback(async () => {
     try {
@@ -136,8 +139,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                     activeFilter === filter
                       ? "bg-blue-500 text-white shadow-sm"
                       : "text-gray-700 hover:text-gray-900"
-                  }`}
-                >
+                  }`}>
                   {filter}
                 </button>
               ))}
@@ -149,16 +151,14 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                 viewMode === "list"
                   ? "Switch to Grid View"
                   : "Switch to List View"
-              }
-            >
+              }>
               {viewMode === "list" ? (
                 <svg
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z"
                     stroke="#757575"
@@ -180,8 +180,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                   height="25"
                   viewBox="0 0 25 15"
                   fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                  xmlns="http://www.w3.org/2000/svg">
                   <path
                     fillRule="evenodd"
                     clip-rule="evenodd"
@@ -240,8 +239,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                     <tr>
                       <td
                         colSpan={8}
-                        className="px-6 py-12 text-center text-gray-500"
-                      >
+                        className="px-6 py-12 text-center text-gray-500">
                         No projects found
                       </td>
                     </tr>
@@ -254,8 +252,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                           className="hover:bg-gray-50 cursor-pointer"
                           onClick={() =>
                             navigate(`/prototype-detail/${project._id}`)
-                          }
-                        >
+                          }>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <div className="w-12 h-12 bg-gray-200 rounded flex-shrink-0 flex items-center justify-center">
@@ -295,8 +292,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                                 monetization.isOn
                                   ? "text-green-600"
                                   : "text-red-600"
-                              }`}
-                            >
+                              }`}>
                               {monetization.text}
                             </span>
                           </td>
@@ -348,8 +344,9 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                   <div
                     key={project._id}
                     className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group relative aspect-square flex flex-col"
-                    onClick={() => navigate(`/prototype-detail/${project._id}`)}
-                  >
+                    onClick={() =>
+                      navigate(`/prototype-detail/${project._id}`)
+                    }>
                     {/* Thumbnail Section */}
                     <div className="relative w-full flex-[0.6] bg-gray-200 overflow-hidden min-h-0 flex-shrink-0">
                       {project.thumbnail ? (
@@ -377,15 +374,13 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           // Add edit functionality here
-                        }}
-                      >
+                        }}>
                         <svg
                           width="18"
                           height="18"
                           viewBox="0 0 18 18"
                           fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
+                          xmlns="http://www.w3.org/2000/svg">
                           <path
                             d="M1 18C0.716667 18 0.479333 17.904 0.288 17.712C0.0966668 17.52 0.000666667 17.2827 0 17V14.575C0 14.3083 0.0500001 14.054 0.15 13.812C0.25 13.57 0.391667 13.3577 0.575 13.175L13.2 0.575C13.4 0.391667 13.621 0.25 13.863 0.15C14.105 0.0500001 14.359 0 14.625 0C14.891 0 15.1493 0.0500001 15.4 0.15C15.6507 0.25 15.8673 0.4 16.05 0.6L17.425 2C17.625 2.18333 17.7707 2.4 17.862 2.65C17.9533 2.9 17.9993 3.15 18 3.4C18 3.66667 17.954 3.921 17.862 4.163C17.77 4.405 17.6243 4.62567 17.425 4.825L4.825 17.425C4.64167 17.6083 4.429 17.75 4.187 17.85C3.945 17.95 3.691 18 3.425 18H1ZM14.6 4.8L16 3.4L14.6 2L13.2 3.4L14.6 4.8Z"
                             fill="black"
@@ -428,8 +423,7 @@ const CreatorDashboardPage: React.FC<CreatorDashboardPageProps> = ({
                               viewBox="0 0 33 33"
                               fill="none"
                               xmlns="http://www.w3.org/2000/svg"
-                              style={{ transform: "scale(1.25)" }}
-                            >
+                              style={{ transform: "scale(1.25)" }}>
                               <path
                                 fillRule="evenodd"
                                 clipRule="evenodd"
